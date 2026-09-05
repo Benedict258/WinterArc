@@ -56,21 +56,22 @@ export const useTasks = (filters: { date?: string; status?: string; threadId?: s
     queryKey: ['tasks', filters],
     queryFn: async () => {
       try {
-        const apiTasks = await fetchTasksFromAPI(filters);
-        await cacheTasks(apiTasks);
-        return apiTasks;
+        const apiTasks = await fetchTasksFromAPI(filters)
+        await cacheTasks(apiTasks)
+        return apiTasks
       } catch (err) {
-        console.warn('Network fetch failed, falling back to cache:', err);
-        const cachedTasks = await getCachedTasks();
+        console.warn('Network fetch failed, falling back to cache:', err)
+        const cachedTasks = await getCachedTasks()
         if (cachedTasks.length > 0) {
           return cachedTasks.filter((task: any) => {
-            if (filters.date && (!task.date || !task.date.startsWith(filters.date))) return false;
-            if (filters.status && task.status !== filters.status) return false;
-            if (filters.threadId !== undefined && task.threadId !== filters.threadId) return false;
-            return true;
-          });
+            if (filters.date && (!task.date || !task.date.startsWith(filters.date))) return false
+            if (filters.status && task.status !== filters.status) return false
+            if (filters.threadId === null && task.threadId) return false
+            if (filters.threadId && filters.threadId !== null && task.threadId !== filters.threadId) return false
+            return true
+          })
         }
-        return [];
+        return []
       }
     },
   });

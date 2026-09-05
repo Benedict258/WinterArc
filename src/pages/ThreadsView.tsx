@@ -3,388 +3,291 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
-import { useThreads } from '@/hooks/useThreads'
-import { useCreateThread, useUpdateThread, useDeleteThread } from '@/hooks/useThreads'
+import { useThreads, useCreateThread, useUpdateThread, useDeleteThread } from '@/hooks/useThreads'
 import { useState } from 'react'
 
-export default function ThreadsView() {
-  const { data: threads = [], isLoading: threadsLoading, error: threadsError } = useThreads()
-  const { 
-    mutate: createThread, 
-    isPending: isCreating,
-    isError: isCreateError,
-    error: createError
-  } = useCreateThread()
-  const { 
-    mutate: updateThread, 
-    isPending: isUpdating,
-    isError: isUpdateError,
-    error: updateError
-  } = useUpdateThread()
-  const { 
-    mutate: deleteThread, 
-    isPending: isDeleting,
-    isError: isDeleteError,
-    error: deleteError
-  } = useDeleteThread()
-  
-  const [editThreadId, setEditThreadId] = useState<string | null>(null)
-  const [editThreadName, setEditThreadName] = useState('')
-  const [editThreadCategory, setEditThreadCategory] = useState('')
-  const [editThreadFrequency, setEditThreadFrequency] = useState('')
-  const [editThreadFixedDay, setEditThreadFixedDay] = useState<number | null>(null)
-  const [editThreadStatus, setEditThreadStatus] = useState('')
-  const [editThreadNotes, setEditThreadNotes] = useState('')
-  
-  const [selectedCategory, setSelectedCategory] = useState('All')
-  
-  const predefinedCategories = ['All', 'Role/Program', 'Active Build', 'Learning Track', 'Application/Outreach', 'Other']
-  const extraCategories = Array.from(new Set(threads.map(t => t.category))).filter(c => !predefinedCategories.includes(c))
-  const categories = [...predefinedCategories, ...extraCategories]
+const PREDEFINED_CATEGORIES = ['Role/Program', 'Active Build', 'Learning Track', 'Application/Outreach', 'Other']
+const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-  const filteredThreads = threads.filter(t => {
-    if (selectedCategory === 'All') return true
-    return t.category === selectedCategory
+const frequencyColors: Record<string, string> = {
+  daily: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+  weekly: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  multiple: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  'fixed-day': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+}
+
+function frequencyDescription(thread: any): string {
+  switch (thread.frequency) {
+    case 'daily': return 'Every day'
+    case 'weekly': return 'Once per week'
+    case 'multiple': return 'Multiple times per week'
+    case 'fixed-day': return `Every ${DAY_LABELS[thread.fixedDay ?? 0]}`
+    default: return 'Unknown frequency'
+  }
+}
+
+export default function ThreadsView() {
+  const { data: threads = [], isLoading, error } = useThreads()
+  const { mutate: createThread, isPending: isCreating } = useCreateThread()
+  const { mutate: updateThread, isPending: isUpdating } = useUpdateThread()
+  const { mutate: deleteThread, isPending: isDeleting } = useDeleteThread()
+
+  const [selectedCategory, setSelectedCategory] = useState('All')
+  const [editId, setEditId] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    name: '',
+    category: '',
+    frequency: '',
+    fixedDay: null as number | null,
+    status: '',
+    notes: '',
   })
-  
-  const frequencyColors: Record<string, string> = {
-    daily: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-    weekly: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-    multiple: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    'fixed-day': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+
+  const extraCategories = Array.from(new Set(threads.map(t => t.category))).filter(c => !PREDEFINED_CATEGORIES.includes(c))
+  const categories = ['All', ...PREDEFINED_CATEGORIES, ...extraCategories]
+
+  const filteredThreads = threads.filter(t => selectedCategory === 'All' || t.category === selectedCategory)
+
+  const openNew = () => {
+    setEditId('new')
+    setForm({ name: '', category: '', frequency: '', fixedDay: null, status: 'active', notes: '' })
   }
-  
-  const handleSaveEdit = () => {
-    if (!editThreadId) return
-    
-    const updates: Partial<any> = {
-      name: editThreadName,
-      category: editThreadCategory,
-      frequency: editThreadFrequency,
-      status: editThreadStatus,
-      notes: editThreadNotes
+
+  const openEdit = (thread: any) => {
+    setEditId(thread._id)
+    setForm({
+      name: thread.name,
+      category: thread.category,
+      frequency: thread.frequency,
+      fixedDay: thread.fixedDay ?? null,
+      status: thread.status,
+      notes: thread.notes || '',
+    })
+  }
+
+  const closeForm = () => setEditId(null)
+
+  const handleSave = () => {
+    const payload: any = {
+      name: form.name,
+      category: form.category,
+      frequency: form.frequency,
+      fixedDay: form.frequency === 'fixed-day' ? form.fixedDay : null,
+      status: form.status,
+      notes: form.notes,
     }
-    
-    // Only include fixedDay if it's a fixed-day thread
-    if (editThreadFrequency === 'fixed-day') {
-      updates.fixedDay = editThreadFixedDay
+    if (editId === 'new') {
+      createThread(payload)
     } else {
-      updates.fixedDay = null
+      updateThread({ id: editId, updates: payload })
     }
-    
-    updateThread({ id: editThreadId, updates })
-    setEditThreadId(null)
+    closeForm()
   }
-  
-  const handleCancelEdit = () => {
-    setEditThreadId(null)
-    // Reset form values
-    setEditThreadName('')
-    setEditThreadCategory('')
-    setEditThreadFrequency('')
-    setEditThreadFixedDay(null)
-    setEditThreadStatus('')
-    setEditThreadNotes('')
-  }
-  
+
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="max-w-6xl mx-auto space-y-5 sm:space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Threads</h1>
-            <p className="text-lg text-muted-foreground">Manage your active projects and roles</p>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">Threads</h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage your active projects and roles</p>
           </div>
-          <Button onClick={() => setEditThreadId('new')}>
-            <Plus size={18} />New Thread
+          <Button onClick={openNew} className="gap-1.5 self-start sm:self-auto">
+            <Plus size={16} /> New Thread
           </Button>
         </div>
-        
-        {/* Edit/Create Thread Modal */}
-        {editThreadId !== null && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-              <h2 className="text-xl font-bold mb-4">
-                {editThreadId === 'new' ? 'Create New Thread' : 'Edit Thread'}
-              </h2>
-              <form className="space-y-4" onSubmit={(e) => {
-                e.preventDefault()
-                if (editThreadId === 'new') {
-                  createThread({
-                    name: editThreadName,
-                    category: editThreadCategory,
-                    frequency: editThreadFrequency,
-                    fixedDay: editThreadFrequency === 'fixed-day' ? editThreadFixedDay : null,
-                    status: editThreadStatus,
-                    notes: editThreadNotes
-                  })
-                } else {
-                  handleSaveEdit()
-                }
-              }}>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Name</label>
-                  <input
-                    type="text"
-                    value={editThreadName}
-                    onChange={(e) => setEditThreadName(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 border rounded"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium mb-1">Category</label>
-                  <select
-                    value={editThreadCategory}
-                    onChange={(e) => setEditThreadCategory(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 border rounded"
-                  >
-                    <option value="">Select category</option>
-                    <option value="Role/Program">Role/Program</option>
-                    <option value="Active Build">Active Build</option>
-                    <option value="Learning Track">Learning Track</option>
-                    <option value="Application/Outreach">Application/Outreach</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium mb-1">Frequency</label>
-                  <select
-                    value={editThreadFrequency}
-                    onChange={(e) => {
-                      setEditThreadFrequency(e.target.value)
-                      if (e.target.value !== 'fixed-day') {
-                        setEditThreadFixedDay(null)
-                      }
-                    }}
-                    required
-                    className="w-full px-3 py-2 border rounded"
-                  >
-                    <option value="">Select frequency</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="multiple">Multiple times/week</option>
-                    <option value="fixed-day">Fixed day</option>
-                  </select>
-                </div>
-                
-                {editThreadFrequency === 'fixed-day' && (
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Fixed Day</label>
-                    <select
-                      value={editThreadFixedDay ?? ''}
-                      onChange={(e) => setEditThreadFixedDay(parseInt(e.target.value) || null)}
-                      className="w-full px-3 py-2 border rounded"
-                    >
-                      <option value="">Select day</option>
-                      <option value="0">Monday</option>
-                      <option value="1">Tuesday</option>
-                      <option value="2">Wednesday</option>
-                      <option value="3">Thursday</option>
-                      <option value="4">Friday</option>
-                      <option value="5">Saturday</option>
-                      <option value="6">Sunday</option>
-                    </select>
-                  </div>
-                )}
-                
-                <div>
-                  <label className="block text-sm font-medium mb-1">Status</label>
-                  <select
-                    value={editThreadStatus}
-                    onChange={(e) => setEditThreadStatus(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 border rounded"
-                  >
-                    <option value="">Select status</option>
-                    <option value="active">Active</option>
-                    <option value="parked">Parked/Idea</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium mb-1">Notes (optional)</label>
-                  <textarea
-                    value={editThreadNotes}
-                    onChange={(e) => setEditThreadNotes(e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border rounded"
-                  />
-                </div>
-                
-                <div className="flex justify-end gap-3">
-                  <Button 
-                    type="button"
-                    onClick={handleCancelEdit}
-                    variant="outline"
-                    disabled={isCreating || isUpdating}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    type="submit"
-                    disabled={isCreating || isUpdating || !(editThreadName && editThreadCategory && editThreadFrequency && editThreadStatus)}
-                  >
-                    {editThreadId === 'new' ? 'Create' : 'Save'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-        
-        {/* Category Filter */}
-        {threadsLoading ? (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">Loading threads...</p>
-          </div>
-        ) : threadsError ? (
-          <div className="text-center py-8">
-            <p className="text-destructive">Error loading threads: {threadsError.message}</p>
-          </div>
+
+        {isLoading ? (
+          <p className="text-center py-8 text-sm text-muted-foreground">Loading threads...</p>
+        ) : error ? (
+          <p className="text-center py-8 text-sm text-destructive">Error loading threads</p>
         ) : (
           <>
+            {/* Category filters */}
             <div className="flex gap-2 flex-wrap">
-              {categories.map((cat) => {
+              {categories.map(cat => {
                 const count = cat === 'All' ? threads.length : threads.filter(t => t.category === cat).length
+                const active = cat === selectedCategory
                 return (
                   <Button
                     key={cat}
-                    variant={cat === selectedCategory ? 'default' : 'outline'}
+                    variant={active ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setSelectedCategory(cat)}
-                    className="gap-1.5 transition-all"
+                    className="gap-1.5 text-xs"
                   >
                     <span>{cat}</span>
-                    <span className={`text-xs px-1.5 py-0.2 rounded-full ${cat === selectedCategory ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${active ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
                       {count}
                     </span>
                   </Button>
                 )
               })}
             </div>
-            
-            {/* Threads Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredThreads.length === 0 ? (
-                <div className="col-span-full py-12 text-center text-muted-foreground border rounded-lg border-dashed">
-                  No threads found in category "{selectedCategory}".
-                </div>
-              ) : (
-                filteredThreads.map((thread) => (
-                <Card key={thread._id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{thread.name}</CardTitle>
-                        <CardDescription>{thread.category}</CardDescription>
-                      </div>
-                      <div className="flex gap-2">
-                        {editThreadId === thread._id ? (
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={handleCancelEdit}
-                          >
-                            <Edit2 size={16} />
+
+            {/* Threads grid */}
+            {filteredThreads.length === 0 ? (
+              <Card>
+                <CardContent className="py-10 text-center text-muted-foreground">
+                  No threads in "{selectedCategory}".
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+                {filteredThreads.map(thread => (
+                  <Card key={thread._id}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <CardTitle className="text-base truncate">{thread.name}</CardTitle>
+                          <CardDescription className="text-xs">{thread.category}</CardDescription>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(thread)} title="Edit">
+                            <Edit2 size={14} />
                           </Button>
-                        ) : (
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                             onClick={() => {
-                              setEditThreadId(thread._id)
-                              setEditThreadName(thread.name)
-                              setEditThreadCategory(thread.category)
-                              setEditThreadFrequency(thread.frequency)
-                              setEditThreadFixedDay(thread.fixedDay ?? null)
-                              setEditThreadStatus(thread.status)
-                              setEditThreadNotes(thread.notes || '')
+                              if (window.confirm(`Archive "${thread.name}"?`)) deleteThread(thread._id)
                             }}
+                            title="Archive"
                           >
-                            <Edit2 size={16} />
+                            <Trash2 size={14} />
                           </Button>
-                        )}
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => {
-                            deleteThread(thread._id)
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex gap-2 items-center">
-                      <Badge className={frequencyColors[thread.frequency] || ''}>
-                        {thread.frequency}
-                      </Badge>
-                      <Badge variant={thread.status === 'active' ? 'default' : 'outline'}>
-                        {thread.status}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Appears {thread.frequency === 'daily' ? 'every day' : 
-                       thread.frequency === 'weekly' ? 'once per week' : 
-                       thread.frequency === 'multiple' ? 'multiple times per week' : 
-                       thread.frequency === 'fixed-day' ? 'every ' + ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][thread.fixedDay || 0] : 
-                       'unknown frequency'}
-                    </p>
-                  </CardContent>
-                </Card>
-              )))}
-            </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex gap-1.5 flex-wrap">
+                        <Badge className={`text-[10px] ${frequencyColors[thread.frequency] || ''}`}>{thread.frequency}</Badge>
+                        <Badge variant={thread.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{thread.status}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{frequencyDescription(thread)}</p>
+                      {thread.notes && (
+                        <p className="text-xs text-muted-foreground italic break-words line-clamp-3">{thread.notes}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </>
         )}
-        
-        {/* Loading states for mutations */}
-        {isCreating && (
-          <div className="fixed bottom-4 right-4">
-            <p className="bg-blue-500 text-white px-3 py-1 rounded">Creating thread...</p>
-          </div>
-        )}
-        {isUpdating && (
-          <div className="fixed bottom-4 right-4">
-            <p className="bg-blue-500 text-white px-3 py-1 rounded">Updating thread...</p>
-          </div>
-        )}
-        {isDeleting && (
-          <div className="fixed bottom-4 right-4">
-            <p className="bg-blue-500 text-white px-3 py-1 rounded">Deleting thread...</p>
-          </div>
-        )}
-        
-        {/* Error states for mutations */}
-        {isCreateError && (
-          <div className="fixed bottom-4 right-4">
-            <p className="bg-destructive text-white px-3 py-1 rounded">
-              Error creating thread: {createError?.message || 'Unknown error'}
-            </p>
-          </div>
-        )}
-        {isUpdateError && (
-          <div className="fixed bottom-4 right-4">
-            <p className="bg-destructive text-white px-3 py-1 rounded">
-              Error updating thread: {updateError?.message || 'Unknown error'}
-            </p>
-          </div>
-        )}
-        {isDeleteError && (
-          <div className="fixed bottom-4 right-4">
-            <p className="bg-destructive text-white px-3 py-1 rounded">
-              Error deleting thread: {deleteError?.message || 'Unknown error'}
-            </p>
+
+        {(isCreating || isUpdating || isDeleting) && (
+          <div className="fixed bottom-4 right-4 bg-primary text-primary-foreground px-3 py-1.5 rounded shadow text-sm">
+            {isCreating ? 'Creating thread...' : isUpdating ? 'Updating thread...' : 'Archiving...'}
           </div>
         )}
       </div>
+
+      {editId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background border rounded-lg p-5 sm:p-6 w-full max-w-md shadow-lg max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-4">
+              {editId === 'new' ? 'Create New Thread' : 'Edit Thread'}
+            </h2>
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleSave()
+              }}
+            >
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Category</label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
+                  required
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                >
+                  <option value="">Select category</option>
+                  {PREDEFINED_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Frequency</label>
+                <select
+                  value={form.frequency}
+                  onChange={(e) => setForm(f => ({ ...f, frequency: e.target.value, fixedDay: e.target.value === 'fixed-day' ? f.fixedDay : null }))}
+                  required
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                >
+                  <option value="">Select frequency</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="multiple">Multiple times/week</option>
+                  <option value="fixed-day">Fixed day</option>
+                </select>
+              </div>
+
+              {form.frequency === 'fixed-day' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Fixed Day</label>
+                  <select
+                    value={form.fixedDay ?? ''}
+                    onChange={(e) => setForm(f => ({ ...f, fixedDay: parseInt(e.target.value) || null }))}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                  >
+                    <option value="">Select day</option>
+                    {DAY_LABELS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Status</label>
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm(f => ({ ...f, status: e.target.value }))}
+                  required
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                >
+                  <option value="">Select status</option>
+                  <option value="active">Active</option>
+                  <option value="parked">Parked/Idea</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button type="button" onClick={closeForm} variant="outline" size="sm" disabled={isCreating || isUpdating}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={isCreating || isUpdating || !form.name || !form.category || !form.frequency || !form.status}>
+                  {editId === 'new' ? 'Create' : 'Save'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </MainLayout>
   )
 }

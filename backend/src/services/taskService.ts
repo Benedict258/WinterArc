@@ -2,16 +2,24 @@ import { Task } from '../models/Task'
 
 export async function getTasks(filters: any = {}) {
   const query: any = {}
-  
+
   if (filters.date) {
-    const startDate = new Date(filters.date)
-    const endDate = new Date(filters.date)
-    endDate.setDate(endDate.getDate() + 1)
+    // Accept either YYYY-MM-DD or ISO; build a [start, next-day) range in UTC
+    const dateStr = String(filters.date).split('T')[0]
+    const startDate = new Date(`${dateStr}T00:00:00.000Z`)
+    const endDate = new Date(`${dateStr}T00:00:00.000Z`)
+    endDate.setUTCDate(endDate.getUTCDate() + 1)
     query.date = { $gte: startDate, $lt: endDate }
   }
-  
+
   if (filters.status) query.status = filters.status
-  if (filters.threadId) query.threadId = filters.threadId
+  if (filters.threadId !== undefined && filters.threadId !== null) {
+    if (filters.threadId === 'null' || filters.threadId === '') {
+      query.threadId = null
+    } else {
+      query.threadId = filters.threadId
+    }
+  }
 
   return await Task.find(query).sort({ date: 1, createdAt: 1 })
 }

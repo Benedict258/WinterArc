@@ -4,10 +4,6 @@ import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
 export default defineConfig({
-  define: {
-    // Ensure all frontend API calls route directly to the server on port 3000
-    'import.meta.env.VITE_API_URL': JSON.stringify(''),
-  },
   plugins: [
     react(),
     VitePWA({

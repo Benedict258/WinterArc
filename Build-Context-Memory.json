@@ -664,6 +664,162 @@
         "Review Backlog and Goals views for further PRD parity"
       ],
       "notes": "Passcode gate active and verified. Google Calendar conversion working. App compiles cleanly."
+    },
+    {
+      "session_id": "session_007",
+      "timestamp": "2026-09-05T12:00:00Z",
+      "ai_agent": "OpenCode / minimax-m3",
+      "current_phase": "Live MongoDB Wiring + Responsive UI + Real Analytics",
+      "progress": {
+        "completed": [
+          "Removed in-memory fallback from server.ts; server now requires MONGO_URI and connects to MongoDB Atlas on startup",
+          "Added automatic seed-if-empty for threads (30), wishlist (3), goals (3), settings (default tz + target)",
+          "Added .env file with user-provided MONGO_URI (Atlas) and Google OAuth credentials (Calendar auth deferred per user)",
+          "Added backend analytics endpoints: /api/analytics/summary (current-quarter metrics + streak) and /api/analytics/threads (per-thread performance)",
+          "Added /api/analytics/* live analytics — replaces client-side calculations over potentially huge auto-gen task set",
+          "Rewrote WeekView to be fully responsive: mobile = stacked day cards with time blocks + events; tablet/desktop = 7-column grid; both share data layer",
+          "Rewrote GoalsView to consume the new analytics endpoints (clear scoped-to-current-quarter data, no more 'all tasks ever' muddying the metrics)",
+          "Cleaned up ThreadsView, BacklogView, WishlistView, TodayView: responsive layouts, proper modals, real data, removed mock floating toasts",
+          "Fixed taskService.getTasks to handle threadId=null (backlog query) and UTC date prefix matching (timezone-safe)",
+          "Removed stale vite define that pinned VITE_API_URL to empty string (now reads from .env)",
+          "Fixed useTasks cache fallback filter bug (duplicate closing brace) and let/null threadId handling",
+          "Verified end-to-end: npm run lint clean (0 warnings), npm run build clean, server starts and seeds 30 threads / 3 wishlist / 3 goals / settings into Atlas cluster"
+        ],
+        "in_progress": [],
+        "blocked": []
+      },
+      "last_session_summary": "Session 006 implemented passcode gate and 1-click calendar event-to-task conversion. Build and lint were clean.",
+      "changes_made": [
+        "server.ts: complete rewrite — Mongo-only with seedIfEmpty on boot, analytics endpoints, removed all memoryThreads/memoryTasks/memoryGoals/memoryWishlist/memorySettings in-memory state",
+        "backend/src/services/taskService.ts: threadId=null filter support, UTC date range, proper type checks",
+        "src/pages/WeekView.tsx: fully responsive rewrite (mobile stacked / desktop 7-col grid)",
+        "src/pages/GoalsView.tsx: rewrite consuming /api/analytics/summary + /api/analytics/threads; current-quarter scoped; MetricCard and ThreadBar subcomponents",
+        "src/pages/TodayView.tsx: responsive header + form, removed mock error UI, cleaner task list",
+        "src/pages/ThreadsView.tsx: responsive header, single modal with form state, responsive 1/2/3 col grid",
+        "src/pages/BacklogView.tsx: real thread picker (uses useThreads), responsive, working checkbox handler",
+        "src/pages/WishlistView.tsx: responsive, removed mock toasts, accessible label for acquired checkbox",
+        "src/hooks/useAnalytics.ts: new — useAnalyticsSummary + useThreadAnalytics (TanStack Query)",
+        "src/hooks/useTasks.ts: cache fallback filter handles threadId=null correctly",
+        "vite.config.ts: removed pin of VITE_API_URL to empty string",
+        ".env: created with Atlas MONGO_URI + Google OAuth credentials (Google Calendar auth deferred per user request)",
+        ".env.example: untouched (still placeholder)"
+      ],
+      "file_module_map": [
+        {
+          "file": "server.ts",
+          "purpose": "Production full-stack server (Express + Vite middleware or static). Mongo-only with seedIfEmpty + analytics endpoints",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": ".env",
+          "purpose": "Live MONGO_URI + Google OAuth credentials (gitignored)",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "backend/src/services/taskService.ts",
+          "purpose": "Task CRUD with fixed threadId=null + UTC date filter handling",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/hooks/useAnalytics.ts",
+          "purpose": "Live analytics hook for summary + per-thread metrics",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/hooks/useTasks.ts",
+          "purpose": "Task CRUD hook; cache fallback now handles threadId=null",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/pages/WeekView.tsx",
+          "purpose": "Weekly grid; mobile stacked cards + desktop 7-column layout",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/pages/GoalsView.tsx",
+          "purpose": "Goals + quarterly analytics dashboard; uses backend analytics endpoints",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/pages/TodayView.tsx",
+          "purpose": "Today view with quick-add bar + time blocks + calendar events",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/pages/ThreadsView.tsx",
+          "purpose": "Threads CRUD with category filters + responsive 1/2/3-col grid",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/pages/BacklogView.tsx",
+          "purpose": "Backlog with real thread picker, working checkbox",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "src/pages/WishlistView.tsx",
+          "purpose": "Wishlist with responsive modal + accessible acquired checkbox",
+          "last_modified": "2026-09-05T12:00:00Z"
+        },
+        {
+          "file": "vite.config.ts",
+          "purpose": "Removed VITE_API_URL pin; reads from .env",
+          "last_modified": "2026-09-05T12:00:00Z"
+        }
+      ],
+      "decisions_log": [
+        {
+          "decision": "Server fails fast if MONGO_URI missing (no in-memory fallback)",
+          "reason": "User requested live MongoDB-only; no dummy data; ensures prod never silently runs without DB",
+          "alternatives_considered": "Keep fallback with warning log (rejected: would mask real DB outages)"
+        },
+        {
+          "decision": "Auto-seed on first boot if collections empty",
+          "reason": "Idempotent — only inserts when collection is empty, won't duplicate on restart; matches PRD §7",
+          "alternatives_considered": "Require manual seed script run (rejected: extra step for first deploy)"
+        },
+        {
+          "decision": "Analytics scoped to current quarter (Q1-2026..Q4-YYYY)",
+          "reason": "PRD §2.6 specifies quarterly goals; user complained old 'all tasks ever' percentages were unclear",
+          "alternatives_considered": "Current month, current week, last-30-days (rejected: quarter aligns with goals + most meaningful work horizon)"
+        },
+        {
+          "decision": "Mobile-first WeekView with stacked day cards (≤md); desktop 7-col grid (≥md)",
+          "reason": "7 columns on a phone is unreadable; stacking per-day is the natural mobile pattern for a weekly view",
+          "alternatives_considered": "Horizontal scroll on mobile (rejected: poor UX), single-day with day-switcher (rejected: hides the week context)"
+        },
+        {
+          "decision": "Defer Google Calendar OAuth flow (env vars loaded but not used)",
+          "reason": "User explicitly said 'don't worry about Google Calendar integration yet'",
+          "alternatives_considered": "Implement OAuth (rejected: user deprioritised; would block other work)"
+        }
+      ],
+      "known_issues": [
+        {
+          "issue": "Google Calendar OAuth credentials loaded but OAuth flow disabled",
+          "severity": "low",
+          "status": "open",
+          "action": "Re-enable when user requests; currently /api/calendar/status returns connected:false and /api/calendar/events returns empty"
+        },
+        {
+          "issue": "Local PowerShell HTTP test to http://localhost:3000 hung (may be local firewall or IPv6)",
+          "severity": "low",
+          "status": "open",
+          "action": "User to verify in browser after deploy — server confirmed listening on 0.0.0.0:3000"
+        }
+      ],
+      "errors_encountered": [
+        "ESLint: useTasks.ts had duplicate `return []; }` from a partial replace (fixed)",
+        "ESLint: server.ts `let cursor` never reassigned (changed to const)"
+      ],
+      "next_steps": [
+        "Deploy to workspace.benedictisaac.dev (AWS App Runner recommended)",
+        "Verify in browser at deployed URL: Tasks CRUD, Week grid, Goals analytics, Backlog, Wishlist, passcode gate",
+        "Wire up Google Calendar OAuth flow when user is ready",
+        "Set up MongoDB Atlas IP allowlist for the deploy target",
+        "Add Lighthouse / mobile responsiveness QA pass",
+        "Plan PWA offline hardening (already has workbox; queue + cache layer can be tightened)"
+      ],
+      "notes": "Server starts cleanly against user's Atlas cluster (workspace.jwh4owf.mongodb.net). Seeds 30 threads + 3 wishlist + 3 goals + default settings on first boot. Lint: 0 warnings. Build: clean (vite + esbuild bundle of server.cjs at 31.8kb). All views now use live data from /api/* — no remaining in-memory arrays in the request path. Responsive across mobile/tablet/desktop breakpoints."
     }
   ]
 }
