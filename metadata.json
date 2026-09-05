@@ -1,0 +1,6 @@
+{
+  "name": "Workspace",
+  "description": "Task, schedule, and habit tracker hub with calendar integration, weekly grid planning, and backlog management",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
