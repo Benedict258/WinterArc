@@ -7,6 +7,10 @@ export type Settings = {
   timezone: string;
   weeklyGenerationRules: any;
   multipleThreadsPerWeekTarget: number;
+  gridBalancing?: {
+    maxDailyIntensity: number;
+    preferLowIntensityOnBusyDays: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 };

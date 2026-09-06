@@ -1,24 +1,33 @@
 import MainLayout from '@/components/MainLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { format, startOfWeek, addDays, addWeeks, isSameWeek } from 'date-fns'
+import { format, startOfWeek, addDays, addWeeks, isSameWeek, isToday as fnsIsToday } from 'date-fns'
 import { useQueries } from '@tanstack/react-query'
 import { useWeek, useRegenerateWeek } from '@/hooks/useGrid'
 import { useThreads } from '@/hooks/useThreads'
 import { useUpdateTask } from '@/hooks/useTasks'
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, Plus, CheckCircle2, Calendar as CalIcon } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { ChevronLeft, ChevronRight, RefreshCw, Plus, ChevronDown, Calendar as CalIcon, Maximize2, Minimize2 } from 'lucide-react'
 import QuickAddModal from '@/components/QuickAddModal'
+import TaskRow, { type TaskRowData } from '@/components/TaskRow'
+import { cn } from '@/lib/utils'
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const DAY_LABELS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const BLOCKS = ['morning', 'afternoon', 'evening'] as const
+const BLOCKS = [
+  { id: 'morning', label: 'Morning', time: '9:00 AM – 12:00 PM' },
+  { id: 'afternoon', label: 'Afternoon', time: '1:00 PM – 5:00 PM' },
+  { id: 'evening', label: 'Evening', time: '6:00 PM – 9:00 PM' },
+] as const
 
 export default function WeekView() {
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 })
   )
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>(() => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    return { [todayStr]: true }
+  })
 
   const isCurrentWeek = isSameWeek(currentWeekStart, new Date(), { weekStartsOn: 1 })
   const weekStartString = currentWeekStart.toISOString().split('T')[0]
@@ -33,17 +42,26 @@ export default function WeekView() {
 
   const threadMap = new Map(threads.map(thread => [thread._id, thread.name]))
 
-  const dayStrings = Array.from({ length: 7 }, (_, dayIndex) =>
-    format(addDays(currentWeekStart, dayIndex), 'yyyy-MM-dd')
+  const dayStrings = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, dayIndex) =>
+        format(addDays(currentWeekStart, dayIndex), 'yyyy-MM-dd')
+      ),
+    [currentWeekStart]
   )
 
-  const tasksByDayAndBlock: Record<string, Record<string, any[]>> = {}
-  for (const ds of dayStrings) tasksByDayAndBlock[ds] = { morning: [], afternoon: [], evening: [] }
+  const tasksByDayAndBlock: Record<string, Record<string, TaskRowData[]>> = {}
+  for (const ds of dayStrings) {
+    tasksByDayAndBlock[ds] = { morning: [], afternoon: [], evening: [] }
+  }
 
   tasks.forEach((task: any) => {
     const taskDateStr = String(task.date || '').split('T')[0]
     const normBlock = (task.timeBlock || 'morning').toLowerCase()
-    if (tasksByDayAndBlock[taskDateStr] && (BLOCKS as readonly string[]).includes(normBlock)) {
+    if (
+      tasksByDayAndBlock[taskDateStr] &&
+      (normBlock === 'morning' || normBlock === 'afternoon' || normBlock === 'evening')
+    ) {
       tasksByDayAndBlock[taskDateStr][normBlock].push({
         id: task._id,
         title: task.title,
@@ -51,6 +69,8 @@ export default function WeekView() {
         threadName: task.threadId ? threadMap.get(task.threadId) || 'Unknown' : null,
         status: task.status,
         source: task.source,
+        priority: task.priority,
+        intensity: task.intensity,
       })
     }
   })
@@ -74,6 +94,30 @@ export default function WeekView() {
 
   const isLoading = (weekLoading && !tasks.length) || (threadsLoading && !threads.length)
   const hasError = weekError && !tasks.length
+
+  const toggleDay = (dayStr: string) => {
+    setExpandedDays(prev => ({ ...prev, [dayStr]: !prev[dayStr] }))
+  }
+
+  const allExpanded = dayStrings.every(ds => expandedDays[ds])
+  const expandAll = () => {
+    const next: Record<string, boolean> = {}
+    dayStrings.forEach(ds => (next[ds] = true))
+    setExpandedDays(next)
+  }
+  const collapseAll = () => {
+    setExpandedDays({})
+  }
+
+  const handleToggleTask = (task: TaskRowData) => {
+    updateTask({
+      id: task.id,
+      updates: {
+        status: task.status === 'done' ? 'pending' : 'done',
+        completedAt: task.status === 'done' ? null : new Date().toISOString(),
+      },
+    })
+  }
 
   if (isLoading) {
     return (
@@ -100,7 +144,6 @@ export default function WeekView() {
   return (
     <MainLayout>
       <div className="space-y-5 sm:space-y-6">
-        {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -131,7 +174,7 @@ export default function WeekView() {
 
             <Button variant="outline" size="sm" onClick={() => regenerateWeek(weekStartString)} disabled={isRegenerating} className="gap-1.5 h-9 text-xs">
               <RefreshCw size={14} className={isRegenerating ? 'animate-spin' : ''} />
-              <span className="hidden xs:inline sm:inline">{isRegenerating ? 'Rebalancing...' : 'Regenerate'}</span>
+              <span className="hidden sm:inline">{isRegenerating ? 'Rebalancing...' : 'Regenerate'}</span>
             </Button>
 
             <Button size="sm" onClick={() => setQuickAddOpen(true)} className="gap-1.5 h-9 text-xs">
@@ -141,138 +184,148 @@ export default function WeekView() {
           </div>
         </div>
 
-        {/* Mobile: stacked day list (≤ md) */}
-        <div className="md:hidden space-y-3">
-          {dayStrings.map((dayDateStr, dayIndex) => {
-            const dayDate = addDays(currentWeekStart, dayIndex)
-            const isToday = dayDate.toDateString() === new Date().toDateString()
-            const calendarEvents = (calendarQueries[dayIndex]?.data as any[]) || []
-            const dayTotal = (Object.values(tasksByDayAndBlock[dayDateStr]) as any[][]).reduce((s, arr) => s + arr.length, 0)
-            const dayDone = (Object.values(tasksByDayAndBlock[dayDateStr]) as any[][]).reduce(
-              (s, arr) => s + arr.filter((t: any) => t.status === 'done').length, 0
-            )
-
-            return (
-              <Card key={dayDateStr} className={isToday ? 'ring-2 ring-primary/40' : ''}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base font-semibold">{DAY_LABELS_FULL[dayIndex]}</CardTitle>
-                      <CardDescription className="text-xs">{format(dayDate, 'EEE, MMM d')}</CardDescription>
-                    </div>
-                    {isToday ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-medium">Today</span>
-                    ) : dayTotal > 0 ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-medium">{dayDone}/{dayTotal}</span>
-                    ) : null}
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0 space-y-2">
-                  {BLOCKS.map(block => {
-                    const blockTasks = tasksByDayAndBlock[dayDateStr][block]
-                    if (blockTasks.length === 0) return null
-                    return (
-                      <div key={block}>
-                        <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">{block}</p>
-                        <div className="space-y-1">
-                          {blockTasks.map(task => (
-                            <TaskRow key={task.id} task={task} updateTask={updateTask} />
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-
-                  {dayTotal === 0 && calendarEvents.length === 0 && (
-                    <p className="text-xs text-muted-foreground py-1">No tasks or events</p>
-                  )}
-
-                  {calendarEvents.length > 0 && (
-                    <div className="pt-2 mt-2 border-t">
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-                        <CalIcon size={10} /> Events
-                      </p>
-                      <div className="space-y-1">
-                        {calendarEvents.map((event: any, idx: number) => (
-                          <div key={`${dayDateStr}-ev-${idx}`} className="flex items-center gap-2 p-2 rounded bg-secondary/70 text-xs">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{event.title}</p>
-                              <p className="text-muted-foreground">
-                                {new Date(event.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+        <div className="flex items-center gap-2 text-xs">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={allExpanded ? collapseAll : expandAll}
+            className="h-7 px-2 text-muted-foreground hover:text-foreground gap-1"
+          >
+            {allExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {allExpanded ? 'Collapse all' : 'Expand all'}
+          </Button>
         </div>
 
-        {/* Tablet & desktop: 7-column grid (≥ md) */}
-        <div className="hidden md:grid md:grid-cols-7 gap-2 lg:gap-3">
+        <div className="space-y-3">
           {dayStrings.map((dayDateStr, dayIndex) => {
             const dayDate = addDays(currentWeekStart, dayIndex)
-            const isToday = dayDate.toDateString() === new Date().toDateString()
+            const isToday = fnsIsToday(dayDate)
             const calendarEvents = (calendarQueries[dayIndex]?.data as any[]) || []
-            const dayTotal = (Object.values(tasksByDayAndBlock[dayDateStr]) as any[][]).reduce((s, arr) => s + arr.length, 0)
-            const dayDone = (Object.values(tasksByDayAndBlock[dayDateStr]) as any[][]).reduce(
-              (s, arr) => s + arr.filter((t: any) => t.status === 'done').length, 0
+            const dayTotal = (Object.values(tasksByDayAndBlock[dayDateStr]) as TaskRowData[][]).reduce(
+              (s, arr) => s + arr.length,
+              0
             )
+            const dayDone = (Object.values(tasksByDayAndBlock[dayDateStr]) as TaskRowData[][]).reduce(
+              (s, arr) => s + arr.filter(t => t.status === 'done').length,
+              0
+            )
+            const isExpanded = !!expandedDays[dayDateStr]
 
             return (
-              <Card key={dayDateStr} className={`flex flex-col min-w-0 ${isToday ? 'ring-2 ring-primary/40' : ''}`}>
-                <CardHeader className="pb-2 px-3">
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="min-w-0">
-                      <CardTitle className="text-sm font-semibold truncate">{DAYS[dayIndex]}</CardTitle>
-                      <CardDescription className="text-[11px]">{format(dayDate, 'MMM d')}</CardDescription>
+              <Card
+                key={dayDateStr}
+                className={cn(
+                  'transition-colors',
+                  isToday && 'ring-2 ring-primary/40',
+                  !isExpanded && 'hover:bg-accent/30'
+                )}
+              >
+                <CardHeader
+                  className="cursor-pointer select-none pb-3"
+                  onClick={() => toggleDay(dayDateStr)}
+                  role="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={`day-${dayDateStr}-content`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <ChevronDown
+                        size={18}
+                        className={cn(
+                          'shrink-0 text-muted-foreground transition-transform duration-200',
+                          !isExpanded && '-rotate-90'
+                        )}
+                      />
+                      <div className="min-w-0">
+                        <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2 flex-wrap">
+                          {DAY_LABELS_FULL[dayIndex]}
+                          {isToday && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-medium">
+                              Today
+                            </span>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          {format(dayDate, 'EEEE, MMMM d')}
+                        </CardDescription>
+                      </div>
                     </div>
-                    {isToday ? (
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-primary text-primary-foreground font-medium shrink-0">Today</span>
-                    ) : dayTotal > 0 ? (
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-secondary text-muted-foreground font-medium shrink-0">{dayDone}/{dayTotal}</span>
-                    ) : null}
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {dayTotal > 0 ? (
+                        <span className="text-xs text-muted-foreground font-medium">
+                          {dayDone}/{dayTotal} done
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No tasks</span>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="flex-1 space-y-2 pt-0 px-2 pb-2">
-                  {BLOCKS.map(block => {
-                    const blockTasks = tasksByDayAndBlock[dayDateStr][block]
-                    return (
-                      <div key={block} className="p-1.5 rounded bg-secondary/40">
-                        <p className="font-semibold text-[10px] uppercase tracking-wider text-muted-foreground mb-1 px-0.5">{block}</p>
-                        {blockTasks.length > 0 ? (
-                          <div className="space-y-1">
-                            {blockTasks.map(task => (
-                              <TaskRow key={task.id} task={task} updateTask={updateTask} compact />
+
+                <div
+                  id={`day-${dayDateStr}-content`}
+                  className={cn(
+                    'grid transition-[grid-template-rows] duration-200 ease-in-out',
+                    isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <CardContent className="pt-0 space-y-4">
+                      {BLOCKS.map(block => {
+                        const blockTasks = tasksByDayAndBlock[dayDateStr][block.id]
+                        return (
+                          <div key={block.id}>
+                            <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
+                              {block.label} <span className="font-normal normal-case">· {block.time}</span>
+                            </p>
+                            {blockTasks.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {blockTasks.map(task => (
+                                  <TaskRow
+                                    key={task.id}
+                                    task={task}
+                                    onToggle={handleToggleTask}
+                                    showSource
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground/70 px-1 pb-1">No tasks</p>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      <div className="pt-2 border-t">
+                        <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                          <CalIcon size={11} /> Events
+                        </p>
+                        {calendarEvents.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {calendarEvents.map((event: any, idx: number) => (
+                              <div
+                                key={`${dayDateStr}-ev-${idx}`}
+                                className="flex items-center gap-3 p-2.5 sm:p-3 rounded-lg bg-secondary/70"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm break-words">{event.title}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {new Date(event.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {' – '}
+                                    {new Date(event.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-[10px] text-muted-foreground/70 px-1 pb-1">—</p>
+                          <p className="text-xs text-muted-foreground/70 px-1 pb-1">No calendar events</p>
                         )}
                       </div>
-                    )
-                  })}
-
-                  {calendarEvents.length > 0 && (
-                    <div className="mt-1 pt-2 border-t">
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 px-0.5">Events</p>
-                      <div className="space-y-1">
-                        {calendarEvents.map((event: any, idx: number) => (
-                          <div key={`${dayDateStr}-ev-${idx}`} className="p-1.5 rounded bg-secondary/70 text-[11px]">
-                            <p className="font-medium truncate">{event.title}</p>
-                            <p className="text-muted-foreground text-[10px]">
-                              {new Date(event.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
+                    </CardContent>
+                  </div>
+                </div>
               </Card>
             )
           })}
@@ -281,38 +334,5 @@ export default function WeekView() {
 
       <QuickAddModal isOpen={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
     </MainLayout>
-  )
-}
-
-function TaskRow({ task, updateTask, compact = false }: { task: any; updateTask: any; compact?: boolean }) {
-  return (
-    <div className={`flex items-start gap-1.5 p-1.5 rounded bg-secondary hover:bg-secondary/80 transition-colors ${compact ? 'text-[11px]' : 'text-sm'}`}>
-      <input
-        type="checkbox"
-        checked={task.status === 'done'}
-        onChange={() => {
-          updateTask({
-            id: task.id,
-            updates: {
-              status: task.status === 'done' ? 'pending' : 'done',
-              completedAt: task.status === 'done' ? null : new Date().toISOString(),
-            },
-          })
-        }}
-        className={`mt-0.5 shrink-0 rounded cursor-pointer accent-primary ${compact ? 'w-3 h-3' : 'w-4 h-4'}`}
-      />
-      <div className="flex-1 min-w-0">
-        <p className={`break-words ${task.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
-          {task.title}
-        </p>
-        {task.threadId && (
-          <p className="text-[10px] text-muted-foreground truncate">[{task.threadName}]</p>
-        )}
-        {task.source === 'manual' && !compact && (
-          <p className="text-[10px] text-primary">manual</p>
-        )}
-      </div>
-      {task.status === 'done' && <CheckCircle2 size={compact ? 10 : 12} className="text-primary shrink-0 mt-0.5" />}
-    </div>
   )
 }

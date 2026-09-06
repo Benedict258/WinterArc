@@ -1,8 +1,9 @@
 import MainLayout from '@/components/MainLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Cloud, Download, Upload, Lock, ShieldCheck, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Cloud, Download, Upload, Lock, ShieldCheck, RefreshCw, CheckCircle2, AlertCircle, Sliders } from 'lucide-react'
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings'
+import { useGridSettings, useUpdateGridSettings } from '@/hooks/useGrid'
 import { useCalendar } from '@/hooks/useCalendar'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
@@ -31,6 +32,20 @@ export default function SettingsView() {
   const [editTimezone, setEditTimezone] = useState('Africa/Lagos')
   const [editMultipleThreadsPerWeekTarget, setEditMultipleThreadsPerWeekTarget] = useState(3)
   const [isDirty, setIsDirty] = useState(false)
+
+  const { data: gridBalancing } = useGridSettings()
+  const { mutate: updateGridBalancing } = useUpdateGridSettings()
+  const [editMaxDailyIntensity, setEditMaxDailyIntensity] = useState(6)
+  const [editPreferLow, setEditPreferLow] = useState(true)
+  const [gridDirty, setGridDirty] = useState(false)
+
+  useEffect(() => {
+    if (gridBalancing) {
+      setEditMaxDailyIntensity(gridBalancing.maxDailyIntensity)
+      setEditPreferLow(gridBalancing.preferLowIntensityOnBusyDays)
+      setGridDirty(false)
+    }
+  }, [gridBalancing])
   
   // Initialize edit form with current settings
   useEffect(() => {
@@ -288,6 +303,76 @@ export default function SettingsView() {
             </Card>
 
             {/* Data Management */}  
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sliders size={20} />
+                  Grid Balancing
+                </CardTitle>
+                <CardDescription>Control how the weekly generator distributes load across days</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Max Daily Intensity</label>
+                  <div className="flex items-center gap-3 mt-2">
+                    <input
+                      type="range"
+                      min={1}
+                      max={20}
+                      value={editMaxDailyIntensity}
+                      onChange={(e) => {
+                        setEditMaxDailyIntensity(parseInt(e.target.value))
+                        setGridDirty(true)
+                      }}
+                      className="flex-1 accent-primary"
+                    />
+                    <span className="text-sm font-mono w-10 text-right">{editMaxDailyIntensity}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Sum cap: light=1, medium=2, heavy=4. Default 6 ≈ 3 medium tasks per day.
+                  </p>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary">
+                  <input
+                    id="preferLow"
+                    type="checkbox"
+                    checked={editPreferLow}
+                    onChange={(e) => {
+                      setEditPreferLow(e.target.checked)
+                      setGridDirty(true)
+                    }}
+                    className="mt-0.5 h-4 w-4 rounded accent-primary cursor-pointer"
+                  />
+                  <label htmlFor="preferLow" className="text-sm cursor-pointer">
+                    <span className="font-medium block">Prefer low-intensity on busy days</span>
+                    <span className="text-xs text-muted-foreground">
+                      When cap is approached, place lighter tasks first.
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      updateGridBalancing(
+                        {
+                          maxDailyIntensity: editMaxDailyIntensity,
+                          preferLowIntensityOnBusyDays: editPreferLow,
+                        },
+                        { onSuccess: () => setGridDirty(false) }
+                      )
+                    }
+                    disabled={!gridDirty}
+                  >
+                    {gridDirty ? 'Save Grid Balancing' : 'Saved'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Data Management */}
             <Card>
               <CardHeader>
                 <CardTitle>Data Management</CardTitle>

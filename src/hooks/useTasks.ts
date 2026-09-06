@@ -10,10 +10,12 @@ export type Task = {
   _id: string;
   title: string;
   threadId: string | null;
-  date: string; // ISO date string
+  date: string;
   timeBlock: string;
   status: string;
   completedAt: string | null;
+  priority: 'low' | 'medium' | 'high';
+  intensity: 'light' | 'medium' | 'heavy';
   calendarEventId: string | null;
   source: string;
   createdAt: string;

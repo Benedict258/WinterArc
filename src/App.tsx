@@ -5,6 +5,7 @@ import './index.css'
 import TodayView from './pages/TodayView'
 import WeekView from './pages/WeekView'
 import ThreadsView from './pages/ThreadsView'
+import ThreadDetailView from './pages/ThreadDetailView'
 import BacklogView from './pages/BacklogView'
 import WishlistView from './pages/WishlistView'
 import GoalsView from './pages/GoalsView'
@@ -26,6 +27,7 @@ function App() {
                 <Route path="/" element={<TodayView />} />
                 <Route path="/week" element={<WeekView />} />
                 <Route path="/threads" element={<ThreadsView />} />
+                <Route path="/threads/:id" element={<ThreadDetailView />} />
                 <Route path="/backlog" element={<BacklogView />} />
                 <Route path="/wishlist" element={<WishlistView />} />
                 <Route path="/goals" element={<GoalsView />} />

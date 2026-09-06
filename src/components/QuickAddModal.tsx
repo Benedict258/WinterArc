@@ -15,7 +15,9 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const [date, setDate] = useState(todayString)
   const [timeBlock, setTimeBlock] = useState('unscheduled')
   const [threadId, setThreadId] = useState<string>('')
-  
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
+  const [intensity, setIntensity] = useState<'light' | 'medium' | 'heavy'>('medium')
+
   const { data: threads = [] } = useThreads()
   const { mutate: createTask, isPending } = useCreateTask()
 
@@ -33,10 +35,14 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
         threadId: threadId || null,
         status: 'pending',
         source: 'manual',
+        priority,
+        intensity,
       } as any,
       {
         onSuccess: () => {
           setTitle('')
+          setPriority('medium')
+          setIntensity('medium')
           onClose()
         },
       }
@@ -118,6 +124,33 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
                   </option>
                 ))}
             </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Priority</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}
+                className="w-full px-3 py-1.5 border rounded-md text-sm bg-background"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Intensity</label>
+              <select
+                value={intensity}
+                onChange={(e) => setIntensity(e.target.value as 'light' | 'medium' | 'heavy')}
+                className="w-full px-3 py-1.5 border rounded-md text-sm bg-background"
+              >
+                <option value="light">Light (15m)</option>
+                <option value="medium">Medium (45m)</option>
+                <option value="heavy">Heavy (90m+)</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">

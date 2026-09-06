@@ -25,6 +25,7 @@ export default function WishlistView() {
   }
 
   const handleSave = () => {
+    if (!editId) return
     if (editId === 'new') {
       createItem({ item: form.item, note: form.note, acquired: form.acquired })
     } else {

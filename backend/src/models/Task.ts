@@ -26,6 +26,16 @@ const taskSchema = new mongoose.Schema(
       default: 'pending',
     },
     completedAt: Date,
+    priority: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'medium',
+    },
+    intensity: {
+      type: String,
+      enum: ['light', 'medium', 'heavy'],
+      default: 'medium',
+    },
     calendarEventId: String,
     source: {
       type: String,

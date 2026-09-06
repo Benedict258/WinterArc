@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useThreads, useCreateThread, useUpdateThread, useDeleteThread } from '@/hooks/useThreads'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const PREDEFINED_CATEGORIES = ['Role/Program', 'Active Build', 'Learning Track', 'Application/Outreach', 'Other']
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -27,6 +28,7 @@ function frequencyDescription(thread: any): string {
 }
 
 export default function ThreadsView() {
+  const navigate = useNavigate()
   const { data: threads = [], isLoading, error } = useThreads()
   const { mutate: createThread, isPending: isCreating } = useCreateThread()
   const { mutate: updateThread, isPending: isUpdating } = useUpdateThread()
@@ -40,6 +42,8 @@ export default function ThreadsView() {
     frequency: '',
     fixedDay: null as number | null,
     status: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
+    intensity: 'medium' as 'light' | 'medium' | 'heavy',
     notes: '',
   })
 
@@ -50,7 +54,10 @@ export default function ThreadsView() {
 
   const openNew = () => {
     setEditId('new')
-    setForm({ name: '', category: '', frequency: '', fixedDay: null, status: 'active', notes: '' })
+    setForm({
+      name: '', category: '', frequency: '', fixedDay: null, status: 'active',
+      priority: 'medium', intensity: 'medium', notes: '',
+    })
   }
 
   const openEdit = (thread: any) => {
@@ -61,6 +68,8 @@ export default function ThreadsView() {
       frequency: thread.frequency,
       fixedDay: thread.fixedDay ?? null,
       status: thread.status,
+      priority: thread.priority || 'medium',
+      intensity: thread.intensity || 'medium',
       notes: thread.notes || '',
     })
   }
@@ -68,12 +77,15 @@ export default function ThreadsView() {
   const closeForm = () => setEditId(null)
 
   const handleSave = () => {
+    if (!editId) return
     const payload: any = {
       name: form.name,
       category: form.category,
       frequency: form.frequency,
       fixedDay: form.frequency === 'fixed-day' ? form.fixedDay : null,
       status: form.status,
+      priority: form.priority,
+      intensity: form.intensity,
       notes: form.notes,
     }
     if (editId === 'new') {
@@ -135,7 +147,11 @@ export default function ThreadsView() {
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                 {filteredThreads.map(thread => (
-                  <Card key={thread._id}>
+                  <Card
+                    key={thread._id}
+                    className="cursor-pointer hover:border-primary/50 transition-colors"
+                    onClick={() => navigate(`/threads/${thread._id}`)}
+                  >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -143,14 +159,15 @@ export default function ThreadsView() {
                           <CardDescription className="text-xs">{thread.category}</CardDescription>
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(thread)} title="Edit">
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); openEdit(thread) }} title="Edit">
                             <Edit2 size={14} />
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation()
                               if (window.confirm(`Archive "${thread.name}"?`)) deleteThread(thread._id)
                             }}
                             title="Archive"
@@ -164,6 +181,26 @@ export default function ThreadsView() {
                       <div className="flex gap-1.5 flex-wrap">
                         <Badge className={`text-[10px] ${frequencyColors[thread.frequency] || ''}`}>{thread.frequency}</Badge>
                         <Badge variant={thread.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{thread.status}</Badge>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            thread.priority === 'high' ? 'border-red-500 text-red-700 dark:text-red-300' :
+                            thread.priority === 'low' ? 'border-slate-400 text-slate-600 dark:text-slate-400' :
+                            'border-amber-500 text-amber-700 dark:text-amber-300'
+                          }`}
+                        >
+                          {thread.priority || 'medium'} pri
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            thread.intensity === 'heavy' ? 'border-orange-500 text-orange-700 dark:text-orange-300' :
+                            thread.intensity === 'light' ? 'border-sky-400 text-sky-700 dark:text-sky-300' :
+                            'border-violet-400 text-violet-700 dark:text-violet-300'
+                          }`}
+                        >
+                          {thread.intensity || 'medium'} int
+                        </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">{frequencyDescription(thread)}</p>
                       {thread.notes && (
@@ -264,6 +301,33 @@ export default function ThreadsView() {
                   <option value="parked">Parked/Idea</option>
                   <option value="archived">Archived</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Priority</label>
+                  <select
+                    value={form.priority}
+                    onChange={(e) => setForm(f => ({ ...f, priority: e.target.value as 'low' | 'medium' | 'high' }))}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Intensity</label>
+                  <select
+                    value={form.intensity}
+                    onChange={(e) => setForm(f => ({ ...f, intensity: e.target.value as 'light' | 'medium' | 'heavy' }))}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                  >
+                    <option value="light">Light (15m)</option>
+                    <option value="medium">Medium (45m)</option>
+                    <option value="heavy">Heavy (90m+)</option>
+                  </select>
+                </div>
               </div>
 
               <div>

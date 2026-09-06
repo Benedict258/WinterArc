@@ -1,6 +1,23 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useTheme } from 'next-themes'
-import { Plus, Menu, Sun, Moon, Lock } from 'lucide-react'
+import {
+  Plus,
+  Menu,
+  Sun,
+  Moon,
+  Lock,
+  CalendarDays,
+  Sun as TodayIcon,
+  GitBranch,
+  Inbox,
+  Heart,
+  Target,
+  Settings as SettingsIcon,
+  X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import QuickAddModal from '@/components/QuickAddModal'
@@ -9,26 +26,42 @@ import { useAuth } from '@/context/AuthContext'
 interface NavItem {
   label: string
   path: string
+  icon: LucideIcon
 }
 
 const navItems: NavItem[] = [
-  { label: 'Today', path: '/' },
-  { label: 'Week', path: '/week' },
-  { label: 'Threads', path: '/threads' },
-  { label: 'Backlog', path: '/backlog' },
-  { label: 'Wishlist', path: '/wishlist' },
-  { label: 'Goals', path: '/goals' },
-  { label: 'Settings', path: '/settings' },
+  { label: 'Today', path: '/', icon: TodayIcon },
+  { label: 'Week', path: '/week', icon: CalendarDays },
+  { label: 'Threads', path: '/threads', icon: GitBranch },
+  { label: 'Backlog', path: '/backlog', icon: Inbox },
+  { label: 'Wishlist', path: '/wishlist', icon: Heart },
+  { label: 'Goals', path: '/goals', icon: Target },
+  { label: 'Settings', path: '/settings', icon: SettingsIcon },
 ]
+
+const SIDEBAR_EXPANDED_KEY = 'workspace-sidebar-expanded'
+const SIDEBAR_FULL = 'w-64'
+const SIDEBAR_COLLAPSED = 'w-16'
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
   const { logout } = useAuth()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [pinnedExpanded, setPinnedExpanded] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem(SIDEBAR_EXPANDED_KEY) === 'true'
+  })
+  const [hoverExpanded, setHoverExpanded] = useState(false)
 
-  // Keyboard shortcut: press 'q' to open Quick Add when not typing in an input
+  const desktopExpanded = pinnedExpanded || hoverExpanded
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(SIDEBAR_EXPANDED_KEY, String(pinnedExpanded))
+  }, [pinnedExpanded])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = (document.activeElement?.tagName || '').toLowerCase()
@@ -46,83 +79,140 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <aside className={cn(
-        'fixed md:relative w-64 h-full bg-card border-r border-border p-6 z-40 transition-transform',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-      )}>
-        <div className="flex flex-col h-full gap-8">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded bg-primary flex items-center justify-center font-bold text-primary-foreground">
+      <aside
+        onMouseEnter={() => setHoverExpanded(true)}
+        onMouseLeave={() => setHoverExpanded(false)}
+        className={cn(
+          'fixed md:relative h-full bg-card border-r border-border z-40',
+          'flex flex-col transition-[width] duration-200 ease-in-out',
+          desktopExpanded ? SIDEBAR_FULL : SIDEBAR_COLLAPSED,
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        )}
+        aria-expanded={desktopExpanded}
+      >
+        <div className="flex flex-col h-full p-3 gap-4">
+          <div
+            className={cn(
+              'flex items-center gap-2 px-2 py-2',
+              desktopExpanded ? 'justify-start' : 'justify-center'
+            )}
+          >
+            <div className="w-8 h-8 shrink-0 rounded bg-primary flex items-center justify-center font-bold text-primary-foreground">
               W
             </div>
-            <h1 className="font-bold text-lg">Workspace</h1>
+            {desktopExpanded && (
+              <h1 className="font-bold text-lg whitespace-nowrap overflow-hidden">
+                Workspace
+              </h1>
+            )}
           </div>
 
-          {/* Nav Items */}
-          <nav className="flex flex-col gap-2 flex-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  'px-4 py-2 rounded-lg transition-colors font-medium',
-                  location.pathname === item.path
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-secondary text-foreground'
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
+          <nav className="flex flex-col gap-1 flex-1">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const active = location.pathname === item.path
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg transition-colors font-medium cursor-pointer',
+                    desktopExpanded
+                      ? 'px-4 py-2 justify-start'
+                      : 'px-0 py-2 justify-center',
+                    active
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-secondary text-foreground'
+                  )}
+                  title={item.label}
+                >
+                  <Icon size={20} className="shrink-0" />
+                  {desktopExpanded && (
+                    <span className="whitespace-nowrap overflow-hidden">
+                      {item.label}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
           </nav>
 
-          {/* Quick Add */}
-          <button 
+          <button
             onClick={() => setQuickAddOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+            className={cn(
+              'flex items-center gap-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-sm',
+              desktopExpanded
+                ? 'px-4 py-3 justify-center'
+                : 'p-3 justify-center'
+            )}
+            title="Quick Add"
+            aria-label="Quick Add"
           >
             <Plus size={18} />
-            Quick Add
+            {desktopExpanded && <span>Quick Add</span>}
           </button>
 
-          {/* Lock Workspace */}
           <button
-            onClick={logout}
-            className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors border border-transparent hover:border-border"
+            onClick={() => logout()}
+            className={cn(
+              'flex items-center gap-2 rounded-lg transition-colors border border-transparent hover:border-border',
+              'text-muted-foreground hover:text-foreground hover:bg-secondary text-xs',
+              desktopExpanded
+                ? 'px-3 py-2 justify-start'
+                : 'p-2 justify-center'
+            )}
             title="Lock workspace"
+            aria-label="Lock workspace"
           >
             <Lock size={14} />
-            <span>Lock Workspace</span>
+            {desktopExpanded && <span>Lock Workspace</span>}
+          </button>
+
+          <button
+            onClick={() => setPinnedExpanded((prev) => !prev)}
+            className={cn(
+              'flex items-center gap-2 rounded-lg transition-colors',
+              'text-muted-foreground hover:text-foreground hover:bg-secondary text-xs',
+              desktopExpanded
+                ? 'px-3 py-2 justify-start'
+                : 'p-2 justify-center'
+            )}
+            title={pinnedExpanded ? 'Collapse sidebar' : 'Pin sidebar open'}
+            aria-label={pinnedExpanded ? 'Collapse sidebar' : 'Pin sidebar open'}
+          >
+            {pinnedExpanded ? (
+              <PanelLeftClose size={14} />
+            ) : (
+              <PanelLeftOpen size={14} />
+            )}
+            {desktopExpanded && (
+              <span>{pinnedExpanded ? 'Collapse' : 'Pin open'}</span>
+            )}
           </button>
         </div>
       </aside>
 
-      {/* Overlay for mobile */}
-      {sidebarOpen && (
+      {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/50 md:hidden z-30"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => setMobileOpen(false)}
         />
       )}
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <header className="border-b border-border bg-card p-4 md:p-6 flex items-center justify-between">
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="border-b border-border bg-card p-4 md:p-6 flex items-center justify-between gap-2">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={() => setMobileOpen(!mobileOpen)}
             className="md:hidden p-2 hover:bg-secondary rounded-lg"
+            aria-label="Toggle menu"
           >
-            <Menu size={20} />
+            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
 
           <div className="flex-1" />
 
           <div className="flex items-center gap-2">
-            {/* Theme Toggle */}
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="p-2 hover:bg-secondary rounded-lg transition-colors"
@@ -131,7 +221,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            {/* Lock Button */}
             <button
               onClick={logout}
               className="p-2 hover:bg-secondary rounded-lg transition-colors text-muted-foreground hover:text-foreground"
@@ -143,16 +232,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        {/* Content Area */}
-        <main className="flex-1 overflow-auto p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
 
-      {/* Global Quick Add Dialog */}
-      <QuickAddModal 
-        isOpen={quickAddOpen} 
-        onClose={() => setQuickAddOpen(false)} 
+      <QuickAddModal
+        isOpen={quickAddOpen}
+        onClose={() => setQuickAddOpen(false)}
       />
     </div>
   )

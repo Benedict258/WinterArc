@@ -11,6 +11,16 @@ const settingsSchema = new mongoose.Schema(
       type: Number,
       default: 3,
     },
+    gridBalancing: {
+      maxDailyIntensity: {
+        type: Number,
+        default: 6,
+      },
+      preferLowIntensityOnBusyDays: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   { timestamps: true }
 )

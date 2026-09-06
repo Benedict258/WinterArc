@@ -139,10 +139,14 @@ async function seedIfEmpty() {
     console.log(`Seeded ${seedGoals.length} goals`)
   }
   const settingsCount = await Settings.countDocuments()
-  if (settingsCount === 0) {
-    await Settings.create({ timezone: 'Africa/Lagos', multipleThreadsPerWeekTarget: 3 })
-    console.log('Seeded default settings')
-  }
+    if (settingsCount === 0) {
+      await Settings.create({
+        timezone: 'Africa/Lagos',
+        multipleThreadsPerWeekTarget: 3,
+        gridBalancing: { maxDailyIntensity: 6, preferLowIntensityOnBusyDays: true },
+      })
+      console.log('Seeded default settings')
+    }
 }
 
 async function startServer() {
@@ -205,6 +209,107 @@ async function startServer() {
     try {
       const result = await threadService.deleteThread(req.params.id)
       res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.get('/api/threads/:id/stats', async (req, res) => {
+    try {
+      const { id } = req.params
+      const thread = await Thread.findById(id)
+      if (!thread) {
+        res.status(404).json({ error: 'Thread not found' })
+        return
+      }
+
+      const now = new Date()
+      const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1, 0, 0, 0, 0)
+      const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0, 23, 59, 59, 999)
+
+      const tasks = await Task.find({ threadId: id })
+      const quarterTasks = tasks.filter(t => {
+        if (!t.date) return false
+        const d = new Date(t.date)
+        return d >= quarterStart && d <= quarterEnd
+      })
+      const quarterDone = quarterTasks.filter(t => t.status === 'done').length
+      const allDone = tasks.filter(t => t.status === 'done').length
+
+      const completionDates = new Set(
+        tasks
+          .filter(t => t.status === 'done' && t.completedAt)
+          .map(t => new Date(t.completedAt!).toISOString().split('T')[0])
+      )
+      let streak = 0
+      const cursor = new Date()
+      if (!completionDates.has(cursor.toISOString().split('T')[0])) {
+        cursor.setDate(cursor.getDate() - 1)
+      }
+      while (completionDates.has(cursor.toISOString().split('T')[0])) {
+        streak++
+        cursor.setDate(cursor.getDate() - 1)
+      }
+
+      const lastActivity = tasks
+        .filter(t => t.completedAt)
+        .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())[0]?.completedAt || null
+
+      const todayStr = new Date().toISOString().split('T')[0]
+      const upcomingTasks = tasks
+        .filter(t => t.status !== 'done' && t.date && new Date(t.date).toISOString().split('T')[0] >= todayStr)
+        .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
+        .slice(0, 5)
+        .map(t => ({
+          _id: t._id,
+          title: t.title,
+          date: t.date,
+          timeBlock: t.timeBlock,
+          status: t.status,
+        }))
+
+      res.json({
+        tasksThisQuarter: { total: quarterTasks.length, completed: quarterDone, rate: quarterTasks.length > 0 ? Math.round((quarterDone / quarterTasks.length) * 100) : 0 },
+        tasksAllTime: { total: tasks.length, completed: allDone },
+        streakDays: streak,
+        lastActivity,
+        upcomingTasks,
+      })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.post('/api/threads/:id/resources', async (req, res) => {
+    try {
+      const { title, url, description, kind } = req.body || {}
+      if (!title || !url) {
+        res.status(400).json({ error: 'title and url are required' })
+        return
+      }
+      const thread = await Thread.findById(req.params.id)
+      if (!thread) {
+        res.status(404).json({ error: 'Thread not found' })
+        return
+      }
+      thread.resources.push({ title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' } as any)
+      await thread.save()
+      res.status(201).json(thread.resources[thread.resources.length - 1])
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.delete('/api/threads/:id/resources/:resourceId', async (req, res) => {
+    try {
+      const thread = await Thread.findById(req.params.id)
+      if (!thread) {
+        res.status(404).json({ error: 'Thread not found' })
+        return
+      }
+      thread.resources = thread.resources.filter(r => String(r._id) !== req.params.resourceId) as any
+      await thread.save()
+      res.json({ success: true })
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
     }
@@ -278,6 +383,8 @@ async function startServer() {
           timeBlock: t.timeBlock,
           status: t.status,
           source: t.source,
+          priority: t.priority,
+          intensity: t.intensity,
         })),
       })
     } catch (error) {
@@ -290,6 +397,24 @@ async function startServer() {
       const targetDate = req.body?.date ? new Date(req.body.date) : new Date()
       const result = await gridService.regenerateWeek(targetDate)
       res.json({ regenerated: result.length })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.get('/api/grid/settings', async (req, res) => {
+    try {
+      const balancing = await gridService.getGridSettings()
+      res.json(balancing)
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.put('/api/grid/settings', async (req, res) => {
+    try {
+      const balancing = await gridService.updateGridSettings(req.body || {})
+      res.json(balancing)
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
     }
@@ -382,7 +507,11 @@ async function startServer() {
     try {
       let settings = await Settings.findOne()
       if (!settings) {
-        settings = await Settings.create({ timezone: 'Africa/Lagos', multipleThreadsPerWeekTarget: 3 })
+        settings = await Settings.create({
+          timezone: 'Africa/Lagos',
+          multipleThreadsPerWeekTarget: 3,
+          gridBalancing: { maxDailyIntensity: 6, preferLowIntensityOnBusyDays: true },
+        })
       }
       res.json(settings)
     } catch (error) {

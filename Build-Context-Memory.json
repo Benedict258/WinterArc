@@ -820,6 +820,137 @@
         "Plan PWA offline hardening (already has workbox; queue + cache layer can be tightened)"
       ],
       "notes": "Server starts cleanly against user's Atlas cluster (workspace.jwh4owf.mongodb.net). Seeds 30 threads + 3 wishlist + 3 goals + default settings on first boot. Lint: 0 warnings. Build: clean (vite + esbuild bundle of server.cjs at 31.8kb). All views now use live data from /api/* — no remaining in-memory arrays in the request path. Responsive across mobile/tablet/desktop breakpoints."
+    },
+    {
+      "session_id": "session_008",
+      "timestamp": "2026-09-06T12:00:00Z",
+      "ai_agent": "OpenCode / minimax-m3",
+      "current_phase": "Feature Pack: Sidebar polish, Week accordion, balanced grid, Thread detail page, live deploy on EC2",
+      "progress": {
+        "completed": [
+          "Task 1: Desktop sidebar starts collapsed (icon-only 64px), expands on hover; dedicated Pin open / Collapse button at bottom; state persists in localStorage 'workspace-sidebar-expanded'",
+          "Task 2+3: Extracted shared TaskRow component (src/components/TaskRow.tsx); WeekView fully rewritten as single accordion layout (no more mobile/desktop split) — 7 stacked day cards, click header to expand/collapse, today expanded by default, Expand/Collapse all toolbar button; Today and Week use identical TaskRow styling",
+          "Task 4: Added priority (low/medium/high) + intensity (light/medium/heavy) fields to Thread and Task schemas; default medium/medium; added gridBalancing subdoc to Settings (maxDailyIntensity=6, preferLowIntensityOnBusyDays=true); rewrote gridService.generateWeek as deterministic bin-pack: sort slots by priority desc then intensity desc, pick day with lowest current intensity that doesn't already contain the same thread and respects fixed-day; round-robin time blocks within day; new GET/PUT /api/grid/settings; Settings page has new 'Grid Balancing' card with slider + prefer-low checkbox; thread cards and task rows show priority dot + intensity chip with consistent color coding (red/amber/slate for priority, orange/sky/violet for intensity)",
+          "Task 5: Thread model gained resources subdoc array (title, url, description, kind:link|resource); new endpoints GET /api/threads/:id/stats, POST /api/threads/:id/resources, DELETE /api/threads/:id/resources/:resourceId; stats returns quarter completion %, all-time totals, consecutive-day streak, last activity, next 5 upcoming tasks; new src/components/Markdown.tsx (90-line lightweight renderer — no new dep) supports bold, italic, code, links, h1/h2, ul/ol; new src/hooks/useThread.ts; new src/pages/ThreadDetailView.tsx at /threads/:id with stats grid, editable notes (markdown), resources list, upcoming tasks, full edit modal; Thread cards in ThreadsView now clickable → detail page; Edit/Delete buttons stop propagation",
+          "Backlog explanation provided verbally — it's the task inbox for one-off / unscheduled items, not a Wishlist (buying) and not a Thread (ongoing)",
+          "All five frontend tests pass: lint 0 warnings, build clean, tsc --noEmit 0 errors",
+          "Renamed live domain workspaceapi.benedictisaac.dev → winterarc.benedictisaac.dev (DNS A record, .env FRONTEND_URL + GOOGLE_REDIRECT_URI, Certbot new cert, Nginx rewritten to 301-redirect old → new + serve new on 443 with both certs)",
+          "EC2 deployment verified live: pm2 workspace process stable, MongoDB Atlas connection green, /api/health returns mongoConnected:true, browser loads https://winterarc.benedictisaac.dev with passcode gate"
+        ],
+        "in_progress": [
+          "Deploy session_008 changes to live EC2 (winterarc.benedictisaac.dev)"
+        ],
+        "blocked": []
+      },
+      "last_session_summary": "Built all 5 user-requested modifications (sidebar collapse, week accordion, balanced grid with priority+intensity, thread detail page, backlog explained) sequentially. All backend schema changes, frontend components, and the new Thread detail route shipped. Verified clean lint/build/typescript. Live deployment uses winterarc.benedictisaac.dev with HTTPS via Let's Encrypt.",
+      "changes_made": [
+        "src/components/MainLayout.tsx: rewritten with collapsible desktop sidebar (icon-only 64px collapsed, 256px expanded), hover/click expansion, localStorage persistence, dedicated pin button, full Lucide icon set for nav items",
+        "src/components/TaskRow.tsx: NEW shared component used by Today + Week views; consistent checkbox/title/thread-name/priority-dot/intensity-chip/delete-on-hover",
+        "src/components/Markdown.tsx: NEW lightweight markdown renderer (bold/italic/code/links/h1/h2/ul/ol, safe escaping, no deps)",
+        "src/pages/TodayView.tsx: now uses shared TaskRow, passes priority/intensity to each row",
+        "src/pages/WeekView.tsx: fully rewritten as single accordion layout; removed mobile/desktop split; expand/collapse per day + expand/collapse all; time blocks show inline time range; events section per day; today expanded by default",
+        "src/pages/ThreadsView.tsx: form now includes priority + intensity selects; thread cards show 4 badges; entire card is clickable → /threads/:id; Edit/Delete stop propagation",
+        "src/pages/ThreadDetailView.tsx: NEW full-page thread detail with stats grid, editable markdown notes, resources CRUD, upcoming tasks, edit modal",
+        "src/pages/SettingsView.tsx: new 'Grid Balancing' card with slider (1-20) and prefer-low checkbox; saved via useUpdateGridSettings",
+        "src/components/QuickAddModal.tsx: added priority + intensity selects",
+        "src/hooks/useThread.ts: NEW hooks (useThread, useThreadStats, useAddResource, useDeleteResource)",
+        "src/hooks/useGrid.ts: added useGridSettings + useUpdateGridSettings; GridTask type gained priority/intensity",
+        "src/hooks/useThreads.ts: Thread type gained priority/intensity/resources; ThreadResource type added",
+        "src/hooks/useTasks.ts: Task type gained priority/intensity",
+        "src/hooks/useSettings.ts: Settings type gained gridBalancing subdoc",
+        "src/App.tsx: new /threads/:id route → ThreadDetailView",
+        "backend/src/models/Thread.ts: added priority, intensity, resources subdoc array",
+        "backend/src/models/Task.ts: added priority, intensity",
+        "backend/src/models/Settings.ts: added gridBalancing subdoc (maxDailyIntensity, preferLowIntensityOnBusyDays)",
+        "backend/src/utils/validation.ts: zod schemas updated for all new fields; new gridBalancingSchema",
+        "backend/src/services/gridService.ts: REWRITTEN — deterministic bin-pack algorithm (priority + intensity + cap), loadBalancing helper, getGridSettings/updateGridSettings exports; new balancing parameter for generateWeek",
+        "backend/src/services/gridService.test.ts: updated tests to match new contract (no duplicates, cap respected, priority-first ordering)",
+        "server.ts: new GET /api/grid/settings, PUT /api/grid/settings, GET /api/threads/:id/stats, POST /api/threads/:id/resources, DELETE /api/threads/:id/resources/:resourceId; grid week response now includes priority/intensity; Settings GET seeds gridBalancing defaults; seedIfEmpty seeds gridBalancing on first boot"
+      ],
+      "file_module_map": [
+        {"file": "src/components/MainLayout.tsx", "purpose": "Sidebar with collapse on hover + localStorage pin", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "src/components/TaskRow.tsx", "purpose": "Shared task row used by Today + Week", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "src/components/Markdown.tsx", "purpose": "Lightweight markdown renderer (no new dep)", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "src/pages/ThreadDetailView.tsx", "purpose": "Thread detail page with stats, notes, resources, upcoming tasks", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "src/pages/WeekView.tsx", "purpose": "Accordion week view (7 stacked days)", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "src/pages/TodayView.tsx", "purpose": "Today view using shared TaskRow", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "src/pages/ThreadsView.tsx", "purpose": "Thread CRUD with priority/intensity + clickable cards", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "src/pages/SettingsView.tsx", "purpose": "Settings with Grid Balancing section", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "backend/src/services/gridService.ts", "purpose": "Balanced grid generation (priority + intensity + cap + no duplicates)", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "server.ts", "purpose": "Production full-stack server with new grid + thread detail endpoints", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "backend/src/models/Thread.ts", "purpose": "Thread with priority/intensity/resources", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "backend/src/models/Task.ts", "purpose": "Task with priority/intensity", "last_modified": "2026-09-06T12:00:00Z"},
+        {"file": "backend/src/models/Settings.ts", "purpose": "Settings with gridBalancing subdoc", "last_modified": "2026-09-06T12:00:00Z"}
+      ],
+      "decisions_log": [
+        {
+          "decision": "Sidebar starts collapsed (icon-only) on desktop by default; hover expands transiently; dedicated pin button at bottom for sticky state",
+          "reason": "User picked 'Default closed on desktop, slides in on hover/click' from the question menu",
+          "alternatives_considered": "Default open with collapse (rejected by user)"
+        },
+        {
+          "decision": "Week view is a single accordion layout shared across mobile + desktop (not separate stacked/grid layouts)",
+          "reason": "Simpler mental model, less code duplication, accordion works equally well on small + large screens",
+          "alternatives_considered": "Calendar grid (rejected: doesn't suit time-block concept), Day list with focus mode (rejected: hides non-selected days)"
+        },
+        {
+          "decision": "Added both priority AND intensity fields (not just smarter distribution)",
+          "reason": "User picked 'Add priority + intensity fields' from the question menu; explicit user input > algorithmic inference; lets user override algorithm per-thread",
+          "alternatives_considered": "Just smarter distribution no new fields (rejected by user)"
+        },
+        {
+          "decision": "Grid algorithm = deterministic sort by (priority desc, intensity desc) + greedy bin-pack into least-loaded day, with hard no-duplicate-thread-per-day rule",
+          "reason": "O(N log N) where N=slots (~30 typical). Avoids duplicate (user's main complaint) and balances intensity. Deterministic so regenerate produces same result with same inputs.",
+          "alternatives_considered": "Random with retry (rejected: can produce different results each regen, makes testing hard); pure round-robin (rejected: ignores priority/intensity)"
+        },
+        {
+          "decision": "Thread detail = new page at /threads/:id, not a modal",
+          "reason": "User specified 'a totally different page' for it; gives room for stats grid, resources CRUD, full notes view; React Router already in place",
+          "alternatives_considered": "Modal/Sheet (rejected by user); expand-in-place card (rejected: cramped for resources list)"
+        },
+        {
+          "decision": "Lightweight custom markdown renderer instead of adding react-markdown dependency",
+          "reason": "PRD requires **bold**, *italic*, `code`, [links](url), lists, headings — ~90 lines of regex-based parser; no new package to maintain, smaller bundle (~376KB unchanged)",
+          "alternatives_considered": "Add react-markdown (~30KB gzipped, more features, more deps) — deferred until user needs tables/code-blocks/HTML"
+        },
+        {
+          "decision": "Renamed live domain workspaceapi.benedictisaac.dev → winterarc.benedictisaac.dev (kept old cert + 301-redirect)",
+          "reason": "User asked for the rename. Nginx config now has 3 server blocks: 80 (both → 301 to new), 443 old (301 to new), 443 new (main)",
+          "alternatives_considered": "Drop old domain entirely (rejected: external links/bookmarks could break)"
+        }
+      ],
+      "known_issues": [
+        {
+          "issue": "Existing auto-generated tasks in the DB don't have priority/intensity values (schema defaults to medium on read, but DB rows have no field)",
+          "severity": "low",
+          "status": "mitigated",
+          "action": "Mongoose defaults will fill in medium/medium when docs are re-fetched; no migration script needed because GridWeek reads from regenerated tasks only. User can Regenerate Week to flush old auto-generated tasks and get the new fields."
+        },
+        {
+          "issue": "Pre-existing TS errors in ThreadsView.tsx and WishlistView.tsx (editId could be null in handleSave) — fixed in this session as drive-by",
+          "severity": "low",
+          "status": "resolved",
+          "action": "Added `if (!editId) return` guard at top of handleSave in both files"
+        },
+        {
+          "issue": "Settings: maxDailyIntensity slider has no validation feedback on extreme values",
+          "severity": "low",
+          "status": "open",
+          "action": "Server clamps to 1-20 via zod; could add a 'days will be over-stuffed' warning if user sets cap very high"
+        }
+      ],
+      "errors_encountered": [
+        "lucide-react import: my NavItem.icon type was React.ComponentType<{size, className}> but LucideIcon is ForwardRefExoticComponent<LucideProps>; resolved by importing `type LucideIcon` from lucide-react",
+        "Edit tool was called with oldString=newString twice (tool format error); recovered with single edit per file"
+      ],
+      "next_steps": [
+        "Deploy session_008 to live EC2: pull, npm install, npm run build, pm2 restart",
+        "Run 'Regenerate Week' on live to flush old auto-generated tasks so they pick up priority/intensity defaults",
+        "Add a dedicated Week 'load indicator' badge per day showing current intensity sum / cap",
+        "Consider drag-to-reorder time blocks within a day (post-PM2 deploy)",
+        "Add export of single-thread resources + notes to JSON"
+      ],
+      "notes": "All 5 user-requested changes implemented and verified. Lint 0 warnings, build clean, tsc --noEmit 0 errors. Domain renamed to winterarc.benedictisaac.dev; old domain 301-redirects. Live EC2 (Ubuntu t3.micro + PM2 + Nginx + Let's Encrypt) is stable. MongoDB Atlas cluster 'workspace' connected. The new balanced algorithm prevents the user's main complaint (same thread on the same day twice) and respects maxDailyIntensity cap from Settings."
     }
   ]
 }

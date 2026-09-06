@@ -6,6 +6,16 @@ import { initDB, cacheThreads, getCachedThreads, clearCache } from '@/lib/storag
 import { initSyncDB, addToQueue, isOnline, startSyncListener, stopSyncListener, processQueue } from '@/lib/syncQueue';
 
 // Types
+export type ThreadResource = {
+  _id: string;
+  title: string;
+  url: string;
+  description: string;
+  kind: 'link' | 'resource';
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Thread = {
   _id: string;
   name: string;
@@ -13,7 +23,10 @@ export type Thread = {
   frequency: string;
   fixedDay: number | null;
   status: string;
+  priority: 'low' | 'medium' | 'high';
+  intensity: 'light' | 'medium' | 'heavy';
   notes: string;
+  resources: ThreadResource[];
   createdAt: string;
   updatedAt: string;
 };

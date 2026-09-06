@@ -1,7 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import MainLayout from '@/components/MainLayout'
-import { Calendar, Clock, CheckCircle2, Plus, Trash2 } from 'lucide-react'
+import TaskRow, { type TaskRowData } from '@/components/TaskRow'
+import { Calendar, Clock, CheckCircle2, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTasks, useUpdateTask, useCreateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useThreads } from '@/hooks/useThreads'
@@ -76,6 +77,8 @@ export default function TodayView() {
         threadId: task.threadId,
         threadName: task.threadId ? threadMap.get(task.threadId) || 'Unknown' : null,
         status: task.status,
+        priority: task.priority,
+        intensity: task.intensity,
       })),
   }))
 
@@ -153,45 +156,22 @@ export default function TodayView() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {block.tasks.length > 0 ? (
-                  block.tasks.map((task) => (
-                    <div
+                  block.tasks.map((task: TaskRowData) => (
+                    <TaskRow
                       key={task.id}
-                      className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={task.status === 'done'}
-                        onChange={() => {
-                          updateTask({
-                            id: task.id,
-                            updates: {
-                              status: task.status === 'done' ? 'pending' : 'done',
-                              completedAt: task.status === 'done' ? null : new Date().toISOString(),
-                            },
-                          })
-                        }}
-                        className="w-5 h-5 rounded cursor-pointer accent-primary shrink-0"
-                      />
-                      <span className={`flex-1 min-w-0 break-words ${task.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
-                        {task.title}
-                      </span>
-                      {task.threadId && (
-                        <span className="text-xs text-muted-foreground hidden sm:inline shrink-0">
-                          [{task.threadName}]
-                        </span>
-                      )}
-                      {task.status === 'done' && <CheckCircle2 size={16} className="text-primary shrink-0" />}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteTask(task.id)
-                        }}
-                        className="p-1 text-muted-foreground hover:text-destructive opacity-40 hover:opacity-100 transition-opacity shrink-0"
-                        title="Delete task"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
+                      task={task}
+                      onToggle={(t) => {
+                        updateTask({
+                          id: t.id,
+                          updates: {
+                            status: t.status === 'done' ? 'pending' : 'done',
+                            completedAt: t.status === 'done' ? null : new Date().toISOString(),
+                          },
+                        })
+                      }}
+                      onDelete={(t) => deleteTask(t.id)}
+                      showSource
+                    />
                   ))
                 ) : (
                   <p className="text-xs text-muted-foreground py-2">No tasks scheduled for this time block</p>

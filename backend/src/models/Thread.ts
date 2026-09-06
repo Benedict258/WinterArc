@@ -1,5 +1,15 @@
 import mongoose from 'mongoose'
 
+const resourceSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    url: { type: String, required: true },
+    description: { type: String, default: '' },
+    kind: { type: String, enum: ['link', 'resource'], default: 'link' },
+  },
+  { timestamps: true }
+)
+
 const threadSchema = new mongoose.Schema(
   {
     name: {
@@ -17,7 +27,7 @@ const threadSchema = new mongoose.Schema(
       required: true,
     },
     fixedDay: {
-      type: Number, // 0 = Monday, 6 = Sunday
+      type: Number,
       min: 0,
       max: 6,
     },
@@ -26,7 +36,18 @@ const threadSchema = new mongoose.Schema(
       enum: ['active', 'parked', 'archived'],
       default: 'active',
     },
+    priority: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'medium',
+    },
+    intensity: {
+      type: String,
+      enum: ['light', 'medium', 'heavy'],
+      default: 'medium',
+    },
     notes: String,
+    resources: [resourceSchema],
   },
   { timestamps: true }
 )
