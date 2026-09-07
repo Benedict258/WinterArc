@@ -16,6 +16,7 @@ export default function TodayView() {
   const [quickTitle, setQuickTitle] = useState('')
   const [selectedBlock, setSelectedBlock] = useState('morning')
   const [selectedThread, setSelectedThread] = useState<string>('')
+  const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({ morning: true, afternoon: true, evening: true, unscheduled: true })
 
   const { data: tasks = [], isLoading: tasksLoading } = useTasks({ date: todayString })
   const { mutate: updateTask } = useUpdateTask()
@@ -140,43 +141,58 @@ export default function TodayView() {
           </CardContent>
         </Card>
 
+        {/* Expand/Collapse All */}
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" onClick={() => {
+            const allExpanded = timeBlocks.every(b => expandedBlocks[b.id])
+            const newState = !allExpanded
+            setExpandedBlocks(Object.fromEntries(timeBlocks.map(b => [b.id, newState])))
+          }}>
+            {timeBlocks.every(b => expandedBlocks[b.id]) ? 'Collapse All' : 'Expand All'}
+          </Button>
+        </div>
+
         {/* Time Blocks */}
         {timeBlocks.map((block) => {
           const Icon = block.icon
+          const isExpanded = expandedBlocks[block.id] ?? true
           return (
             <Card key={block.id}>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedBlocks(prev => ({ ...prev, [block.id]: !isExpanded }))}>
                 <div className="flex items-center gap-3">
                   <Icon className="text-primary shrink-0" size={20} />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <CardTitle className="text-base">{block.label}</CardTitle>
                     <CardDescription className="text-xs">{block.time}</CardDescription>
                   </div>
+                  <span className="text-xs text-muted-foreground">{isExpanded ? '▼' : '▶'}</span>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {block.tasks.length > 0 ? (
-                  block.tasks.map((task: TaskRowData) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      onToggle={(t) => {
-                        updateTask({
-                          id: t.id,
-                          updates: {
-                            status: t.status === 'done' ? 'pending' : 'done',
-                            completedAt: t.status === 'done' ? null : new Date().toISOString(),
-                          },
-                        })
-                      }}
-                      onDelete={(t) => deleteTask(t.id)}
-                      showSource
-                    />
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground py-2">No tasks scheduled for this time block</p>
-                )}
-              </CardContent>
+              {isExpanded && (
+                <CardContent className="space-y-2">
+                  {block.tasks.length > 0 ? (
+                    block.tasks.map((task: TaskRowData) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        onToggle={(t) => {
+                          updateTask({
+                            id: t.id,
+                            updates: {
+                              status: t.status === 'done' ? 'pending' : 'done',
+                              completedAt: t.status === 'done' ? null : new Date().toISOString(),
+                            },
+                          })
+                        }}
+                        onDelete={(t) => deleteTask(t.id)}
+                        showSource
+                      />
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-2">No tasks scheduled for this time block</p>
+                  )}
+                </CardContent>
+              )}
             </Card>
           )
         })}

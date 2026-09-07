@@ -216,10 +216,10 @@ export default function DropView() {
             sorted.map((item, idx) => {
               const isImg = isImage(item.mimeType)
               const isAlt = idx % 2 === 1
-              const bubbleBorder = isAlt ? 'border-emerald-500/20' : 'border-border/50'
+              const bubbleBg = isAlt ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-background border-border/50'
               return (
                 <div key={item._id} className={`group relative w-fit ${isAlt ? 'self-end' : 'self-start'}`}>
-                  <div className={`rounded-2xl border ${bubbleBorder} bg-transparent p-3 shadow-sm max-w-[min(70vw,420px)]`}>
+                  <div className={`rounded-2xl border ${bubbleBg} p-3 shadow-sm max-w-[min(70vw,420px)]`}>
                     <div className="min-w-0">
                       {item.type === 'text' && (
                         <p className="whitespace-pre-wrap break-words text-sm">{item.textContent}</p>
