@@ -531,6 +531,22 @@ async function startServer() {
     }
   })
 
+  app.get('/api/export', async (req, res) => {
+    try {
+      const threads = await Thread.find()
+      const tasks = await Task.find()
+      const wishlist = await WishlistItem.find()
+      const goals = await Goal.find()
+      const settings = await Settings.findOne()
+      const data = { exportedAt: new Date().toISOString(), threads, tasks, wishlist, goals, settings }
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Content-Disposition', 'attachment; filename="workspace-export.json"')
+      res.json(data)
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
   // ============================================
   // ANALYTICS ENDPOINTS
   // ============================================
