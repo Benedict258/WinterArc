@@ -55,9 +55,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     if (typeof window === 'undefined') return false
     return localStorage.getItem(SIDEBAR_EXPANDED_KEY) === 'true'
   })
-  const [hoverExpanded, setHoverExpanded] = useState(false)
 
-  const desktopExpanded = pinnedExpanded || hoverExpanded
+  const desktopExpanded = pinnedExpanded
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -82,8 +81,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="flex h-screen bg-background">
       <aside
-        onMouseEnter={() => setHoverExpanded(true)}
-        onMouseLeave={() => setHoverExpanded(false)}
         className={cn(
           'fixed md:relative h-full bg-card border-r border-border z-40',
           'flex flex-col transition-[width] duration-200 ease-in-out',

@@ -25,7 +25,7 @@ export default function DropView() {
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const feedRef = useRef<HTMLDivElement>(null)
-  const lastIdRef = useRef<string | null>(null)
+  const [imgUrls, setImgUrls] = useState<Record<string,string>>({})
 
   const fetchItems = async () => {
     try {
@@ -61,6 +61,16 @@ export default function DropView() {
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' })
   }, [items.length])
+
+  useEffect(() => {
+    items.forEach(item => {
+      if (item.type === 'file' && isImage(item.mimeType) && !imgUrls[item._id]) {
+        fetch(`/api/drop/${item._id}/download-url`).then(r => r.json()).then(d => {
+          if (d.downloadUrl) setImgUrls(prev => ({ ...prev, [item._id]: d.downloadUrl }))
+        })
+      }
+    })
+  }, [items])
 
   const uploadFile = async (file: File) => {
     try {
@@ -195,7 +205,11 @@ export default function DropView() {
                       {item.type === 'file' && (
                         <div className="space-y-2">
                           {isImg ? (
-                            <img src={undefined} alt={item.fileName || ''} className="max-h-64 rounded-lg border" />
+                            imgUrls[item._id] ? (
+                              <img src={imgUrls[item._id]} alt={item.fileName || ''} className="max-h-32 w-auto rounded-lg border" />
+                            ) : (
+                              <div className="text-xs text-muted-foreground">Loading preview...</div>
+                            )
                           ) : (
                             <div className="flex items-center gap-3 p-2 border rounded-lg">
                               <FileText className="opacity-70" />
@@ -207,9 +221,8 @@ export default function DropView() {
                           )}
                         </div>
                       )}
-                      <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <div className="mt-2 text-[11px] text-muted-foreground">
                         <span>{formatTime(item.createdAt)}</span>
-                        <span>• expires in {daysLeft(item.expiresAt)} days</span>
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-60 group-hover:opacity-100">
