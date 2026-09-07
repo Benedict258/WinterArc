@@ -16,6 +16,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Upload,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { label: 'Backlog', path: '/backlog', icon: Inbox },
   { label: 'Wishlist', path: '/wishlist', icon: Heart },
   { label: 'Goals', path: '/goals', icon: Target },
+  { label: 'Drop', path: '/drop', icon: Upload },
   { label: 'Settings', path: '/settings', icon: SettingsIcon },
 ]
 

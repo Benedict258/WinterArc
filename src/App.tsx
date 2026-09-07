@@ -10,6 +10,7 @@ import BacklogView from './pages/BacklogView'
 import WishlistView from './pages/WishlistView'
 import GoalsView from './pages/GoalsView'
 import SettingsView from './pages/SettingsView'
+import DropView from './pages/DropView'
 import { Toaster } from './components/ui/toaster'
 import { AuthProvider } from './context/AuthContext'
 import PasscodeGate from './components/PasscodeGate'
@@ -31,6 +32,7 @@ function App() {
                 <Route path="/backlog" element={<BacklogView />} />
                 <Route path="/wishlist" element={<WishlistView />} />
                 <Route path="/goals" element={<GoalsView />} />
+                <Route path="/drop" element={<DropView />} />
                 <Route path="/settings" element={<SettingsView />} />
               </Routes>
               <Toaster />

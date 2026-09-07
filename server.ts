@@ -10,6 +10,7 @@ import { WishlistItem } from './backend/src/models/WishlistItem.ts'
 import { Goal } from './backend/src/models/Goal.ts'
 import { Settings } from './backend/src/models/Settings.ts'
 import { CalendarSync } from './backend/src/models/CalendarSync.ts'
+import { DropItem } from './backend/src/models/DropItem.ts'
 
 import * as threadService from './backend/src/services/threadService.ts'
 import * as taskService from './backend/src/services/taskService.ts'
@@ -542,6 +543,107 @@ async function startServer() {
       res.setHeader('Content-Type', 'application/json')
       res.setHeader('Content-Disposition', 'attachment; filename="workspace-export.json"')
       res.json(data)
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  // ============================================
+  // DROP ENDPOINTS
+  // ============================================
+  app.post('/api/drop/upload-url', async (req, res) => {
+    try {
+      const { fileName, mimeType, fileSize } = req.body || {}
+      const MAX_SIZE = 100 * 1024 * 1024
+      if (!fileName || !mimeType || typeof fileSize !== 'number') {
+        return res.status(400).json({ error: 'fileName, mimeType, fileSize required' })
+      }
+      if (fileSize > MAX_SIZE) {
+        return res.status(400).json({ error: 'File exceeds 100MB limit' })
+      }
+      const { v4: uuidv4 } = await import('uuid')
+      const key = `drop/${uuidv4()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '-')}`
+      const { getPresignedPutUrl } = await import('./backend/src/services/s3.ts')
+      const url = await getPresignedPutUrl(key, mimeType, 300)
+      res.json({ uploadUrl: url, s3Key: key })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.post('/api/drop', async (req, res) => {
+    try {
+      const { type, s3Key, fileName, fileSize, mimeType, textContent } = req.body || {}
+      if (!type || !['file', 'text', 'link'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid type' })
+      }
+      const now = new Date()
+      const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+      const doc = await DropItem.create({
+        type,
+        s3Key: type === 'file' ? s3Key : null,
+        fileName: type === 'file' ? fileName : null,
+        fileSize: type === 'file' ? fileSize : null,
+        mimeType: type === 'file' ? mimeType : null,
+        textContent: type === 'text' || type === 'link' ? textContent : null,
+        createdAt: now,
+        expiresAt,
+      })
+      res.status(201).json(doc)
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.get('/api/drop', async (req, res) => {
+    try {
+      const items = await DropItem.find({ expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 })
+      res.json(items)
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.get('/api/drop/:id/download-url', async (req, res) => {
+    try {
+      const item = await DropItem.findById(req.params.id)
+      if (!item || item.type !== 'file' || !item.s3Key) {
+        return res.status(404).json({ error: 'File not found' })
+      }
+      const { getPresignedGetUrl } = await import('./backend/src/services/s3.ts')
+      const url = await getPresignedGetUrl(item.s3Key, 300)
+      res.json({ downloadUrl: url })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.delete('/api/drop/:id', async (req, res) => {
+    try {
+      const item = await DropItem.findById(req.params.id)
+      if (!item) return res.status(404).json({ error: 'Not found' })
+      if (item.type === 'file' && item.s3Key) {
+        const { deleteS3Object } = await import('./backend/src/services/s3.ts')
+        await deleteS3Object(item.s3Key).catch(() => {})
+      }
+      await DropItem.deleteOne({ _id: req.params.id })
+      res.json({ ok: true })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  app.patch('/api/drop/:id', async (req, res) => {
+    try {
+      const { expiresAt } = req.body || {}
+      if (!expiresAt) return res.status(400).json({ error: 'expiresAt required' })
+      const item = await DropItem.findByIdAndUpdate(
+        req.params.id,
+        { expiresAt: new Date(expiresAt) },
+        { new: true }
+      )
+      if (!item) return res.status(404).json({ error: 'Not found' })
+      res.json(item)
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
     }
