@@ -1,7 +1,7 @@
 import MainLayout from '@/components/MainLayout'
 import { Button } from '@/components/ui/button'
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { Upload, Link as LinkIcon, FileText, Trash2, Download, Copy, Paperclip, X } from 'lucide-react'
+import { Upload, Link as LinkIcon, FileText, Download, Copy, Paperclip, MoreVertical } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { format } from 'date-fns'
 
@@ -26,6 +26,7 @@ export default function DropView() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const feedRef = useRef<HTMLDivElement>(null)
   const [imgUrls, setImgUrls] = useState<Record<string,string>>({})
+  const [menuOpen, setMenuOpen] = useState<string | null>(null)
 
   const fetchItems = async () => {
     try {
@@ -188,17 +189,19 @@ export default function DropView() {
               <p className="text-sm">Drag a file here or type below to send it to your other devices.</p>
             </div>
           ) : (
-            sorted.map(item => {
+            sorted.map((item, idx) => {
               const isImg = isImage(item.mimeType)
+              const isAlt = idx % 2 === 1
+              const bubbleBg = isAlt ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-background'
               return (
-                <div key={item._id} className="group rounded-2xl border bg-background p-3 shadow-sm">
+                <div key={item._id} className={`relative rounded-2xl border ${bubbleBg} p-3 shadow-sm max-w-[75%] ${isAlt ? 'self-end' : 'self-start'}`}>
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       {item.type === 'text' && (
-                        <p className="whitespace-pre-wrap break-words">{item.textContent}</p>
+                        <p className="whitespace-pre-wrap break-words text-sm">{item.textContent}</p>
                       )}
                       {item.type === 'link' && (
-                        <a href={item.textContent} target="_blank" rel="noreferrer" className="text-primary underline break-all">
+                        <a href={item.textContent} target="_blank" rel="noreferrer" className="text-primary underline break-all text-sm">
                           {item.textContent}
                         </a>
                       )}
@@ -206,7 +209,7 @@ export default function DropView() {
                         <div className="space-y-2">
                           {isImg ? (
                             imgUrls[item._id] ? (
-                              <img src={imgUrls[item._id]} alt={item.fileName || ''} className="max-h-32 w-auto rounded-lg border" />
+                              <img src={imgUrls[item._id]} alt={item.fileName || ''} className="max-h-32 w-auto max-w-full rounded-lg border object-contain" />
                             ) : (
                               <div className="text-xs text-muted-foreground">Loading preview...</div>
                             )
@@ -214,7 +217,7 @@ export default function DropView() {
                             <div className="flex items-center gap-3 p-2 border rounded-lg">
                               <FileText className="opacity-70" />
                               <div className="min-w-0">
-                                <p className="truncate font-medium">{item.fileName}</p>
+                                <p className="truncate font-medium text-sm">{item.fileName}</p>
                                 <p className="text-xs text-muted-foreground">{item.fileSize ? `${(item.fileSize/1024).toFixed(1)} KB` : ''}</p>
                               </div>
                             </div>
@@ -225,16 +228,21 @@ export default function DropView() {
                         <span>{formatTime(item.createdAt)}</span>
                       </div>
                     </div>
-                    <div className="flex gap-1 opacity-60 group-hover:opacity-100">
+                    <button onClick={() => setMenuOpen(menuOpen === item._id ? null : item._id)} className="p-1 hover:bg-secondary rounded">
+                      <MoreVertical size={14}/>
+                    </button>
+                  </div>
+                  {menuOpen === item._id && (
+                    <div className="absolute right-2 top-8 bg-popover border rounded-md shadow-md p-1 flex gap-1 z-10">
                       {item.type !== 'file' && item.textContent && (
-                        <button onClick={() => copyText(item.textContent!)} className="p-1.5 hover:bg-secondary rounded"><Copy size={14}/></button>
+                        <button onClick={() => { copyText(item.textContent!); setMenuOpen(null) }} className="p-1.5 hover:bg-secondary rounded" title="Copy"><Copy size={14}/></button>
                       )}
                       {item.type === 'file' && (
-                        <button onClick={() => downloadItem(item._id, item.fileName || undefined)} className="p-1.5 hover:bg-secondary rounded"><Download size={14}/></button>
+                        <button onClick={() => { downloadItem(item._id, item.fileName || undefined); setMenuOpen(null) }} className="p-1.5 hover:bg-secondary rounded" title="Download"><Download size={14}/></button>
                       )}
-                      <button onClick={(e) => deleteItem(item._id, e)} className="p-1.5 hover:bg-secondary rounded text-destructive"><X size={14}/></button>
+                      <button onClick={() => { deleteItem(item._id); setMenuOpen(null) }} className="p-1.5 hover:bg-secondary rounded text-destructive" title="Delete">✕</button>
                     </div>
-                  </div>
+                  )}
                 </div>
               )
             })
