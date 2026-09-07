@@ -155,6 +155,7 @@ async function seedIfEmpty() {
 
 async function startServer() {
   const app = express()
+  app.set('trust proxy', 1)
   app.use(cors({
     origin: process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev',
     credentials: true,
