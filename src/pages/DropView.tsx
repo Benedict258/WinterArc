@@ -153,12 +153,19 @@ export default function DropView() {
 
   const copyImageToClipboard = async (url: string) => {
     try {
-      const res = await fetch(url)
+      const res = await fetch(url, { mode: 'cors' })
+      if (!res.ok) throw new Error('fetch failed')
       const blob = await res.blob()
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
       toast({ title: 'Image copied' })
     } catch {
-      toast({ title: 'Copy failed', variant: 'destructive' })
+      // fallback to copying URL
+      try {
+        await navigator.clipboard.writeText(url)
+        toast({ title: 'Image URL copied' })
+      } catch {
+        toast({ title: 'Copy failed', variant: 'destructive' })
+      }
     }
   }
 
