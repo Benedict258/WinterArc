@@ -90,20 +90,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         aria-expanded={desktopExpanded}
       >
         <div className="flex flex-col h-full p-3 gap-4">
-          <div
+          <button
+            onClick={() => setPinnedExpanded(prev => !prev)}
             className={cn(
-              'flex items-center gap-2 px-2 py-2',
+              'flex items-center gap-2 px-2 py-2 w-full text-left rounded-lg hover:bg-secondary transition-colors cursor-pointer',
               desktopExpanded ? 'justify-start' : 'justify-center'
             )}
+            aria-label="Toggle sidebar"
           >
-            <img src="/logo.png" alt="WinterArc Logo" className="w-8 h-8 shrink-0 rounded object-contain" />
+            <img src="/logo.png" alt="WinterArc Logo" className="w-12 h-12 shrink-0 rounded object-contain" />
             {desktopExpanded && (
               <div className="flex flex-col leading-tight">
                 <h1 className="font-bold text-lg whitespace-nowrap overflow-hidden">WinterArc</h1>
                 <span className="text-[10px] text-muted-foreground whitespace-nowrap overflow-hidden">workspace</span>
               </div>
             )}
-          </div>
+          </button>
 
           <nav className="flex flex-col gap-1 flex-1">
             {navItems.map((item) => {
