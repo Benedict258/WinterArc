@@ -17,11 +17,11 @@ export default function PasscodeGate({ children }: PasscodeGateProps) {
     return <>{children}</>
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!passcode) return
 
-    const success = login(passcode.trim())
+    const success = await login(passcode.trim())
     if (!success) {
       setError(true)
     }
@@ -89,13 +89,13 @@ export default function PasscodeGate({ children }: PasscodeGateProps) {
           <div className="text-center space-y-1.5">
             <button
               type="button"
-              onClick={() => login('BenedictIsaac#258')}
+              onClick={async () => { await login('BenedictIsaac#258') }}
               className="text-xs text-primary hover:underline font-medium"
             >
               Quick Unlock (Default Passcode)
             </button>
             <p className="text-[11px] text-muted-foreground">
-              Single-user private system • Passcode: <span className="font-mono text-[10px]">BenedictIsaac#258</span>
+              Single-user private system
             </p>
           </div>
         </div>

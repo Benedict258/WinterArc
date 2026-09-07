@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import path from 'path'
 import mongoose from 'mongoose'
+import session from 'express-session'
 import { createServer as createViteServer } from 'vite'
 
 import { Thread } from './backend/src/models/Thread.ts'
@@ -154,8 +155,22 @@ async function seedIfEmpty() {
 
 async function startServer() {
   const app = express()
-  app.use(cors())
+  app.use(cors({
+    origin: process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev',
+    credentials: true,
+  }))
   app.use(express.json())
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'change-me',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24,
+    },
+  }))
 
   // MongoDB connection (required)
   try {
@@ -168,6 +183,31 @@ async function startServer() {
   }
 
   // ============================================
+  // AUTH
+  // ============================================
+  const requireAuth = (req: any, res: any, next: any) => {
+    if (req.session?.authenticated) return next()
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  app.post('/api/auth/login', (req, res) => {
+    const { passcode } = req.body
+    if (passcode && passcode === process.env.APP_PASSCODE) {
+      req.session.authenticated = true
+      return res.json({ ok: true })
+    }
+    return res.status(401).json({ error: 'Invalid passcode' })
+  })
+
+  app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy(() => res.json({ ok: true }))
+  })
+
+  app.get('/api/auth/me', (req, res) => {
+    res.json({ authenticated: !!req.session?.authenticated })
+  })
+
+  // ============================================
   // HEALTH CHECK
   // ============================================
   app.get('/api/health', (req, res) => {
@@ -176,6 +216,12 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       mongoConnected: mongoose.connection.readyState === 1,
     })
+  })
+
+  // Protect all API routes except auth/health
+  app.use('/api', (req, res, next) => {
+    if (req.path.startsWith('/auth') || req.path === '/health') return next()
+    return requireAuth(req, res, next)
   })
 
   // ============================================

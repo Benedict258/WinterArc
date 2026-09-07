@@ -1,32 +1,38 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
 
 interface AuthContextType {
   isAuthenticated: boolean
-  login: (passcode: string) => boolean
-  logout: () => void
+  login: (passcode: string) => Promise<boolean>
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const PASSCODE = 'BenedictIsaac#258'
-const STORAGE_KEY = 'workspace_auth_status'
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEY) === 'authenticated'
-  })
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
 
-  const login = (passcode: string): boolean => {
-    if (passcode === PASSCODE) {
-      localStorage.setItem(STORAGE_KEY, 'authenticated')
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setIsAuthenticated(!!d.authenticated))
+  }, [])
+
+  const login = async (passcode: string): Promise<boolean> => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode })
+    })
+    if (res.ok) {
       setIsAuthenticated(true)
       return true
     }
     return false
   }
 
-  const logout = () => {
-    localStorage.removeItem(STORAGE_KEY)
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     setIsAuthenticated(false)
   }
 
