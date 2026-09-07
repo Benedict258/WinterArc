@@ -98,9 +98,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           >
             <img src="/logo.png" alt="WinterArc Logo" className="w-8 h-8 shrink-0 rounded object-contain" />
             {desktopExpanded && (
-              <h1 className="font-bold text-lg whitespace-nowrap overflow-hidden">
-                Workspace
-              </h1>
+              <div className="flex flex-col leading-tight">
+                <h1 className="font-bold text-lg whitespace-nowrap overflow-hidden">WinterArc</h1>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap overflow-hidden">workspace</span>
+              </div>
             )}
           </div>
 
