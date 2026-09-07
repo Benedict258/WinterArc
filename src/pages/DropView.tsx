@@ -151,6 +151,17 @@ export default function DropView() {
     toast({ title: 'Copied' })
   }
 
+  const copyImageToClipboard = async (url: string) => {
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+      toast({ title: 'Image copied' })
+    } catch {
+      toast({ title: 'Copy failed', variant: 'destructive' })
+    }
+  }
+
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     const today = new Date()
@@ -180,6 +191,12 @@ export default function DropView() {
           onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
+          onPaste={e => {
+            const items = e.clipboardData?.files
+            if (items && items.length > 0) {
+              handleFiles(items)
+            }
+          }}
           className={`flex-1 overflow-y-auto rounded-xl border bg-card p-4 flex flex-col gap-3 ${isDragging ? 'border-primary bg-primary/5' : 'border-border'}`}
         >
           {sorted.length === 0 ? (
@@ -194,9 +211,9 @@ export default function DropView() {
               const isAlt = idx % 2 === 1
               const bubbleBg = isAlt ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-background'
               return (
-                <div key={item._id} className={`relative rounded-2xl border ${bubbleBg} p-3 shadow-sm max-w-[70%] w-fit ${isAlt ? 'self-end' : 'self-start'}`}>
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
+                <div key={item._id} className={`group relative w-fit ${isAlt ? 'self-end' : 'self-start'}`}>
+                  <div className={`rounded-2xl border ${bubbleBg} p-3 shadow-sm max-w-[min(70vw,420px)]`}>
+                    <div className="min-w-0">
                       {item.type === 'text' && (
                         <p className="whitespace-pre-wrap break-words text-sm">{item.textContent}</p>
                       )}
@@ -209,12 +226,12 @@ export default function DropView() {
                         <div className="space-y-2">
                           {isImg ? (
                             imgUrls[item._id] ? (
-                              <img src={imgUrls[item._id]} alt={item.fileName || ''} className="max-h-32 w-auto max-w-full rounded-lg border object-contain" />
+                              <img src={imgUrls[item._id]} alt={item.fileName || ''} className="max-h-28 w-auto max-w-full rounded-lg border object-contain" />
                             ) : (
                               <div className="text-xs text-muted-foreground">Loading preview...</div>
                             )
                           ) : (
-                            <div className="flex items-center gap-3 p-2 border rounded-lg">
+                            <div className="flex items-center gap-3 p-2 border rounded-lg w-fit">
                               <FileText className="opacity-70" />
                               <div className="min-w-0">
                                 <p className="truncate font-medium text-sm">{item.fileName}</p>
@@ -228,16 +245,18 @@ export default function DropView() {
                         <span>{formatTime(item.createdAt)}</span>
                       </div>
                     </div>
-                    <button onClick={() => setMenuOpen(menuOpen === item._id ? null : item._id)} className="p-1 hover:bg-secondary rounded">
-                      <MoreVertical size={14}/>
-                    </button>
                   </div>
+                  <button onClick={() => setMenuOpen(menuOpen === item._id ? null : item._id)} className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition bg-popover border rounded-full p-1 shadow">
+                    <MoreVertical size={12}/>
+                  </button>
                   {menuOpen === item._id && (
-                    <div className="absolute right-2 top-8 bg-popover border rounded-md shadow-md p-1 flex gap-1 z-10">
+                    <div className="absolute -top-10 right-0 bg-popover border rounded-md shadow-md p-1 flex gap-1 z-10">
                       {(item.type !== 'file' && item.textContent) || item.type === 'file' ? (
                         <button onClick={() => { 
-                          if (item.type === 'file' && item.fileName) {
-                            navigator.clipboard.writeText(item.fileName)
+                          if (isImg && imgUrls[item._id]) {
+                            copyImageToClipboard(imgUrls[item._id])
+                          } else if (item.type === 'file' && item.fileName) {
+                            navigator.clipboard.writeText(item.fileName); toast({title:'Copied name'})
                           } else if (item.textContent) {
                             copyText(item.textContent!)
                           }
