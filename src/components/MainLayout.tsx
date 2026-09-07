@@ -96,9 +96,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               desktopExpanded ? 'justify-start' : 'justify-center'
             )}
           >
-            <div className="w-8 h-8 shrink-0 rounded bg-primary flex items-center justify-center font-bold text-primary-foreground">
-              W
-            </div>
+            <img src="/logo.png" alt="WinterArc Logo" className="w-8 h-8 shrink-0 rounded object-contain" />
             {desktopExpanded && (
               <h1 className="font-bold text-lg whitespace-nowrap overflow-hidden">
                 Workspace
