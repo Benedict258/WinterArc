@@ -200,39 +200,38 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="border-b border-border bg-card p-4 md:p-6 flex items-center justify-between gap-2">
+      <div className="flex-1 min-w-0">
+        <main className="flex-1 overflow-auto p-6">{children}</main>
+
+        {/* Floating top-right controls */}
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
           <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden p-2 hover:bg-secondary rounded-lg"
-            aria-label="Toggle menu"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="p-2.5 bg-card border border-border rounded-xl shadow-sm hover:bg-secondary transition-colors"
+            aria-label="Toggle theme"
+            title="Toggle theme"
           >
-            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
-          <div className="flex-1" />
+          <button
+            onClick={logout}
+            className="p-2.5 bg-card border border-border rounded-xl shadow-sm hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+            aria-label="Lock workspace"
+            title="Lock workspace"
+          >
+            <Lock size={18} />
+          </button>
+        </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-              aria-label="Toggle theme"
-            >
-              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-
-            <button
-              onClick={logout}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors text-muted-foreground hover:text-foreground"
-              aria-label="Lock workspace"
-              title="Lock workspace"
-            >
-              <Lock size={20} />
-            </button>
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        {/* Mobile menu toggle */}
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="md:hidden fixed top-4 left-4 z-50 p-2.5 bg-card border border-border rounded-xl shadow-sm"
+          aria-label="Toggle menu"
+        >
+          {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
       </div>
 
       <QuickAddModal
