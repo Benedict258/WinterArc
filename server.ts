@@ -11,6 +11,8 @@ import { Goal } from './backend/src/models/Goal.ts'
 import { Settings } from './backend/src/models/Settings.ts'
 import { CalendarSync } from './backend/src/models/CalendarSync.ts'
 import { DropItem } from './backend/src/models/DropItem.ts'
+import { getPresignedPutUrl, getPresignedGetUrl, deleteS3Object } from './backend/src/services/s3.ts'
+import { v4 as uuidv4 } from 'uuid'
 
 import * as threadService from './backend/src/services/threadService.ts'
 import * as taskService from './backend/src/services/taskService.ts'
@@ -561,9 +563,7 @@ async function startServer() {
       if (fileSize > MAX_SIZE) {
         return res.status(400).json({ error: 'File exceeds 100MB limit' })
       }
-      const { v4: uuidv4 } = await import('uuid')
       const key = `drop/${uuidv4()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '-')}`
-      const { getPresignedPutUrl } = await import('./backend/src/services/s3.ts')
       const url = await getPresignedPutUrl(key, mimeType, 300)
       res.json({ uploadUrl: url, s3Key: key })
     } catch (error) {
@@ -610,7 +610,6 @@ async function startServer() {
       if (!item || item.type !== 'file' || !item.s3Key) {
         return res.status(404).json({ error: 'File not found' })
       }
-      const { getPresignedGetUrl } = await import('./backend/src/services/s3.ts')
       const url = await getPresignedGetUrl(item.s3Key, 300)
       res.json({ downloadUrl: url })
     } catch (error) {
@@ -623,7 +622,6 @@ async function startServer() {
       const item = await DropItem.findById(req.params.id)
       if (!item) return res.status(404).json({ error: 'Not found' })
       if (item.type === 'file' && item.s3Key) {
-        const { deleteS3Object } = await import('./backend/src/services/s3.ts')
         await deleteS3Object(item.s3Key).catch(() => {})
       }
       await DropItem.deleteOne({ _id: req.params.id })
