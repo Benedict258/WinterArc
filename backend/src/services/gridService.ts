@@ -131,24 +131,24 @@ export async function generateWeek(
       return fallback.length > 0 ? fallback : [0, 1, 2, 3, 4, 5, 6]
     })()
 
-    const sortedDays = [...candidatePool].sort((a, b) => {
-      const aFit = dayLoads[a] + intensity <= balancing.maxDailyIntensity ? 0 : 1
-      const bFit = dayLoads[b] + intensity <= balancing.maxDailyIntensity ? 0 : 1
-      if (aFit !== bFit) return aFit - bFit
-      return dayLoads[a] - dayLoads[b]
-    })
+    const fitDays = candidatePool.filter(d => dayLoads[d] + intensity <= balancing.maxDailyIntensity)
+    const daysToConsider = fitDays.length > 0 ? fitDays : candidatePool
+    const sortedDays = [...daysToConsider].sort((a, b) => dayLoads[a] - dayLoads[b])
     const chosenDay = sortedDays[0]
 
-    if (allowedDays.length > 0) {
+    if (allowedDays.length > 0 && fitDays.length > 0) {
       dayLoads[chosenDay] += intensity
       dayThreads[chosenDay].add(threadId)
+
+      const blockLoads = dayBlockLoads[chosenDay]
+      const timeBlock = pickBlock(blockLoads)
+      blockLoads[timeBlock] += 1
+
+      tasks.push(makeTask(slot.thread, addDays(startDate, chosenDay), timeBlock))
+    } else if (allowedDays.length > 0) {
+      // No fitting day within maxDailyIntensity – skip to avoid overload
+      // Could log or enqueue to backlog
     }
-
-    const blockLoads = dayBlockLoads[chosenDay]
-    const timeBlock = pickBlock(blockLoads)
-    blockLoads[timeBlock] += 1
-
-    tasks.push(makeTask(slot.thread, addDays(startDate, chosenDay), timeBlock))
   }
 
   return tasks
