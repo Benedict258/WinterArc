@@ -180,7 +180,7 @@ export default function DropView() {
           onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          className={`flex-1 overflow-y-auto rounded-xl border bg-card p-4 space-y-3 ${isDragging ? 'border-primary bg-primary/5' : 'border-border'}`}
+          className={`flex-1 overflow-y-auto rounded-xl border bg-card p-4 flex flex-col gap-3 ${isDragging ? 'border-primary bg-primary/5' : 'border-border'}`}
         >
           {sorted.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
@@ -194,7 +194,7 @@ export default function DropView() {
               const isAlt = idx % 2 === 1
               const bubbleBg = isAlt ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-background'
               return (
-                <div key={item._id} className={`relative rounded-2xl border ${bubbleBg} p-3 shadow-sm max-w-[75%] ${isAlt ? 'self-end' : 'self-start'}`}>
+                <div key={item._id} className={`relative rounded-2xl border ${bubbleBg} p-3 shadow-sm max-w-[70%] w-fit ${isAlt ? 'self-end' : 'self-start'}`}>
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       {item.type === 'text' && (
@@ -234,9 +234,16 @@ export default function DropView() {
                   </div>
                   {menuOpen === item._id && (
                     <div className="absolute right-2 top-8 bg-popover border rounded-md shadow-md p-1 flex gap-1 z-10">
-                      {item.type !== 'file' && item.textContent && (
-                        <button onClick={() => { copyText(item.textContent!); setMenuOpen(null) }} className="p-1.5 hover:bg-secondary rounded" title="Copy"><Copy size={14}/></button>
-                      )}
+                      {(item.type !== 'file' && item.textContent) || item.type === 'file' ? (
+                        <button onClick={() => { 
+                          if (item.type === 'file' && item.fileName) {
+                            navigator.clipboard.writeText(item.fileName)
+                          } else if (item.textContent) {
+                            copyText(item.textContent!)
+                          }
+                          setMenuOpen(null)
+                        }} className="p-1.5 hover:bg-secondary rounded" title="Copy"><Copy size={14}/></button>
+                      ) : null}
                       {item.type === 'file' && (
                         <button onClick={() => { downloadItem(item._id, item.fileName || undefined); setMenuOpen(null) }} className="p-1.5 hover:bg-secondary rounded" title="Download"><Download size={14}/></button>
                       )}
