@@ -93,7 +93,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <button
             onClick={() => setPinnedExpanded(prev => !prev)}
             className={cn(
-              'flex items-center gap-2 px-2 py-2 w-full text-left rounded-lg hover:bg-secondary transition-colors cursor-pointer',
+              'flex items-center gap-2 px-2 py-2 w-full text-left rounded-lg cursor-pointer',
               desktopExpanded ? 'justify-start' : 'justify-center'
             )}
             aria-label="Toggle sidebar"

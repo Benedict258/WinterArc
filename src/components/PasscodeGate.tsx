@@ -86,14 +86,7 @@ export default function PasscodeGate({ children }: PasscodeGateProps) {
             </Button>
           </form>
 
-          <div className="text-center space-y-1.5">
-            <button
-              type="button"
-              onClick={async () => { await login('BenedictIsaac#258') }}
-              className="text-xs text-primary hover:underline font-medium"
-            >
-              Quick Unlock (Default Passcode)
-            </button>
+          <div className="text-center">
             <p className="text-[11px] text-muted-foreground">
               Single-user private system
             </p>
