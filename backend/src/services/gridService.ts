@@ -41,13 +41,15 @@ async function loadBalancing(): Promise<GridBalancing> {
   return defaultBalancing()
 }
 
-function expandSlots(threads: ThreadShape[]) {
+function expandSlots(threads: ThreadShape[], weekSeed = 0) {
   const slots: { thread: ThreadShape; fixedDay: number | null }[] = []
   for (const t of threads) {
     if (t.frequency === 'daily') {
       for (let i = 0; i < 7; i++) slots.push({ thread: t, fixedDay: i })
     } else if (t.frequency === 'multiple') {
-      const pattern = [0, 2, 4]
+      const basePattern = [0, 2, 4]
+      const offset = weekSeed % 3
+      const pattern = basePattern.map(d => (d + offset * 2) % 7)
       for (const dayIndex of pattern) slots.push({ thread: t, fixedDay: dayIndex })
     } else if (t.frequency === 'weekly') {
       slots.push({ thread: t, fixedDay: null })
@@ -97,6 +99,7 @@ export async function generateWeek(
 ) {
   const balancing = balancingOverride || defaultBalancing()
   const active = threads.filter(t => t.status === 'active')
+  const weekSeed = Math.floor(startDate.getTime() / (7 * 24 * 60 * 60 * 1000))
 
   const dayLoads: Record<number, number> = {}
   for (let i = 0; i < 7; i++) dayLoads[i] = 0
@@ -108,7 +111,7 @@ export async function generateWeek(
   }
 
   const tasks: any[] = []
-  const slots = sortSlots(expandSlots(active))
+  const slots = sortSlots(expandSlots(active, weekSeed))
 
   for (const slot of slots) {
     const intensity = INTENSITY_WEIGHT[slot.thread.intensity || 'medium'] || 2
@@ -133,7 +136,11 @@ export async function generateWeek(
 
     const fitDays = candidatePool.filter(d => dayLoads[d] + intensity <= balancing.maxDailyIntensity)
     const daysToConsider = fitDays.length > 0 ? fitDays : candidatePool
-    const sortedDays = [...daysToConsider].sort((a, b) => dayLoads[a] - dayLoads[b])
+    const sortedDays = [...daysToConsider].sort((a, b) => {
+      const loadDiff = dayLoads[a] - dayLoads[b]
+      if (loadDiff !== 0) return loadDiff
+      return ((a + weekSeed) % 7) - ((b + weekSeed) % 7)
+    })
     const chosenDay = sortedDays[0]
 
     if (allowedDays.length > 0 && fitDays.length > 0) {
