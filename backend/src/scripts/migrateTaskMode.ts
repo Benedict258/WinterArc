@@ -1,5 +1,24 @@
 import mongoose from 'mongoose';
 import { Thread } from '../models/Thread';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Simple .env loader
+function loadEnv() {
+  const envPath = path.join(process.cwd(), '.env');
+  if (!fs.existsSync(envPath)) return;
+  const content = fs.readFileSync(envPath, 'utf-8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const value = trimmed.slice(eq + 1).trim();
+    process.env[key] = value;
+  }
+}
+loadEnv();
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/workspace';
 
