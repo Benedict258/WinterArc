@@ -12,6 +12,7 @@ export const threadSchema = z.object({
   status: z.enum(['active', 'parked', 'archived']).default('active'),
   priority: priorityEnum.default('medium'),
   intensity: intensityEnum.default('medium'),
+  taskMode: z.enum(['discrete', 'continuous']).default('continuous'),
   notes: z.string().optional().nullable(),
 });
 export const threadUpdateSchema = threadSchema.partial();

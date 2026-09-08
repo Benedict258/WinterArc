@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useThreads, useCreateThread, useUpdateThread, useDeleteThread } from '@/hooks/useThreads'
+import { useTasks, useCreateTask } from '@/hooks/useTasks'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -33,6 +34,8 @@ export default function ThreadsView() {
   const { mutate: createThread, isPending: isCreating } = useCreateThread()
   const { mutate: updateThread, isPending: isUpdating } = useUpdateThread()
   const { mutate: deleteThread, isPending: isDeleting } = useDeleteThread()
+  const { data: allTasks = [] } = useTasks({})
+  const { mutate: createTask } = useCreateTask()
 
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [editId, setEditId] = useState<string | null>(null)
@@ -45,6 +48,7 @@ export default function ThreadsView() {
     priority: 'medium' as 'low' | 'medium' | 'high',
     intensity: 'medium' as 'light' | 'medium' | 'heavy',
     notes: '',
+    taskType: 'discrete' as 'discrete' | 'continuous',
   })
 
   const extraCategories = Array.from(new Set(threads.map(t => t.category))).filter(c => !PREDEFINED_CATEGORIES.includes(c))
@@ -56,7 +60,7 @@ export default function ThreadsView() {
     setEditId('new')
     setForm({
       name: '', category: '', frequency: '', fixedDay: null, status: 'active',
-      priority: 'medium', intensity: 'medium', notes: '',
+      priority: 'medium', intensity: 'medium', notes: '', taskType: 'discrete',
     })
   }
 
@@ -71,6 +75,7 @@ export default function ThreadsView() {
       priority: thread.priority || 'medium',
       intensity: thread.intensity || 'medium',
       notes: thread.notes || '',
+      taskType: thread.taskType || 'discrete',
     })
   }
 
@@ -87,6 +92,7 @@ export default function ThreadsView() {
       priority: form.priority,
       intensity: form.intensity,
       notes: form.notes,
+      taskType: form.taskType,
     }
     if (editId === 'new') {
       createThread(payload)
@@ -178,7 +184,7 @@ export default function ThreadsView() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <div className="flex gap-1.5 flex-wrap">
+                      <div className="flex gap-1.5 flex-wrap items-center">
                         <Badge className={`text-[10px] ${frequencyColors[thread.frequency] || ''}`}>{thread.frequency}</Badge>
                         <Badge variant={thread.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{thread.status}</Badge>
                         <Badge
@@ -201,11 +207,46 @@ export default function ThreadsView() {
                         >
                           {thread.intensity || 'medium'} int
                         </Badge>
+                        {(() => {
+                          const queueCount = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled').length
+                          return queueCount > 0 ? (
+                            <Badge variant="secondary" className="text-[10px] ml-auto">{queueCount} queued</Badge>
+                          ) : null
+                        })()}
                       </div>
                       <p className="text-xs text-muted-foreground">{frequencyDescription(thread)}</p>
                       {thread.notes && (
                         <p className="text-xs text-muted-foreground italic break-words line-clamp-3">{thread.notes}</p>
                       )}
+                      <div className="flex items-center justify-between pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7 px-2"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const title = prompt('Task title')
+                            if (title) {
+                              createTask({
+                                title,
+                                threadId: thread._id,
+                                date: '',
+                                timeBlock: 'unscheduled',
+                                status: 'pending',
+                                source: 'manual',
+                              })
+                            }
+                          }}
+                        >
+                          + Add task
+                        </Button>
+                        {thread.taskType === 'discrete' && (() => {
+                          const queueCount = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled').length
+                          return queueCount === 0 ? (
+                            <p className="text-[11px] text-muted-foreground italic">No tasks queued — add one to see this thread in your week.</p>
+                          ) : null
+                        })()}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -327,6 +368,20 @@ export default function ThreadsView() {
                     <option value="medium">Medium (45m)</option>
                     <option value="heavy">Heavy (90m+)</option>
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Task Type</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="taskType" value="discrete" checked={form.taskType === 'discrete'} onChange={() => setForm(f => ({ ...f, taskType: 'discrete' }))} />
+                    Discrete
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="taskType" value="continuous" checked={form.taskType === 'continuous'} onChange={() => setForm(f => ({ ...f, taskType: 'continuous' }))} />
+                    Continuous
+                  </label>
                 </div>
               </div>
 

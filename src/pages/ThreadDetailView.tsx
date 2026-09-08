@@ -32,7 +32,7 @@ export default function ThreadDetailView() {
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
   const [editingMeta, setEditingMeta] = useState(false)
-  const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium' })
+  const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium', taskType: 'discrete' as 'discrete' | 'continuous' })
   const [showAddResource, setShowAddResource] = useState(false)
   const [resourceDraft, setResourceDraft] = useState({ title: '', url: '', description: '', kind: 'link' as 'link' | 'resource' })
 
@@ -47,6 +47,7 @@ export default function ThreadDetailView() {
         status: thread.status,
         priority: thread.priority,
         intensity: thread.intensity,
+        taskType: (thread as any).taskType || 'discrete',
       })
     }
   }, [thread])
@@ -91,6 +92,7 @@ export default function ThreadDetailView() {
         status: metaDraft.status,
         priority: metaDraft.priority as 'low' | 'medium' | 'high',
         intensity: metaDraft.intensity as 'light' | 'medium' | 'heavy',
+        taskType: metaDraft.taskType,
       },
     }, {
       onSuccess: () => setEditingMeta(false),
@@ -386,6 +388,19 @@ export default function ThreadDetailView() {
                       <option value="medium">Medium</option>
                       <option value="heavy">Heavy</option>
                     </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Task Type</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="radio" name="taskType" value="discrete" checked={metaDraft.taskType === 'discrete'} onChange={() => setMetaDraft(d => ({ ...d, taskType: 'discrete' }))} />
+                      Discrete
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="radio" name="taskType" value="continuous" checked={metaDraft.taskType === 'continuous'} onChange={() => setMetaDraft(d => ({ ...d, taskType: 'continuous' }))} />
+                      Continuous
+                    </label>
                   </div>
                 </div>
               </div>

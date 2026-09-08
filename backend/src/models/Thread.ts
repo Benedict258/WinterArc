@@ -46,6 +46,11 @@ const threadSchema = new mongoose.Schema(
       enum: ['light', 'medium', 'heavy'],
       default: 'medium',
     },
+    taskMode: {
+      type: String,
+      enum: ['discrete', 'continuous'],
+      default: 'continuous',
+    },
     notes: String,
     resources: [resourceSchema],
   },
