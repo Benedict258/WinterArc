@@ -219,6 +219,41 @@ export default function ThreadDetailView() {
           </Card>
         )}
 
+        {thread && (() => {
+          const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
+          if (queued.length === 0) return null
+          const priorityOrder = { high:0, medium:1, low:2 }
+          const sorted = [...queued].sort((a,b) => {
+            const aDue = a.dueDate ? new Date(a.dueDate).getTime():Infinity
+            const bDue = b.dueDate ? new Date(b.dueDate).getTime():Infinity
+            if (aDue!==bDue) return aDue-bDue
+            return (priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1)
+          })
+          return (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText size={18} /> Queued Tasks
+                </CardTitle>
+                <CardDescription className="text-xs">Manage unscheduled tasks for this thread</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {sorted.map(t => (
+                  <div key={t._id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/40">
+                    <span className="flex-1 truncate text-sm">{t.title}</span>
+                    <span className="text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                      const newTitle = window.prompt('Edit title', t.title)
+                      if (newTitle && newTitle.trim()) updateTask({ id: t._id, updates: { title: newTitle.trim() } })
+                    }}><Edit2 size={12} /></Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm('Delete task?')) deleteTask(t._id) }}><Trash2 size={12} /></Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )
+        })()}
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <div>
@@ -305,41 +340,6 @@ export default function ThreadDetailView() {
             )}
           </CardContent>
         </Card>
-
-        {thread && (() => {
-          const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
-          if (queued.length === 0) return null
-          const priorityOrder = { high:0, medium:1, low:2 }
-          const sorted = [...queued].sort((a,b) => {
-            const aDue = a.dueDate ? new Date(a.dueDate).getTime():Infinity
-            const bDue = b.dueDate ? new Date(b.dueDate).getTime():Infinity
-            if (aDue!==bDue) return aDue-bDue
-            return (priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1)
-          })
-          return (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <FileText size={18} /> Queued Tasks
-                </CardTitle>
-                <CardDescription className="text-xs">Manage unscheduled tasks for this thread</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {sorted.map(t => (
-                  <div key={t._id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/40">
-                    <span className="flex-1 truncate text-sm">{t.title}</span>
-                    <span className="text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                      const newTitle = window.prompt('Edit title', t.title)
-                      if (newTitle && newTitle.trim()) updateTask({ id: t._id, updates: { title: newTitle.trim() } })
-                    }}><Edit2 size={12} /></Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm('Delete task?')) deleteTask(t._id) }}><Trash2 size={12} /></Button>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )
-        })()}
 
         {editingMeta && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
