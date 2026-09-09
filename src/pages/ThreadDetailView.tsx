@@ -40,6 +40,8 @@ export default function ThreadDetailView() {
   const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium', taskType: 'discrete' as 'discrete' | 'continuous' })
   const [showAddResource, setShowAddResource] = useState(false)
   const [resourceDraft, setResourceDraft] = useState({ title: '', url: '', description: '', kind: 'link' as 'link' | 'resource' })
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [addTaskDraft, setAddTaskDraft] = useState({ title: '', dueDate: '', priority: 'medium' as 'low'|'medium'|'high', intensity: 'medium' as 'light'|'medium'|'heavy' })
 
   useEffect(() => {
     if (thread) {
@@ -238,22 +240,7 @@ export default function ThreadDetailView() {
                 </CardTitle>
                 <CardDescription className="text-xs">Manage unscheduled tasks for this thread</CardDescription>
               </div>
-              <Button size="sm" variant="outline" onClick={() => {
-                const title = window.prompt('Task title')
-                if (!title?.trim()) return
-                const due = window.prompt('Due date (YYYY-MM-DD, optional)')
-                createTask({
-                  title: title.trim(),
-                  threadId: thread._id,
-                  date: '',
-                  timeBlock: 'unscheduled',
-                  status: 'pending',
-                  source: 'manual',
-                  dueDate: due || null,
-                  priority: 'medium',
-                  intensity: 'medium'
-                })
-              }}>+ Add task</Button>
+              <Button size="sm" variant="outline" onClick={() => { setShowAddTask(true); setAddTaskDraft({ title:'', dueDate:'', priority:'medium', intensity:'medium' }) }}>+ Add task</Button>
             </CardHeader>
               <CardContent className="space-y-2">
                 {sorted.map(t => (
@@ -532,6 +519,61 @@ export default function ThreadDetailView() {
                   <Button type="submit" size="sm" disabled={isAddingResource} className="gap-1">
                     <Plus size={14} /> Add Resource
                   </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {showAddTask && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-background border rounded-lg p-5 sm:p-6 w-full max-w-md shadow-lg">
+              <h2 className="text-lg font-bold mb-4">Add Task to Thread</h2>
+              <form onSubmit={(e) => {
+                e.preventDefault()
+                if (!addTaskDraft.title.trim()) return
+                createTask({
+                  title: addTaskDraft.title.trim(),
+                  threadId: thread._id,
+                  date: '',
+                  timeBlock: 'unscheduled',
+                  status: 'pending',
+                  source: 'manual',
+                  dueDate: addTaskDraft.dueDate || null,
+                  priority: addTaskDraft.priority,
+                  intensity: addTaskDraft.intensity
+                })
+                setShowAddTask(false)
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Task Title</label>
+                  <input type="text" autoFocus value={addTaskDraft.title} onChange={e=>setAddTaskDraft(d=>({...d,title:e.target.value}))} required className="w-full px-3 py-2 border rounded-md bg-background text-sm"/>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Due Date (optional)</label>
+                  <input type="date" value={addTaskDraft.dueDate} onChange={e=>setAddTaskDraft(d=>({...d,dueDate:e.target.value}))} className="w-full px-3 py-2 border rounded-md bg-background text-sm"/>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Priority</label>
+                    <select value={addTaskDraft.priority} onChange={e=>setAddTaskDraft(d=>({...d,priority:e.target.value as any}))} className="w-full px-3 py-2 border rounded-md bg-background text-sm">
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Intensity</label>
+                    <select value={addTaskDraft.intensity} onChange={e=>setAddTaskDraft(d=>({...d,intensity:e.target.value as any}))} className="w-full px-3 py-2 border rounded-md bg-background text-sm">
+                      <option value="light">Light</option>
+                      <option value="medium">Medium</option>
+                      <option value="heavy">Heavy</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button type="button" onClick={()=>setShowAddTask(false)} variant="outline" size="sm">Cancel</Button>
+                  <Button type="submit" size="sm" disabled={!addTaskDraft.title.trim()}>Create Task</Button>
                 </div>
               </form>
             </div>
