@@ -230,13 +230,31 @@ export default function ThreadDetailView() {
             return (priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1)
           })
           return (
-            <Card>
-              <CardHeader>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <div>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FileText size={18} /> Queued Tasks
                 </CardTitle>
                 <CardDescription className="text-xs">Manage unscheduled tasks for this thread</CardDescription>
-              </CardHeader>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => {
+                const title = window.prompt('Task title')
+                if (!title?.trim()) return
+                const due = window.prompt('Due date (YYYY-MM-DD, optional)')
+                createTask({
+                  title: title.trim(),
+                  threadId: thread._id,
+                  date: '',
+                  timeBlock: 'unscheduled',
+                  status: 'pending',
+                  source: 'manual',
+                  dueDate: due || null,
+                  priority: 'medium',
+                  intensity: 'medium'
+                })
+              }}>+ Add task</Button>
+            </CardHeader>
               <CardContent className="space-y-2">
                 {sorted.map(t => (
                   <div key={t._id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/40">
