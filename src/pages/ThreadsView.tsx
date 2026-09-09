@@ -214,18 +214,30 @@ export default function ThreadsView() {
                           const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
                           const queueCount = queued.length
                           if (queueCount === 0) return null
-                          const withDue = queued.filter(t => t.dueDate).map(t => new Date(t.dueDate))
+                          const priorityOrder = { high: 0, medium: 1, low: 2 }
+                          const sortedQueued = [...queued].sort((a, b) => {
+                            const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Infinity
+                            const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Infinity
+                            if (aDue !== bDue) return aDue - bDue
+                            const aPri = priorityOrder[a.priority] ?? 1
+                            const bPri = priorityOrder[b.priority] ?? 1
+                            return aPri - bPri
+                          })
+                          const firstWithDue = sortedQueued.find(t => t.dueDate)
                           let dueLabel = ''
-                          if (withDue.length > 0) {
-                            const minDue = new Date(Math.min(...withDue.map(d => d.getTime())))
+                          let isOverdue = false
+                          if (firstWithDue) {
+                            const minDue = new Date(firstWithDue.dueDate)
                             const now = new Date()
                             const diffDays = Math.ceil((minDue.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-                            if (diffDays < 0) dueLabel = ` • ${Math.abs(diffDays)}d overdue`
-                            else if (diffDays === 0) dueLabel = ` • Due today`
+                            if (diffDays < 0) {
+                              dueLabel = ` • ${Math.abs(diffDays)}d overdue`
+                              isOverdue = true
+                            } else if (diffDays === 0) dueLabel = ` • Due today`
                             else if (diffDays <= 7) dueLabel = ` • ${diffDays}d left`
                           }
                           return (
-                            <Badge variant="secondary" className="text-[10px] ml-auto">{queueCount} queued{dueLabel}</Badge>
+                            <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-[10px] ml-auto">{queueCount} queued{dueLabel}</Badge>
                           )
                         })()}
                       </div>

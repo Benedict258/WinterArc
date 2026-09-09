@@ -36,15 +36,17 @@ export default function TaskRow({
     const now = new Date()
     const diffMs = due.getTime() - now.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-    if (diffDays < 0) return { label: `${Math.abs(diffDays)}d overdue`, color: 'text-red-600' }
-    if (diffDays === 0) return { label: 'Due today', color: 'text-amber-600' }
-    if (diffDays === 1) return { label: 'Due tomorrow', color: 'text-amber-600' }
-    return { label: `${diffDays}d left`, color: 'text-muted-foreground' }
+    if (diffDays < 0) return { label: `${Math.abs(diffDays)}d overdue`, color: 'text-red-600', isOverdue: true }
+    if (diffDays === 0) return { label: 'Due today', color: 'text-amber-600', isOverdue: false }
+    if (diffDays === 1) return { label: 'Due tomorrow', color: 'text-amber-600', isOverdue: false }
+    return { label: `${diffDays}d left`, color: 'text-muted-foreground', isOverdue: false }
   }, [task.dueDate])
+  const isOverdue = dueCountdown?.isOverdue && !isDone
   return (
     <div
       className={cn(
         'group flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors',
+        isOverdue && 'border border-red-500/40 bg-red-50 dark:bg-red-950/20',
         className
       )}
     >
@@ -64,7 +66,12 @@ export default function TaskRow({
         {task.title}
       </span>
       {dueCountdown && (
-        <span className={`text-[10px] font-medium shrink-0 ${dueCountdown.color}`}>
+        <span className={cn(
+          'text-[10px] font-medium shrink-0 px-1.5 py-0.5 rounded',
+          dueCountdown.isOverdue
+            ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200'
+            : dueCountdown.color
+        )}>
           {dueCountdown.label}
         </span>
       )}
