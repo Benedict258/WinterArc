@@ -308,6 +308,7 @@ export default function ThreadDetailView() {
               <Markdown source={thread.notes || ''} />
             )}
           </CardContent>
+          )}
         </Card>
 
         <Card>
