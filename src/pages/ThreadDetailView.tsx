@@ -218,7 +218,8 @@ export default function ThreadDetailView() {
                   </div>
                 ))}
               </div>
-            </CardContent>
+               </CardContent>
+             )}
           </Card>
         )}
 
