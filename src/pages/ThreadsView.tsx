@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useThreads, useCreateThread, useUpdateThread, useDeleteThread } from '@/hooks/useThreads'
-import { useTasks, useCreateTask, useUpdateTask } from '@/hooks/useTasks'
+import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -37,6 +37,7 @@ export default function ThreadsView() {
   const { data: allTasks = [] } = useTasks({})
   const { mutate: createTask } = useCreateTask()
   const { mutate: updateTask } = useUpdateTask()
+  const { mutate: deleteTask } = useDeleteTask()
 
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [editId, setEditId] = useState<string | null>(null)
@@ -282,7 +283,7 @@ export default function ThreadsView() {
                            return (priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1)
                          })
                          return (
-                           <div className="mt-3 pt-3 border-t space-y-1">
+                             <div className="mt-3 pt-3 border-t space-y-1">
                              <p className="text-[11px] font-medium text-muted-foreground">Queued tasks</p>
                              {sorted.map(t => (
                                <div key={t._id} className="flex items-center gap-2 text-xs">
@@ -296,6 +297,17 @@ export default function ThreadsView() {
                                    const next = t.priority==='high'?'medium':t.priority==='medium'?'low':t.priority
                                    updateTask({ id: t._id, updates: { priority: next } })
                                  }} title="Move down">↓</Button>
+                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+                                   const newTitle = window.prompt('Edit task title', t.title)
+                                   if (newTitle && newTitle.trim() !== t.title) {
+                                     updateTask({ id: t._id, updates: { title: newTitle.trim() } })
+                                   }
+                                 }} title="Edit task"><Edit2 size={12} /></Button>
+                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => {
+                                   if (window.confirm('Delete this task?')) {
+                                     deleteTask(t._id)
+                                   }
+                                 }} title="Delete task"><Trash2 size={12} /></Button>
                                </div>
                              ))}
                            </div>
