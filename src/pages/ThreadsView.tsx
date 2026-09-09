@@ -272,47 +272,6 @@ export default function ThreadsView() {
                            ) : null
                          })()}
                        </div>
-                       {(() => {
-                         const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
-                         if (queued.length === 0) return null
-                         const priorityOrder = { high:0, medium:1, low:2 }
-                         const sorted = [...queued].sort((a,b)=> {
-                           const aDue = a.dueDate ? new Date(a.dueDate).getTime():Infinity
-                           const bDue = b.dueDate ? new Date(b.dueDate).getTime():Infinity
-                           if (aDue!==bDue) return aDue-bDue
-                           return (priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1)
-                         })
-                         return (
-                             <div className="mt-3 pt-3 border-t space-y-1">
-                             <p className="text-[11px] font-medium text-muted-foreground">Queued tasks</p>
-                             {sorted.map(t => (
-                               <div key={t._id} className="flex items-center gap-2 text-xs">
-                                 <span className="flex-1 truncate">{t.title}</span>
-                                 <span className="text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
-                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
-                                   const next = t.priority==='low'?'medium':t.priority==='medium'?'high':t.priority
-                                   updateTask({ id: t._id, updates: { priority: next } })
-                                 }} title="Move up">↑</Button>
-                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
-                                   const next = t.priority==='high'?'medium':t.priority==='medium'?'low':t.priority
-                                   updateTask({ id: t._id, updates: { priority: next } })
-                                 }} title="Move down">↓</Button>
-                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
-                                   const newTitle = window.prompt('Edit task title', t.title)
-                                   if (newTitle && newTitle.trim() !== t.title) {
-                                     updateTask({ id: t._id, updates: { title: newTitle.trim() } })
-                                   }
-                                 }} title="Edit task"><Edit2 size={12} /></Button>
-                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => {
-                                   if (window.confirm('Delete this task?')) {
-                                     deleteTask(t._id)
-                                   }
-                                 }} title="Delete task"><Trash2 size={12} /></Button>
-                               </div>
-                             ))}
-                           </div>
-                         )
-                       })()}
                     </CardContent>
                   </Card>
                 ))}

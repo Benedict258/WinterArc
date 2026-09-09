@@ -194,6 +194,31 @@ export default function ThreadDetailView() {
           </div>
         )}
 
+        {stats && stats.upcomingTasks.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Calendar size={18} /> Upcoming Tasks
+              </CardTitle>
+              <CardDescription className="text-xs">Next 5 pending tasks for this thread</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1.5">
+                {stats.upcomingTasks.map(t => (
+                  <div key={t._id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-secondary/60">
+                    <span className="text-sm flex-1 min-w-0 break-words">{t.title}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {new Date(t.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' · '}
+                      {t.timeBlock}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <div>
@@ -280,31 +305,6 @@ export default function ThreadDetailView() {
             )}
           </CardContent>
         </Card>
-
-        {stats && stats.upcomingTasks.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Calendar size={18} /> Upcoming Tasks
-              </CardTitle>
-              <CardDescription className="text-xs">Next 5 pending tasks for this thread</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1.5">
-                {stats.upcomingTasks.map(t => (
-                  <div key={t._id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-secondary/60">
-                    <span className="text-sm flex-1 min-w-0 break-words">{t.title}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {new Date(t.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                      {' · '}
-                      {t.timeBlock}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {thread && (() => {
           const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
