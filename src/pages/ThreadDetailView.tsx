@@ -243,6 +243,14 @@ export default function ThreadDetailView() {
                     <span className="flex-1 truncate text-sm">{t.title}</span>
                     <span className="text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                      const next = t.priority==='low'?'medium':t.priority==='medium'?'high':t.priority
+                      updateTask({ id: t._id, updates: { priority: next } })
+                    }} title="Move up">↑</Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                      const next = t.priority==='high'?'medium':t.priority==='medium'?'low':t.priority
+                      updateTask({ id: t._id, updates: { priority: next } })
+                    }} title="Move down">↓</Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
                       const newTitle = window.prompt('Edit title', t.title)
                       if (newTitle && newTitle.trim()) updateTask({ id: t._id, updates: { title: newTitle.trim() } })
                     }}><Edit2 size={12} /></Button>
