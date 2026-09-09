@@ -195,6 +195,12 @@ export default function TodayView() {
                             },
                           })
                         }}
+                        onEdit={(t) => {
+                          const newTitle = window.prompt('Edit task title', t.title)
+                          if (newTitle && newTitle.trim() !== t.title) {
+                            updateTask({ id: t.id, updates: { title: newTitle.trim() } })
+                          }
+                        }}
                         onDelete={(t) => deleteTask(t.id)}
                         showSource
                       />

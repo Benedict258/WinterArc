@@ -5,7 +5,7 @@ import { format, startOfWeek, addDays, addWeeks, isSameWeek, isToday as fnsIsTod
 import { useQueries } from '@tanstack/react-query'
 import { useWeek, useRegenerateWeek } from '@/hooks/useGrid'
 import { useThreads } from '@/hooks/useThreads'
-import { useUpdateTask } from '@/hooks/useTasks'
+import { useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, RefreshCw, Plus, ChevronDown, Calendar as CalIcon, Maximize2, Minimize2 } from 'lucide-react'
 import QuickAddModal from '@/components/QuickAddModal'
@@ -33,6 +33,7 @@ export default function WeekView() {
   const weekStartString = currentWeekStart.toISOString().split('T')[0]
 
   const { mutate: updateTask } = useUpdateTask()
+  const { mutate: deleteTask } = useDeleteTask()
   const { mutate: regenerateWeek, isPending: isRegenerating } = useRegenerateWeek()
 
   const { data: weekData = { week: [] }, isLoading: weekLoading, error: weekError } = useWeek(weekStartString)
@@ -287,6 +288,13 @@ export default function WeekView() {
                                     key={task.id}
                                     task={task}
                                     onToggle={handleToggleTask}
+                                    onEdit={(t) => {
+                                      const newTitle = window.prompt('Edit task title', t.title)
+                                      if (newTitle && newTitle.trim() !== t.title) {
+                                        updateTask({ id: t.id, updates: { title: newTitle.trim() } })
+                                      }
+                                    }}
+                                    onDelete={(t) => deleteTask(t.id)}
                                     showSource
                                   />
                                 ))}

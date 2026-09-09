@@ -1,4 +1,4 @@
-import { CheckCircle2, Trash2 } from 'lucide-react'
+import { CheckCircle2, Trash2, Edit2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import React from 'react'
 
@@ -18,6 +18,7 @@ interface TaskRowProps {
   task: TaskRowData
   onToggle: (task: TaskRowData) => void
   onDelete?: (task: TaskRowData) => void
+  onEdit?: (task: TaskRowData) => void
   showSource?: boolean
   className?: string
 }
@@ -26,6 +27,7 @@ export default function TaskRow({
   task,
   onToggle,
   onDelete,
+  onEdit,
   showSource = false,
   className,
 }: TaskRowProps) {
@@ -108,6 +110,19 @@ export default function TaskRow({
         </span>
       )}
       {isDone && <CheckCircle2 size={16} className="text-primary shrink-0" />}
+      {onEdit && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit(task)
+          }}
+          className="p-1 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0"
+          title="Edit task"
+          aria-label="Edit task"
+        >
+          <Edit2 size={15} />
+        </button>
+      )}
       {onDelete && (
         <button
           onClick={(e) => {
