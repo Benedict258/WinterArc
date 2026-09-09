@@ -8,7 +8,7 @@ import { useThread, useThreadStats, useAddResource, useDeleteResource } from '@/
 import { useTasks, useUpdateTask, useDeleteTask, useCreateTask } from '@/hooks/useTasks'
 import { useUpdateThread } from '@/hooks/useThreads'
 import {
-  ArrowLeft, Edit2, Trash2, ExternalLink, Plus, Flame, BarChart3, Calendar, FileText, Link2, Save, X, Check
+  ArrowLeft, Edit2, Trash2, ExternalLink, Plus, Flame, BarChart3, Calendar, FileText, Link2, Save, X, Check, ChevronDown
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -37,6 +37,7 @@ export default function ThreadDetailView() {
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
   const [editingMeta, setEditingMeta] = useState(false)
+  const [expandedSections, setExpandedSections] = useState({ queued:true, notes:true, resources:true })
   const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium', taskType: 'discrete' as 'discrete' | 'continuous' })
   const [showAddResource, setShowAddResource] = useState(false)
   const [resourceDraft, setResourceDraft] = useState({ title: '', url: '', description: '', kind: 'link' as 'link' | 'resource' })
@@ -234,7 +235,8 @@ export default function ThreadDetailView() {
           return (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <div>
+              <div className="flex items-center gap-2 cursor-pointer" onClick={()=>setExpandedSections(s=>({...s, queued:!s.queued}))}>
+                <ChevronDown size={16} className={expandedSections.queued ? '' : 'rotate-[-90deg]'} />
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FileText size={18} /> Queued Tasks
                 </CardTitle>
@@ -242,6 +244,7 @@ export default function ThreadDetailView() {
               </div>
               <Button size="sm" variant="outline" onClick={() => { setShowAddTask(true); setAddTaskDraft({ title:'', dueDate:'', priority:'medium', intensity:'medium' }) }}>+ Add task</Button>
             </CardHeader>
+            {expandedSections.queued && (
               <CardContent className="space-y-2">
                 {sorted.map(t => (
                   <div key={t._id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/40">
@@ -269,11 +272,14 @@ export default function ThreadDetailView() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileText size={18} /> Notes
-              </CardTitle>
-              <CardDescription className="text-xs">Markdown supported · **bold**, *italic*, `code`, [links](url), lists, headings</CardDescription>
+            <div className="flex items-center gap-2 cursor-pointer" onClick={()=>setExpandedSections(s=>({...s, notes:!s.notes}))}>
+              <ChevronDown size={16} className={expandedSections.notes ? '' : 'rotate-[-90deg]'} />
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText size={18} /> Notes
+                </CardTitle>
+                <CardDescription className="text-xs">Markdown supported · **bold**, *italic*, `code`, [links](url), lists, headings</CardDescription>
+              </div>
             </div>
             {!editingNotes ? (
               <Button size="sm" variant="ghost" onClick={() => { setNotesDraft(thread.notes || ''); setEditingNotes(true) }} className="gap-1">
@@ -288,6 +294,7 @@ export default function ThreadDetailView() {
               </div>
             )}
           </CardHeader>
+          {expandedSections.notes && (
           <CardContent>
             {editingNotes ? (
               <textarea
@@ -305,16 +312,20 @@ export default function ThreadDetailView() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Link2 size={18} /> Resources & Links
-              </CardTitle>
-              <CardDescription className="text-xs">Bookmarks, docs, repos, anything relevant to this thread</CardDescription>
+            <div className="flex items-center gap-2 cursor-pointer" onClick={()=>setExpandedSections(s=>({...s, resources:!s.resources}))}>
+              <ChevronDown size={16} className={expandedSections.resources ? '' : 'rotate-[-90deg]'} />
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Link2 size={18} /> Resources & Links
+                </CardTitle>
+                <CardDescription className="text-xs">Bookmarks, docs, repos, anything relevant to this thread</CardDescription>
+              </div>
             </div>
             <Button size="sm" variant="outline" onClick={() => setShowAddResource(true)} className="gap-1">
               <Plus size={14} /> Add
             </Button>
           </CardHeader>
+          {expandedSections.resources && (
           <CardContent>
             {(thread.resources || []).length === 0 ? (
               <p className="text-sm text-muted-foreground italic py-2">No resources yet. Add links or bookmarks to keep references handy.</p>
@@ -352,6 +363,7 @@ export default function ThreadDetailView() {
               </div>
             )}
           </CardContent>
+          )}
         </Card>
 
         {editingMeta && (
