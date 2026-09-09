@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useThreads, useCreateThread, useUpdateThread, useDeleteThread } from '@/hooks/useThreads'
-import { useTasks, useCreateTask } from '@/hooks/useTasks'
+import { useTasks, useCreateTask, useUpdateTask } from '@/hooks/useTasks'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -36,12 +36,15 @@ export default function ThreadsView() {
   const { mutate: deleteThread, isPending: isDeleting } = useDeleteThread()
   const { data: allTasks = [] } = useTasks({})
   const { mutate: createTask } = useCreateTask()
+  const { mutate: updateTask } = useUpdateTask()
 
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [editId, setEditId] = useState<string | null>(null)
   const [quickAddThreadId, setQuickAddThreadId] = useState<string | null>(null)
   const [quickAddTitle, setQuickAddTitle] = useState('')
   const [quickAddDueDate, setQuickAddDueDate] = useState('')
+  const [quickAddPriority, setQuickAddPriority] = useState<'low'|'medium'|'high'>('medium')
+  const [quickAddIntensity, setQuickAddIntensity] = useState<'light'|'medium'|'heavy'>('medium')
   const [form, setForm] = useState({
     name: '',
     category: '',
@@ -245,27 +248,59 @@ export default function ThreadsView() {
                       {thread.notes && (
                         <p className="text-xs text-muted-foreground italic break-words line-clamp-3">{thread.notes}</p>
                       )}
-                       <div className="flex items-center justify-between pt-1">
-                         <Button
-                           size="sm"
-                           variant="outline"
-                           className="text-xs h-7 px-2"
-                           onClick={(e) => {
-                             e.stopPropagation()
-                             setQuickAddThreadId(thread._id)
-                             setQuickAddTitle('')
-                             setQuickAddDueDate('')
-                           }}
-                         >
-                           + Add task
-                         </Button>
-                        {thread.taskType === 'discrete' && (() => {
-                          const queueCount = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled').length
-                          return queueCount === 0 ? (
-                            <p className="text-[11px] text-muted-foreground italic">No tasks queued — add one to see this thread in your week.</p>
-                          ) : null
-                        })()}
-                      </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-7 px-2"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setQuickAddThreadId(thread._id)
+                              setQuickAddTitle('')
+                              setQuickAddDueDate('')
+                              setQuickAddPriority('medium')
+                              setQuickAddIntensity('medium')
+                            }}
+                          >
+                            + Add task
+                          </Button>
+                         {thread.taskType === 'discrete' && (() => {
+                           const queueCount = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled').length
+                           return queueCount === 0 ? (
+                             <p className="text-[11px] text-muted-foreground italic">No tasks queued — add one to see this thread in your week.</p>
+                           ) : null
+                         })()}
+                       </div>
+                       {(() => {
+                         const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
+                         if (queued.length === 0) return null
+                         const priorityOrder = { high:0, medium:1, low:2 }
+                         const sorted = [...queued].sort((a,b)=> {
+                           const aDue = a.dueDate ? new Date(a.dueDate).getTime():Infinity
+                           const bDue = b.dueDate ? new Date(b.dueDate).getTime():Infinity
+                           if (aDue!==bDue) return aDue-bDue
+                           return (priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1)
+                         })
+                         return (
+                           <div className="mt-3 pt-3 border-t space-y-1">
+                             <p className="text-[11px] font-medium text-muted-foreground">Queued tasks</p>
+                             {sorted.map(t => (
+                               <div key={t._id} className="flex items-center gap-2 text-xs">
+                                 <span className="flex-1 truncate">{t.title}</span>
+                                 <span className="text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
+                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+                                   const next = t.priority==='low'?'medium':t.priority==='medium'?'high':t.priority
+                                   updateTask({ id: t._id, updates: { priority: next } })
+                                 }} title="Move up">↑</Button>
+                                 <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+                                   const next = t.priority==='high'?'medium':t.priority==='medium'?'low':t.priority
+                                   updateTask({ id: t._id, updates: { priority: next } })
+                                 }} title="Move down">↓</Button>
+                               </div>
+                             ))}
+                           </div>
+                         )
+                       })()}
                     </CardContent>
                   </Card>
                 ))}
@@ -444,10 +479,14 @@ export default function ThreadsView() {
                   timeBlock: 'unscheduled',
                   status: 'pending',
                   source: 'manual',
+                  priority: quickAddPriority,
+                  intensity: quickAddIntensity,
                 })
                 setQuickAddThreadId(null)
                 setQuickAddTitle('')
                 setQuickAddDueDate('')
+                setQuickAddPriority('medium')
+                setQuickAddIntensity('medium')
               }}
             >
               <div>
@@ -469,6 +508,32 @@ export default function ThreadsView() {
                   onChange={(e) => setQuickAddDueDate(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md bg-background text-sm"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Priority</label>
+                  <select
+                    value={quickAddPriority}
+                    onChange={(e) => setQuickAddPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Intensity</label>
+                  <select
+                    value={quickAddIntensity}
+                    onChange={(e) => setQuickAddIntensity(e.target.value as any)}
+                    className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                  >
+                    <option value="light">Light</option>
+                    <option value="medium">Medium</option>
+                    <option value="heavy">Heavy</option>
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <Button type="button" onClick={() => setQuickAddThreadId(null)} variant="outline" size="sm">
