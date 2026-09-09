@@ -11,6 +11,7 @@ export type Task = {
   title: string;
   threadId: string | null;
   date: string;
+  dueDate?: string | null;
   timeBlock: string;
   status: string;
   completedAt: string | null;

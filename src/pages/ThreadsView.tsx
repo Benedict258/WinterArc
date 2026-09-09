@@ -39,6 +39,9 @@ export default function ThreadsView() {
 
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [editId, setEditId] = useState<string | null>(null)
+  const [quickAddThreadId, setQuickAddThreadId] = useState<string | null>(null)
+  const [quickAddTitle, setQuickAddTitle] = useState('')
+  const [quickAddDueDate, setQuickAddDueDate] = useState('')
   const [form, setForm] = useState({
     name: '',
     category: '',
@@ -208,38 +211,42 @@ export default function ThreadsView() {
                           {thread.intensity || 'medium'} int
                         </Badge>
                         {(() => {
-                          const queueCount = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled').length
-                          return queueCount > 0 ? (
-                            <Badge variant="secondary" className="text-[10px] ml-auto">{queueCount} queued</Badge>
-                          ) : null
+                          const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
+                          const queueCount = queued.length
+                          if (queueCount === 0) return null
+                          const withDue = queued.filter(t => t.dueDate).map(t => new Date(t.dueDate))
+                          let dueLabel = ''
+                          if (withDue.length > 0) {
+                            const minDue = new Date(Math.min(...withDue.map(d => d.getTime())))
+                            const now = new Date()
+                            const diffDays = Math.ceil((minDue.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                            if (diffDays < 0) dueLabel = ` • ${Math.abs(diffDays)}d overdue`
+                            else if (diffDays === 0) dueLabel = ` • Due today`
+                            else if (diffDays <= 7) dueLabel = ` • ${diffDays}d left`
+                          }
+                          return (
+                            <Badge variant="secondary" className="text-[10px] ml-auto">{queueCount} queued{dueLabel}</Badge>
+                          )
                         })()}
                       </div>
                       <p className="text-xs text-muted-foreground">{frequencyDescription(thread)}</p>
                       {thread.notes && (
                         <p className="text-xs text-muted-foreground italic break-words line-clamp-3">{thread.notes}</p>
                       )}
-                      <div className="flex items-center justify-between pt-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs h-7 px-2"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const title = prompt('Task title')
-                            if (title) {
-                              createTask({
-                                title,
-                                threadId: thread._id,
-                                date: '',
-                                timeBlock: 'unscheduled',
-                                status: 'pending',
-                                source: 'manual',
-                              })
-                            }
-                          }}
-                        >
-                          + Add task
-                        </Button>
+                       <div className="flex items-center justify-between pt-1">
+                         <Button
+                           size="sm"
+                           variant="outline"
+                           className="text-xs h-7 px-2"
+                           onClick={(e) => {
+                             e.stopPropagation()
+                             setQuickAddThreadId(thread._id)
+                             setQuickAddTitle('')
+                             setQuickAddDueDate('')
+                           }}
+                         >
+                           + Add task
+                         </Button>
                         {thread.taskType === 'discrete' && (() => {
                           const queueCount = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled').length
                           return queueCount === 0 ? (
@@ -401,6 +408,62 @@ export default function ThreadsView() {
                 </Button>
                 <Button type="submit" size="sm" disabled={isCreating || isUpdating || !form.name || !form.category || !form.frequency || !form.status}>
                   {editId === 'new' ? 'Create' : 'Save'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {quickAddThreadId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background border rounded-lg p-5 sm:p-6 w-full max-w-md shadow-lg">
+            <h2 className="text-lg font-bold mb-4">Add Task to Thread</h2>
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!quickAddTitle.trim()) return
+                createTask({
+                  title: quickAddTitle.trim(),
+                  threadId: quickAddThreadId,
+                  date: '',
+                  dueDate: quickAddDueDate || null,
+                  timeBlock: 'unscheduled',
+                  status: 'pending',
+                  source: 'manual',
+                })
+                setQuickAddThreadId(null)
+                setQuickAddTitle('')
+                setQuickAddDueDate('')
+              }}
+            >
+              <div>
+                <label className="block text-sm font-medium mb-1">Task Title</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={quickAddTitle}
+                  onChange={(e) => setQuickAddTitle(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Due Date (optional)</label>
+                <input
+                  type="date"
+                  value={quickAddDueDate}
+                  onChange={(e) => setQuickAddDueDate(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button type="button" onClick={() => setQuickAddThreadId(null)} variant="outline" size="sm">
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={!quickAddTitle.trim()}>
+                  Create Task
                 </Button>
               </div>
             </form>

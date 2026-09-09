@@ -16,6 +16,7 @@ export const taskSchema = z.object({
   title: z.string().min(1, 'Task title is required'),
   threadId: z.string().nullable().optional(), // ObjectId as string
   date: z.string(), // ISO date string
+  dueDate: z.string().optional().nullable(),
   timeBlock: z.enum(['morning', 'afternoon', 'evening', 'unscheduled']).default('unscheduled'),
   status: z.enum(['pending', 'done', 'skipped']).default('pending'),
   completedAt: z.string().optional().nullable(),

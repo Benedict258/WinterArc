@@ -15,6 +15,10 @@ const taskSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    dueDate: {
+      type: Date,
+      default: null,
+    },
     timeBlock: {
       type: String,
       enum: ['morning', 'afternoon', 'evening', 'unscheduled'],

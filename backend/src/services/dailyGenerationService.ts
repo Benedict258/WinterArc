@@ -65,6 +65,58 @@ export async function generateToday(date: Date) {
     progressMap.set(String(p.threadId), p.appearances)
   }
 
+  // Cleanup expired due-date tasks
+  await Task.deleteMany({
+    date: null,
+    timeBlock: 'unscheduled',
+    dueDate: { $lt: targetDate }
+  })
+
+  const results: any[] = []
+  const scheduledThreadIds = new Set<string>()
+
+  // Priority rank helper
+  const priorityRank = { high: 3, medium: 2, low: 1 }
+
+  // 1. Due-date aware candidate selection - priority over normal tasks
+  const dueWindowEnd = endOfDay(addDays(targetDate, 3))
+  const dueTasks = await Task.find({
+    date: null,
+    timeBlock: 'unscheduled',
+    dueDate: { $gte: targetDate, $lte: dueWindowEnd }
+  }).sort({ dueDate: 1, priority: -1 })
+
+  // Group by thread for same-priority handling
+  const dueTasksByThread = new Map<string, any[]>()
+  for (const t of dueTasks) {
+    const tid = String(t.threadId)
+    if (!dueTasksByThread.has(tid)) dueTasksByThread.set(tid, [])
+    dueTasksByThread.get(tid)!.push(t)
+  }
+
+  for (const [threadId, tasks] of dueTasksByThread.entries()) {
+    // Determine max priority in this thread's due tasks
+    const maxRank = Math.max(...tasks.map(t => priorityRank[t.priority as keyof typeof priorityRank] ?? 2))
+    const eligible = tasks.filter(t => (priorityRank[t.priority as keyof typeof priorityRank] ?? 2) === maxRank)
+
+    // Sort by earliest due date then createdAt
+    eligible.sort((a, b) => {
+      const d = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      if (d !== 0) return d
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    })
+
+    for (const task of eligible) {
+      const block = await getNextFreeBlock(targetDate)
+      task.date = targetDate
+      task.timeBlock = block
+      await task.save()
+      await incrementWeeklyProgress(task.threadId, weekStart)
+      scheduledThreadIds.add(threadId)
+      results.push({ threadId, taskId: task._id, action: 'committed-due-date', dueDate: task.dueDate })
+    }
+  }
+
   type Candidate = {
     thread: any
     appearances: number
@@ -75,9 +127,13 @@ export async function generateToday(date: Date) {
   const candidates: Candidate[] = []
 
   for (const thread of threads) {
+    const threadIdStr = String(thread._id)
+    // Skip threads already satisfied by due-date tasks
+    if (scheduledThreadIds.has(threadIdStr)) continue
+
     const freq = thread.frequency as Frequency
     const target = getTarget(freq)
-    const appearances = progressMap.get(String(thread._id)) ?? 0
+    const appearances = progressMap.get(threadIdStr) ?? 0
 
     let isCandidate = false
     if (freq === 'fixed-day') {
@@ -102,23 +158,23 @@ export async function generateToday(date: Date) {
 
   candidates.sort((a, b) => b.deficit - a.deficit)
 
-  const results = []
-
   for (const c of candidates) {
     const { thread } = c
     const threadId = thread._id
+    const threadIdStr = String(threadId)
 
+    // Ignore tasks with dueDate for normal flow
     const queuedTask = await Task.findOne({
       threadId,
       date: null,
-      timeBlock: 'unscheduled'
+      timeBlock: 'unscheduled',
+      dueDate: { $exists: false }
     }).sort({ createdAt: 1 })
 
     const block = await getNextFreeBlock(targetDate)
 
     if (thread.taskMode === 'discrete') {
       if (!queuedTask) {
-        // skip per spec
         continue
       }
       queuedTask.date = targetDate
@@ -127,7 +183,6 @@ export async function generateToday(date: Date) {
       await incrementWeeklyProgress(threadId, weekStart)
       results.push({ threadId, taskId: queuedTask._id, action: 'committed-discrete' })
     } else {
-      // continuous
       if (queuedTask) {
         queuedTask.date = targetDate
         queuedTask.timeBlock = block

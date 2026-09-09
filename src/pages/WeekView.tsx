@@ -71,6 +71,7 @@ export default function WeekView() {
         source: task.source,
         priority: task.priority,
         intensity: task.intensity,
+        dueDate: task.dueDate || null,
       })
     }
   })

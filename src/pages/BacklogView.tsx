@@ -24,12 +24,14 @@ export default function BacklogView() {
   const [editTaskTitle, setEditTaskTitle] = useState('')
   const [editTaskThreadId, setEditTaskThreadId] = useState<string>('')
   const [editTaskTimeBlock, setEditTaskTimeBlock] = useState<'morning' | 'afternoon' | 'evening' | 'unscheduled'>('unscheduled')
+  const [editTaskDueDate, setEditTaskDueDate] = useState('')
 
   const openNew = () => {
     setEditTaskId('new')
     setEditTaskTitle('')
     setEditTaskThreadId('')
     setEditTaskTimeBlock('unscheduled')
+    setEditTaskDueDate('')
   }
 
   const openEdit = (task: any) => {
@@ -37,6 +39,7 @@ export default function BacklogView() {
     setEditTaskTitle(task.title)
     setEditTaskThreadId(task.threadId ?? '')
     setEditTaskTimeBlock(task.timeBlock ?? 'unscheduled')
+    setEditTaskDueDate(task.dueDate ? task.dueDate.split('T')[0] : '')
   }
 
   const handleSave = () => {
@@ -47,6 +50,7 @@ export default function BacklogView() {
         threadId: editTaskThreadId || null,
         timeBlock: editTaskTimeBlock,
         date: null,
+        dueDate: editTaskDueDate || null,
         status: 'pending',
         source: 'manual',
       } as any)
@@ -57,6 +61,7 @@ export default function BacklogView() {
           title: editTaskTitle,
           threadId: editTaskThreadId || null,
           timeBlock: editTaskTimeBlock,
+          dueDate: editTaskDueDate || null,
         },
       })
     }
@@ -198,6 +203,16 @@ export default function BacklogView() {
                   <option value="afternoon">Afternoon</option>
                   <option value="evening">Evening</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Due Date (optional)</label>
+                <input
+                  type="date"
+                  value={editTaskDueDate}
+                  onChange={(e) => setEditTaskDueDate(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-1">

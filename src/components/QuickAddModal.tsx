@@ -13,6 +13,7 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const todayString = new Date().toISOString().split('T')[0]
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(todayString)
+  const [dueDate, setDueDate] = useState('')
   const [timeBlock, setTimeBlock] = useState('unscheduled')
   const [threadId, setThreadId] = useState<string>('')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
@@ -31,6 +32,7 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
       {
         title: title.trim(),
         date: date || todayString,
+        dueDate: dueDate || null,
         timeBlock: timeBlock,
         threadId: threadId || null,
         status: 'pending',
@@ -94,18 +96,27 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Time Block</label>
-              <select
-                value={timeBlock}
-                onChange={(e) => setTimeBlock(e.target.value)}
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Due Date</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
                 className="w-full px-3 py-1.5 border rounded-md text-sm bg-background"
-              >
-                <option value="unscheduled">Unscheduled</option>
-                <option value="morning">Morning</option>
-                <option value="afternoon">Afternoon</option>
-                <option value="evening">Evening</option>
-              </select>
+              />
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Time Block</label>
+            <select
+              value={timeBlock}
+              onChange={(e) => setTimeBlock(e.target.value)}
+              className="w-full px-3 py-1.5 border rounded-md text-sm bg-background"
+            >
+              <option value="unscheduled">Unscheduled</option>
+              <option value="morning">Morning</option>
+              <option value="afternoon">Afternoon</option>
+              <option value="evening">Evening</option>
+            </select>
           </div>
 
           <div>

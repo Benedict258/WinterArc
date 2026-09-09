@@ -14,6 +14,7 @@ export default function TodayView() {
   const todayString = today.toISOString().split('T')[0]
   const quickInputRef = useRef<HTMLInputElement>(null)
   const [quickTitle, setQuickTitle] = useState('')
+  const [quickDueDate, setQuickDueDate] = useState('')
   const [selectedBlock, setSelectedBlock] = useState('morning')
   const [selectedThread, setSelectedThread] = useState<string>('')
   const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({ morning: true, afternoon: true, evening: true, unscheduled: true })
@@ -34,12 +35,14 @@ export default function TodayView() {
     createTask({
       title: quickTitle.trim(),
       date: todayString,
+      dueDate: quickDueDate || null,
       timeBlock: selectedBlock,
       threadId: selectedThread || null,
       status: 'pending',
       source: 'manual',
     } as any)
     setQuickTitle('')
+    setQuickDueDate('')
   }
 
   const handleConvertCalendarEvent = (event: any) => {
@@ -80,6 +83,7 @@ export default function TodayView() {
         status: task.status,
         priority: task.priority,
         intensity: task.intensity,
+        dueDate: task.dueDate || null,
       })),
   }))
 
@@ -113,6 +117,13 @@ export default function TodayView() {
                 onChange={(e) => setQuickTitle(e.target.value)}
                 placeholder="Quick-add task for today..."
                 className="flex-1 min-w-[180px] px-3 py-2 border rounded-md text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <input
+                type="date"
+                value={quickDueDate}
+                onChange={(e) => setQuickDueDate(e.target.value)}
+                className="px-3 py-2 border rounded-md text-sm bg-background"
+                title="Due date (optional)"
               />
               <select
                 value={selectedBlock}

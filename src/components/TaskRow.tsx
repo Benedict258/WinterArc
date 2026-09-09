@@ -1,5 +1,6 @@
 import { CheckCircle2, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import React from 'react'
 
 export interface TaskRowData {
   id: string
@@ -10,6 +11,7 @@ export interface TaskRowData {
   source?: string
   priority?: 'low' | 'medium' | 'high' | string
   intensity?: 'light' | 'medium' | 'heavy' | string
+  dueDate?: string | null
 }
 
 interface TaskRowProps {
@@ -28,6 +30,17 @@ export default function TaskRow({
   className,
 }: TaskRowProps) {
   const isDone = task.status === 'done'
+  const dueCountdown = React.useMemo(() => {
+    if (!task.dueDate) return null
+    const due = new Date(task.dueDate)
+    const now = new Date()
+    const diffMs = due.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    if (diffDays < 0) return { label: `${Math.abs(diffDays)}d overdue`, color: 'text-red-600' }
+    if (diffDays === 0) return { label: 'Due today', color: 'text-amber-600' }
+    if (diffDays === 1) return { label: 'Due tomorrow', color: 'text-amber-600' }
+    return { label: `${diffDays}d left`, color: 'text-muted-foreground' }
+  }, [task.dueDate])
   return (
     <div
       className={cn(
@@ -50,6 +63,11 @@ export default function TaskRow({
       >
         {task.title}
       </span>
+      {dueCountdown && (
+        <span className={`text-[10px] font-medium shrink-0 ${dueCountdown.color}`}>
+          {dueCountdown.label}
+        </span>
+      )}
       {task.threadId && (
         <span className="text-xs text-muted-foreground hidden sm:inline shrink-0">
           [{task.threadName}]
