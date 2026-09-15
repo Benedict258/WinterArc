@@ -549,7 +549,7 @@ export default function ThreadDetailView() {
                 createTask({
                   title: addTaskDraft.title.trim(),
                   threadId: thread._id,
-                  date: '',
+                  date: null,
                   timeBlock: 'unscheduled',
                   status: 'pending',
                   source: 'manual',

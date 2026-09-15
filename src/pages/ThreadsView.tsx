@@ -445,7 +445,7 @@ export default function ThreadsView() {
                 createTask({
                   title: quickAddTitle.trim(),
                   threadId: quickAddThreadId,
-                  date: '',
+                  date: null,
                   dueDate: quickAddDueDate || null,
                   timeBlock: 'unscheduled',
                   status: 'pending',
