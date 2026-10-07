@@ -3,7 +3,7 @@
 ```
 browser ──► Vercel (static React app, PWA)
               │  /api/*  rewritten (proxied) to ──► Render (Express API) ──► MongoDB Atlas
-              │                                            └─► S3 / R2 (Drop files, presigned URLs)
+              │                                            └─► Backblaze B2 (Drop files, presigned URLs)
 ```
 
 - **Vercel** serves the built frontend from `dist/` and proxies every `/api/*`
@@ -11,9 +11,10 @@ browser ──► Vercel (static React app, PWA)
   so the session cookie is first-party and `SameSite=Lax` keeps working.
 - **Render** runs `dist/server.cjs` — API only (`render.yaml`).
 - **MongoDB Atlas** stays where it is.
-- **Drop files** go straight from the browser to an S3-compatible bucket via
-  presigned URLs. AWS S3 still works from Render; if you're leaving AWS
-  entirely, use Cloudflare R2 (free tier, S3-compatible) — just set `S3_ENDPOINT`.
+- **Drop files** live in a private **Backblaze B2** bucket (10 GB free, no card
+  needed). The browser uploads/downloads directly using short-lived presigned
+  URLs from the API, via B2's S3-compatible API. (Any S3-compatible store works
+  — only the `S3_*` env vars change.)
 
 ---
 
@@ -34,8 +35,13 @@ browser ──► Vercel (static React app, PWA)
    |---|---|
    | `MONGO_URI` | Atlas connection string (with the **new** password) |
    | `APP_PASSCODE` | your lock-screen passcode |
-   | `S3_DROP_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | storage (see §4); leave empty to run without file uploads |
-   | `S3_ENDPOINT` | empty for AWS, `https://<account-id>.r2.cloudflarestorage.com` for R2 |
+   | `S3_DROP_BUCKET` | B2 bucket name (see §4) |
+   | `S3_ACCESS_KEY_ID` | B2 application **keyID** |
+   | `S3_SECRET_ACCESS_KEY` | B2 **applicationKey** |
+   | `S3_REGION` | B2 region, e.g. `us-west-004` |
+   | `S3_ENDPOINT` | `https://s3.<region>.backblazeb2.com`, e.g. `https://s3.us-west-004.backblazeb2.com` |
+
+   Leave the `S3_*` vars empty to run without file uploads (text/link drops still work).
 
    `SESSION_SECRET` is generated automatically; `NODE_ENV`, `TRUST_PROXY=2`
    and `FRONTEND_ORIGIN` are preset.
@@ -62,33 +68,62 @@ every 10 minutes.
    `winterarc.benedictisaac.dev`, then update the DNS record at your registrar
    as Vercel instructs (replacing the old EC2 A record).
 
-## 4. Drop storage
+## 4. Drop storage (Backblaze B2)
 
-Whichever provider you use, the bucket needs a **CORS rule** so the browser
-can upload/download directly:
+1. Sign up at backblaze.com → **B2 Cloud Storage** (free tier, no card).
+2. **Buckets → Create a Bucket**
+   - Name: e.g. `winterarc-drop` (must be globally unique)
+   - Files in bucket: **Private**
+   - Encryption: on (SSE-B2) is fine
+   - Note the **Endpoint** shown on the bucket card, e.g.
+     `s3.us-west-004.backblazeb2.com` → region is `us-west-004`.
+3. **Lifecycle Settings** (on the bucket) → **Keep only the last version of the
+   file**. B2 keeps old versions by default, so without this, deleted drops would
+   still count against your 10 GB.
+4. **CORS Rules** (on the bucket) → *Share everything in this bucket with
+   this one origin*: `https://winterarc.benedictisaac.dev`, and apply the rules
+   to **both** the B2 Native API **and the S3 Compatible API**.
 
-```json
-[
-  {
-    "AllowedOrigins": ["https://winterarc.benedictisaac.dev", "https://<your-project>.vercel.app"],
-    "AllowedMethods": ["GET", "PUT"],
-    "AllowedHeaders": ["Content-Type"],
-    "MaxAgeSeconds": 3000
-  }
-]
-```
+   To also allow your `*.vercel.app` preview URL (the web UI takes one origin),
+   set the rules with the B2 command-line tool (v4) instead:
 
-- **AWS S3 (keep existing `winterarc-drop` bucket):** S3 → bucket →
-  Permissions → CORS → paste the above (replace the old origin). Use an IAM
-  user limited to `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` on
-  `arn:aws:s3:::winterarc-drop/drop/*`.
-- **Cloudflare R2:** create bucket → Settings → CORS policy (same rule) →
-  R2 API token with Object Read & Write on that bucket. Set
-  `S3_REGION=auto` and `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`.
-  Existing files in S3 aren't copied; drops expire after 30 days anyway.
+   ```bash
+   b2 bucket update winterarc-drop allPrivate --cors-rules '[{
+     "corsRuleName": "winterarc",
+     "allowedOrigins": ["https://winterarc.benedictisaac.dev", "https://<your-project>.vercel.app"],
+     "allowedOperations": ["s3_get", "s3_head", "s3_put"],
+     "allowedHeaders": ["content-type"],
+     "exposeHeaders": ["etag"],
+     "maxAgeSeconds": 3600
+   }]'
+   ```
+5. **Application Keys → Add a New Application Key**
+   - Allow access to bucket: **only `winterarc-drop`**
+   - Type of access: **Read and Write**
+   - Copy the **keyID** and **applicationKey** (shown once).
+6. Put these into Render (§2) — and into your local `.env` to test:
 
-Drop items expire after 30 days (Mongo TTL). With R2/S3 you can add a
-30-day lifecycle rule on the `drop/` prefix to delete the files too.
+   ```env
+   S3_DROP_BUCKET=winterarc-drop
+   S3_ACCESS_KEY_ID=<keyID>
+   S3_SECRET_ACCESS_KEY=<applicationKey>
+   S3_REGION=us-west-004
+   S3_ENDPOINT=https://s3.us-west-004.backblazeb2.com
+   ```
+7. Verify everything (keys, region, CORS, upload/download/delete):
+
+   ```bash
+   npm run storage:check
+   ```
+
+   It prints `Storage is ready for Drop.` or tells you which step failed.
+
+Drop items expire after 30 days (Mongo TTL). To also delete the files, add a
+B2 lifecycle rule with file name prefix `drop/`: *days from uploading to
+hiding* = 30, *days from hiding to deleting* = 1.
+
+Files currently in the old S3 bucket aren't migrated; drops are temporary
+(30 days) by design.
 
 ## 5. One-time data cleanup
 
@@ -108,7 +143,8 @@ Once Vercel + Render are serving the domain:
 - `pm2 delete workspace` on the EC2 box, then stop/terminate the instance
   and release its Elastic IP.
 - Delete the EC2 key pair (`WinterArc.pem`) in AWS and locally.
-- If you moved Drop to R2: delete the S3 bucket and the IAM user's keys.
+- Delete the old `winterarc-drop` S3 bucket and the IAM user/access keys the
+  app used.
 
 ---
 
@@ -135,5 +171,6 @@ not production.
 | `TRUST_PROXY` | | proxy hops: `2` behind Vercel→Render, `1` default |
 | `FRONTEND_ORIGIN` | | comma-separated CORS origins |
 | `PORT` | | set by Render; default 3000 |
-| `S3_DROP_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for Drop files | `AWS_*` names also accepted |
-| `S3_REGION`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | | for non-AWS providers |
+| `S3_DROP_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for Drop files | B2 bucket, keyID, applicationKey |
+| `S3_REGION`, `S3_ENDPOINT` | for Drop files | B2 region + `https://s3.<region>.backblazeb2.com` |
+| `S3_FORCE_PATH_STYLE` | | only for MinIO-style endpoints |

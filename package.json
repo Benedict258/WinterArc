@@ -13,7 +13,8 @@
     "preview": "node dist/server.cjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p . && tsc -p tsconfig.server.json",
-    "cleanup:legacy-grid": "tsx backend/src/scripts/cleanupLegacyGrid.ts"
+    "cleanup:legacy-grid": "tsx backend/src/scripts/cleanupLegacyGrid.ts",
+    "storage:check": "tsx backend/src/scripts/checkStorage.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

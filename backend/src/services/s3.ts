@@ -2,14 +2,14 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
- * Object storage for Drop. Works with AWS S3 or any S3-compatible provider
- * (Cloudflare R2, Backblaze B2, MinIO, …) — set S3_ENDPOINT for non-AWS.
+ * Object storage for Drop. Production uses Backblaze B2 through its
+ * S3-compatible API; any S3-compatible provider works (R2, MinIO, AWS S3).
  *
  *   S3_DROP_BUCKET          bucket name (required)
  *   S3_ACCESS_KEY_ID        or AWS_ACCESS_KEY_ID
  *   S3_SECRET_ACCESS_KEY    or AWS_SECRET_ACCESS_KEY
- *   S3_REGION               or AWS_REGION (default us-east-1; R2 uses "auto")
- *   S3_ENDPOINT             e.g. https://<account>.r2.cloudflarestorage.com
+ *   S3_REGION               or AWS_REGION, e.g. us-west-004 for B2
+ *   S3_ENDPOINT             e.g. https://s3.us-west-004.backblazeb2.com
  *   S3_FORCE_PATH_STYLE     "true" for MinIO-style endpoints
  */
 
@@ -32,8 +32,8 @@ function readConfig(): StorageConfig | null {
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
     credentials: { accessKeyId, secretAccessKey },
     // SDK >= 3.729 otherwise signs a CRC32 of the *empty* body into presigned
-    // PUT URLs, so every real browser upload fails the checksum (and R2/B2
-    // reject the extra params outright).
+    // PUT URLs, so every real browser upload fails the checksum (B2 also
+    // rejects the extra checksum params).
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
   })
