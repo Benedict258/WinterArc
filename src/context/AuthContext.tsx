@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { processQueue } from '@/lib/syncQueue'
 
 interface AuthContextType {
   isAuthenticated: boolean
@@ -15,14 +16,19 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // cached data.
 let onUnauthorized: (() => void) | null = null
 let fetchPatched = false
+// Bumped on every successful login. A request sent before the latest login
+// (e.g. the offline queue replaying while the backend wakes up) may come back
+// 401 afterwards — that must not lock the freshly unlocked app.
+let authEpoch = 0
 
 function patchFetchFor401() {
   if (fetchPatched || typeof window === 'undefined') return
   fetchPatched = true
   const originalFetch = window.fetch.bind(window)
   window.fetch = async (input, init) => {
+    const epochAtSend = authEpoch
     const response = await originalFetch(input, init)
-    if (response.status === 401) {
+    if (response.status === 401 && epochAtSend === authEpoch) {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       const path = new URL(url, window.location.origin).pathname
       if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) onUnauthorized?.()
@@ -56,7 +62,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       body: JSON.stringify({ passcode })
     })
     if (res.ok) {
+      authEpoch++
       setIsAuthenticated(true)
+      // Replay anything queued while locked/offline, now with a valid session
+      processQueue().catch(console.error)
       return { ok: true }
     }
     const body = await res.json().catch(() => ({}))

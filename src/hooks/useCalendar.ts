@@ -14,7 +14,7 @@ export type CalendarEvent = {
 }
 
 // API URL
-const API_URL = import.meta.env.VITE_API_URL || ''
+import { API_URL } from '@/lib/api'
 
 // Pull calendar events for a given date
 export const useCalendarEvents = (date: Date | string) => {

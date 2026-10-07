@@ -37,7 +37,7 @@ export type GridBalancing = {
   preferLowIntensityOnBusyDays: boolean;
 };
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+import { API_URL } from '@/lib/api'
 
 export const useWeek = (startDate: string) => {
   return useQuery({

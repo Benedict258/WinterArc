@@ -12,7 +12,7 @@ export type WishlistItem = {
 };
 
 // API URL
-const API_URL = import.meta.env.VITE_API_URL || '';
+import { API_URL } from '@/lib/api'
 
 // Fetch all wishlist items
 export const useWishlist = () => {

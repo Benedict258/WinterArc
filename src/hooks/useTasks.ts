@@ -24,7 +24,7 @@ export type Task = {
 };
 
 // API URL
-const API_URL = import.meta.env.VITE_API_URL || '';
+import { API_URL } from '@/lib/api'
 
 // Initialize DB and sync listener once
 let dbInitialized = false;

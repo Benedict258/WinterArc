@@ -61,8 +61,8 @@ every 10 minutes.
 
 1. Vercel → **Add New → Project** → import `Benedict258/WinterArc`.
 2. Framework preset, build command and output dir come from `vercel.json`
-   (Vite, `npm run build:client`, `dist`). No env vars needed — leave
-   `VITE_API_URL` unset.
+   (Vite, `npm run build:client`, `dist`). **No env vars on Vercel.** The app
+   always calls `/api` on its own domain (`VITE_API_URL` is ignored).
 3. Deploy, open the `*.vercel.app` URL and log in.
 4. **Domain:** Project → Settings → Domains → add
    `winterarc.benedictisaac.dev`, then update the DNS record at your registrar

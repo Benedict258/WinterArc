@@ -55,7 +55,7 @@ export const isOnline = (): boolean => {
 
 type OperationHandler = (operation: any) => Promise<any>
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+import { API_URL } from './api'
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
