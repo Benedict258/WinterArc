@@ -80,23 +80,24 @@ every 10 minutes.
 3. **Lifecycle Settings** (on the bucket) → **Keep only the last version of the
    file**. B2 keeps old versions by default, so without this, deleted drops would
    still count against your 10 GB.
-4. **CORS Rules** (on the bucket) → *Share everything in this bucket with
-   this one origin*: `https://winterarc.benedictisaac.dev`, and apply the rules
-   to **both** the B2 Native API **and the S3 Compatible API**.
-
-   To also allow your `*.vercel.app` preview URL (the web UI takes one origin),
-   set the rules with the B2 command-line tool (v4) instead:
+4. **CORS rule (uploads need a custom rule).** The CORS options in the B2
+   web UI only allow *downloads*, so browser uploads fail with a 403
+   preflight. Set a custom rule with the B2 CLI (`pip install b2`, v4):
 
    ```bash
-   b2 bucket update winterarc-drop allPrivate --cors-rules '[{
+   b2 account authorize            # with a key that has writeBuckets
+   b2 bucket update winterarc-drop --cors-rules '[{
      "corsRuleName": "winterarc",
-     "allowedOrigins": ["https://winterarc.benedictisaac.dev", "https://<your-project>.vercel.app"],
+     "allowedOrigins": ["https://winterarc.benedictisaac.dev", "http://localhost:3000"],
      "allowedOperations": ["s3_get", "s3_head", "s3_put"],
      "allowedHeaders": ["content-type"],
      "exposeHeaders": ["etag"],
      "maxAgeSeconds": 3600
    }]'
    ```
+
+   Add your `https://<project>.vercel.app` URL to `allowedOrigins` if you want
+   uploads to work there too.
 5. **Application Keys → Add a New Application Key**
    - Allow access to bucket: **only `winterarc-drop`**
    - Type of access: **Read and Write**
@@ -108,7 +109,7 @@ every 10 minutes.
    S3_ACCESS_KEY_ID=<keyID>
    S3_SECRET_ACCESS_KEY=<applicationKey>
    S3_REGION=us-west-004
-   S3_ENDPOINT=https://s3.us-west-004.backblazeb2.com
+   S3_ENDPOINT=s3.us-west-004.backblazeb2.com   # https:// is optional
    ```
 7. Verify everything (keys, region, CORS, upload/download/delete):
 

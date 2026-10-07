@@ -26,9 +26,15 @@ function readConfig(): StorageConfig | null {
   const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY
   if (!bucket || !accessKeyId || !secretAccessKey) return null
 
+  // B2 displays its endpoint without a scheme (s3.us-east-005.backblazeb2.com)
+  const rawEndpoint = process.env.S3_ENDPOINT?.trim()
+  const endpoint = rawEndpoint
+    ? (/^https?:\/\//i.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`)
+    : undefined
+
   const client = new S3Client({
     region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1',
-    endpoint: process.env.S3_ENDPOINT || undefined,
+    endpoint,
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
     credentials: { accessKeyId, secretAccessKey },
     // SDK >= 3.729 otherwise signs a CRC32 of the *empty* body into presigned
