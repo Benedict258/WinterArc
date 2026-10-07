@@ -3,11 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { format, startOfWeek, addDays, addWeeks, isSameWeek, isToday as fnsIsToday } from 'date-fns'
 import { useQueries } from '@tanstack/react-query'
-import { useWeek, type ForecastTask } from '@/hooks/useGrid'
+import { useWeek, useRebalanceToday, type ForecastTask } from '@/hooks/useGrid'
 import { useThreads } from '@/hooks/useThreads'
 import { useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Plus, ChevronDown, Calendar as CalIcon, Maximize2, Minimize2, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, ChevronDown, Calendar as CalIcon, Maximize2, Minimize2, Sparkles, RefreshCw } from 'lucide-react'
 import QuickAddModal from '@/components/QuickAddModal'
 import TaskRow, { type TaskRowData } from '@/components/TaskRow'
 import { cn, toDayKey, apiDayKey } from '@/lib/utils'
@@ -34,6 +34,7 @@ export default function WeekView() {
 
   const { mutate: updateTask } = useUpdateTask()
   const { mutate: deleteTask } = useDeleteTask()
+  const { mutate: rebalanceToday, isPending: isRebalancing } = useRebalanceToday()
 
   const { data: weekData, isLoading: weekLoading, error: weekError } = useWeek(weekStartString)
   const tasks = weekData?.week || []
@@ -182,6 +183,20 @@ export default function WeekView() {
                 <ChevronRight size={16} />
               </Button>
             </div>
+
+            {isCurrentWeek && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => rebalanceToday()}
+                disabled={isRebalancing}
+                className="gap-1.5 h-9 text-xs"
+                title="Re-plan today with your current grid balancing and queues"
+              >
+                <RefreshCw size={14} className={isRebalancing ? 'animate-spin' : ''} />
+                <span className="hidden sm:inline">{isRebalancing ? 'Rebalancing…' : 'Rebalance today'}</span>
+              </Button>
+            )}
 
             <Button size="sm" onClick={() => setQuickAddOpen(true)} className="gap-1.5 h-9 text-xs">
               <Plus size={14} />

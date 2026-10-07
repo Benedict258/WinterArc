@@ -55,10 +55,9 @@ export const useUpdateSettings = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast({
-        title: 'Settings updated',
-        description: 'Settings have been successfully updated.',
-      });
+      // Frequency target / timezone change the forecast
+      queryClient.invalidateQueries({ queryKey: ['week'] });
+      // The Settings page shows its own confirmation
     },
     onError: () => {
       toast({

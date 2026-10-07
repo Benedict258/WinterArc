@@ -145,3 +145,73 @@ describe('planDay', () => {
     expect(new Set(actions.map(a => a.timeBlock)).size).toBe(3)
   })
 })
+
+describe('grid balancing', () => {
+  const load = (actions: ReturnType<typeof planDay>) =>
+    actions.reduce((sum, a) => sum + ({ light: 1, medium: 2, heavy: 4 }[a.intensity]), 0)
+
+  it('caps a day at maxDailyIntensity', () => {
+    const threads = Array.from({ length: 10 }, (_, i) => thread(`d${i}`, { frequency: 'daily' }))
+    const actions = planDay(MONDAY, threads, freshState(), { maxDailyIntensity: 6 })
+    expect(actions).toHaveLength(3) // 3 × medium(2) = 6
+    expect(load(actions)).toBeLessThanOrEqual(6)
+  })
+
+  it('counts tasks already on the day', () => {
+    const threads = Array.from({ length: 10 }, (_, i) => thread(`d${i}`, { frequency: 'daily' }))
+    const state = { ...freshState(), dayLoad: 4 }
+    expect(planDay(MONDAY, threads, state, { maxDailyIntensity: 6 })).toHaveLength(1)
+  })
+
+  it('no cap when maxDailyIntensity is not set', () => {
+    const threads = Array.from({ length: 10 }, (_, i) => thread(`d${i}`, { frequency: 'daily' }))
+    expect(planDay(MONDAY, threads, freshState())).toHaveLength(10)
+  })
+
+  it('due tasks and fixed-day threads are placed even over the cap', () => {
+    const state = freshState([task('due', null, { dueKey: MONDAY, intensity: 'heavy' })])
+    const threads = [
+      thread('fixed', { frequency: 'fixed-day', fixedDay: 0, intensity: 'heavy' }),
+      thread('d', { frequency: 'daily' }),
+    ]
+    const actions = planDay(MONDAY, threads, state, { maxDailyIntensity: 2 })
+    expect(actions.map(a => a.taskId ?? a.threadId).sort()).toEqual(['due', 'fixed'])
+  })
+
+  it('prefers light work once the day is busy', () => {
+    const threads = ['H1', 'H2', 'L1', 'L2'].map(id =>
+      thread(id, { name: id, frequency: 'daily', intensity: id.startsWith('H') ? 'heavy' : 'light' }))
+    const preferLow = planDay(MONDAY, threads, freshState(), { maxDailyIntensity: 8, preferLowIntensityOnBusyDays: true })
+    expect(preferLow.map(a => a.threadId)).toEqual(['H1', 'L1', 'L2'])
+    const plain = planDay(MONDAY, threads, freshState(), { maxDailyIntensity: 8, preferLowIntensityOnBusyDays: false })
+    expect(plain.map(a => a.threadId)).toEqual(['H1', 'H2'])
+  })
+
+  it('picks a lighter queued task when the top one does not fit', () => {
+    const t = thread('x', { taskMode: 'discrete', frequency: 'daily' })
+    const state = {
+      ...freshState([
+        task('big', 'x', { priority: 'high', intensity: 'heavy' }),
+        task('small', 'x', { priority: 'low', intensity: 'light' }),
+      ]),
+      dayLoad: 4,
+    }
+    const actions = planDay(MONDAY, [t], state, { maxDailyIntensity: 6 })
+    expect(actions[0]).toMatchObject({ taskId: 'small' })
+  })
+
+  it('threads squeezed out early in the week catch up later', () => {
+    const threads = Array.from({ length: 6 }, (_, i) => thread(`m${i}abc`, { frequency: 'multiple' }))
+    const state = freshState()
+    let total = 0
+    for (let i = 0; i < 7; i++) {
+      state.blockLoads = { morning: 0, afternoon: 0, evening: 0 }
+      state.dayLoad = 0
+      const actions = planDay(addDaysKey(MONDAY, i), threads, state, { maxDailyIntensity: 6 })
+      expect(load(actions)).toBeLessThanOrEqual(6)
+      total += actions.length
+    }
+    // 6 threads × 3/week = 18 wanted; cap allows 3/day = 21 slots, so all fit
+    expect(total).toBe(18)
+  })
+})

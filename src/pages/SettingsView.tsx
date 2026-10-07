@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Cloud, Download, Upload, Lock, ShieldCheck, RefreshCw, CheckCircle2, AlertCircle, Sliders } from 'lucide-react'
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings'
-import { useGridSettings, useUpdateGridSettings } from '@/hooks/useGrid'
+import { useGridSettings, useUpdateGridSettings, useRebalanceToday } from '@/hooks/useGrid'
 import { useCalendar } from '@/hooks/useCalendar'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
@@ -34,6 +34,7 @@ export default function SettingsView() {
 
   const { data: gridBalancing } = useGridSettings()
   const { mutate: updateGridBalancing } = useUpdateGridSettings()
+  const { mutate: rebalanceToday, isPending: isRebalancing } = useRebalanceToday()
   const [editMaxDailyIntensity, setEditMaxDailyIntensity] = useState(6)
   const [editPreferLow, setEditPreferLow] = useState(true)
   const [gridDirty, setGridDirty] = useState(false)
@@ -302,7 +303,7 @@ export default function SettingsView() {
                   <Sliders size={20} />
                   Grid Balancing
                 </CardTitle>
-                <CardDescription>Control how the weekly generator distributes load across days</CardDescription>
+                <CardDescription>Limits how much the daily scheduler puts on one day. Due-date and fixed-day tasks are always placed; anything that doesn't fit moves to a later day.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -340,12 +341,23 @@ export default function SettingsView() {
                   <label htmlFor="preferLow" className="text-sm cursor-pointer">
                     <span className="font-medium block">Prefer low-intensity on busy days</span>
                     <span className="text-xs text-muted-foreground">
-                      When cap is approached, place lighter tasks first.
+                      Once a day is half full, place lighter tasks first and hold heavy ones for another day.
                     </span>
                   </label>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => rebalanceToday()}
+                    disabled={isRebalancing || gridDirty}
+                    title={gridDirty ? 'Save first' : 'Re-plan today with these limits'}
+                    className="gap-1.5"
+                  >
+                    <RefreshCw size={14} className={isRebalancing ? 'animate-spin' : ''} />
+                    {isRebalancing ? 'Rebalancing…' : 'Rebalance today'}
+                  </Button>
                   <Button
                     size="sm"
                     onClick={() =>

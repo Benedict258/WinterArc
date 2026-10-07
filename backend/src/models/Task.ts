@@ -46,6 +46,13 @@ const taskSchema = new mongoose.Schema(
       enum: ['manual', 'auto-generated', 'google-calendar'],
       default: 'manual',
     },
+    // Set when the daily generator put this task on a day, so "Rebalance"
+    // can undo exactly the generator's placements and leave yours alone.
+    scheduledBy: {
+      type: String,
+      enum: ['generator', null],
+      default: null,
+    },
   },
   { timestamps: true }
 )

@@ -78,6 +78,8 @@ export type PlanState = {
   queue: PlanTask[]
   /** existing load per block for the day being planned */
   blockLoads: Record<TimeBlock, number>
+  /** intensity already on the day being planned (light=1, medium=2, heavy=4) */
+  dayLoad?: number
 }
 
 export type PlanAction = {
@@ -95,9 +97,19 @@ export type PlanOptions = {
   multipleTarget?: number
   /** how many days ahead a due date pulls a task onto today */
   dueWindowDays?: number
+  /** Grid balancing: cap on a day's summed intensity. Undefined = no cap. */
+  maxDailyIntensity?: number
+  /** Grid balancing: once a day is half full, place lighter work first and skip heavy. */
+  preferLowIntensityOnBusyDays?: boolean
 }
 
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 }
+export const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
+const HEAVY = INTENSITY_WEIGHT.heavy
+
+export function intensityWeight(intensity: string | undefined): number {
+  return INTENSITY_WEIGHT[intensity || 'medium'] ?? 2
+}
 
 export function getTarget(frequency: Frequency, multipleTarget = 3): number {
   switch (frequency) {
@@ -145,8 +157,13 @@ function byPriorityThenDue(a: PlanTask, b: PlanTask): number {
 
 /**
  * Decide what goes on `dayKey`. Mutates `state` (consumes queued tasks,
- * bumps appearances and block loads) so it can be called day after day to
- * simulate a week.
+ * bumps appearances, block loads and day load) so it can be called day after
+ * day to simulate a week.
+ *
+ * Grid balancing: due-date tasks and fixed-day threads are always placed
+ * (they can't move). Everything else only goes in if it fits under
+ * `maxDailyIntensity`; a thread that doesn't fit stays behind pace and is
+ * picked up on a later day.
  */
 export function planDay(dayKey: string, threads: PlanThread[], state: PlanState, opts: PlanOptions = {}): PlanAction[] {
   const dueWindowEnd = addDaysKey(dayKey, opts.dueWindowDays ?? 3)
@@ -154,17 +171,26 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
   const threadById = new Map(threads.map(t => [t.id, t]))
   const actions: PlanAction[] = []
   const scheduledThreadIds = new Set<string>()
+  const cap = opts.maxDailyIntensity ?? Infinity
+  state.dayLoad = state.dayLoad ?? 0
 
-  const consume = (task: PlanTask, kind: PlanAction['kind']) => {
+  const isBusy = () => opts.preferLowIntensityOnBusyDays === true && state.dayLoad! >= cap / 2
+  const fits = (weight: number) => state.dayLoad! + weight <= cap && !(isBusy() && weight >= HEAVY)
+
+  const place = (action: Omit<PlanAction, 'timeBlock'>) => {
     const block = pickBlock(state.blockLoads)
     state.blockLoads[block] += 1
+    state.dayLoad! += intensityWeight(action.intensity)
+    actions.push({ ...action, timeBlock: block })
+  }
+
+  const consume = (task: PlanTask, kind: PlanAction['kind']) => {
     state.queue = state.queue.filter(t => t.id !== task.id)
-    actions.push({
+    place({
       kind,
       threadId: task.threadId,
       taskId: task.id,
       title: task.title,
-      timeBlock: block,
       priority: task.priority,
       intensity: task.intensity,
       dueKey: task.dueKey,
@@ -177,8 +203,8 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
   }
 
   // 1. Due-date pass. Anything due within the window — or already overdue —
-  //    is placed today, ahead of the normal rotation. Per thread, only the
-  //    highest-priority due tasks go in, earliest due first.
+  //    is placed today, ahead of the normal rotation and regardless of the
+  //    cap. Per thread, only the highest-priority due tasks go in.
   const dueTasks = state.queue.filter(t => t.dueKey !== null && t.dueKey <= dueWindowEnd)
   const dueByThread = new Map<string, PlanTask[]>()
   for (const t of dueTasks) {
@@ -215,33 +241,66 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
     candidates.push({ thread, deficit: target - appearances })
   }
 
-  candidates.sort((a, b) =>
+  const byNeed = (a: Candidate, b: Candidate) =>
     (b.deficit - a.deficit) ||
     ((PRIORITY_RANK[b.thread.priority] ?? 2) - (PRIORITY_RANK[a.thread.priority] ?? 2)) ||
     a.thread.name.localeCompare(b.thread.name)
-  )
 
-  for (const { thread } of candidates) {
-    const queued = state.queue.filter(t => t.threadId === thread.id).sort(byPriorityThenDue)[0]
-    if (queued) {
-      consume(queued, 'queued')
-      bump(thread.id)
-    } else if (thread.taskMode === 'continuous') {
-      const block = pickBlock(state.blockLoads)
-      state.blockLoads[block] += 1
-      actions.push({
+  /** What this thread would put on the day, given the current load. */
+  const pickFor = (thread: PlanThread): { task: PlanTask | null; weight: number } | null => {
+    const queued = state.queue.filter(t => t.threadId === thread.id).sort(byPriorityThenDue)
+    if (queued.length) {
+      if (thread.frequency === 'fixed-day') return { task: queued[0], weight: intensityWeight(queued[0].intensity) }
+      // Best-priority task that fits; on busy days the lightest that fits
+      const options = isBusy()
+        ? [...queued].sort((a, b) => intensityWeight(a.intensity) - intensityWeight(b.intensity) || byPriorityThenDue(a, b))
+        : queued
+      const task = options.find(t => fits(intensityWeight(t.intensity)))
+      return task ? { task, weight: intensityWeight(task.intensity) } : null
+    }
+    if (thread.taskMode !== 'continuous') return null // discrete, empty queue: skip
+    const weight = intensityWeight(thread.intensity)
+    if (thread.frequency !== 'fixed-day' && !fits(weight)) return null
+    return { task: null, weight }
+  }
+
+  const remaining = [...candidates].sort(byNeed)
+  while (remaining.length) {
+    // On busy days, take the lightest available work next; otherwise most-behind first
+    let index = 0
+    let pick = pickFor(remaining[0].thread)
+    if (isBusy()) {
+      let best = -1
+      let bestPick: ReturnType<typeof pickFor> = null
+      remaining.forEach((c, i) => {
+        const p = pickFor(c.thread)
+        if (p && (bestPick === null || p.weight < bestPick.weight)) {
+          best = i
+          bestPick = p
+        }
+      })
+      if (best >= 0) {
+        index = best
+        pick = bestPick
+      }
+    }
+    const [{ thread }] = remaining.splice(index, 1)
+    if (!pick) continue // doesn't fit today; stays behind pace for a later day
+
+    if (pick.task) {
+      consume(pick.task, 'queued')
+    } else {
+      place({
         kind: 'placeholder',
         threadId: thread.id,
         taskId: null,
         title: thread.name,
-        timeBlock: block,
         priority: thread.priority,
         intensity: thread.intensity,
         dueKey: null,
       })
-      bump(thread.id)
     }
-    // discrete with an empty queue: skipped, no slot used
+    bump(thread.id)
   }
 
   return actions
@@ -280,16 +339,26 @@ async function loadSchedulingSettings() {
   return {
     timezone: settings?.timezone || DEFAULT_TIMEZONE,
     multipleTarget: settings?.multipleThreadsPerWeekTarget || 3,
+    planOptions: {
+      multipleTarget: settings?.multipleThreadsPerWeekTarget || 3,
+      maxDailyIntensity: settings?.gridBalancing?.maxDailyIntensity ?? 6,
+      preferLowIntensityOnBusyDays: settings?.gridBalancing?.preferLowIntensityOnBusyDays ?? true,
+    } satisfies PlanOptions,
   }
 }
 
-async function loadBlockLoads(dayKey: string): Promise<Record<TimeBlock, number>> {
+/** Tasks already on a day: per-block counts and summed intensity (skipped tasks don't count). */
+async function loadDayLoad(dayKey: string): Promise<{ blockLoads: Record<TimeBlock, number>; dayLoad: number }> {
   const start = dayKeyToDate(dayKey)
   const end = dayKeyToDate(addDaysKey(dayKey, 1))
-  const tasks = await Task.find({ date: { $gte: start, $lt: end }, timeBlock: { $in: TIME_BLOCKS } }, { timeBlock: 1 })
-  const loads: Record<TimeBlock, number> = { morning: 0, afternoon: 0, evening: 0 }
-  for (const t of tasks) loads[t.timeBlock as TimeBlock] += 1
-  return loads
+  const tasks = await Task.find({ date: { $gte: start, $lt: end }, status: { $ne: 'skipped' } }, { timeBlock: 1, intensity: 1 })
+  const blockLoads: Record<TimeBlock, number> = { morning: 0, afternoon: 0, evening: 0 }
+  let dayLoad = 0
+  for (const t of tasks) {
+    if (t.timeBlock && t.timeBlock in blockLoads) blockLoads[t.timeBlock as TimeBlock] += 1
+    dayLoad += intensityWeight(t.intensity ?? undefined)
+  }
+  return { blockLoads, dayLoad }
 }
 
 async function loadQueue(): Promise<PlanTask[]> {
@@ -304,7 +373,7 @@ async function loadAppearances(threadIds: string[], weekKey: string): Promise<Ma
 
 /** Plan `dayKey` and write it to the database. */
 export async function generateToday(dayKey: string) {
-  const { multipleTarget } = await loadSchedulingSettings()
+  const { planOptions } = await loadSchedulingSettings()
   const threadDocs = await Thread.find({ status: 'active' })
   const threads = threadDocs.map(toPlanThread)
   const weekKey = weekStartKey(dayKey)
@@ -312,17 +381,17 @@ export async function generateToday(dayKey: string) {
   const state: PlanState = {
     appearances: await loadAppearances(threads.map(t => t.id), weekKey),
     queue: await loadQueue(),
-    blockLoads: await loadBlockLoads(dayKey),
+    ...(await loadDayLoad(dayKey)),
   }
 
-  const actions = planDay(dayKey, threads, state, { multipleTarget })
+  const actions = planDay(dayKey, threads, state, planOptions)
   const date = dayKeyToDate(dayKey)
   const weekStart = dayKeyToDate(weekKey)
 
   for (const a of actions) {
     if (a.taskId) {
       // Only commit if it's still unscheduled — guards against a concurrent edit.
-      await Task.updateOne({ _id: a.taskId, date: null }, { $set: { date, timeBlock: a.timeBlock } })
+      await Task.updateOne({ _id: a.taskId, date: null }, { $set: { date, timeBlock: a.timeBlock, scheduledBy: 'generator' } })
     } else {
       await Task.create({
         title: a.title,
@@ -330,6 +399,7 @@ export async function generateToday(dayKey: string) {
         date,
         timeBlock: a.timeBlock,
         source: 'auto-generated',
+        scheduledBy: 'generator',
         status: 'pending',
         priority: a.priority,
         intensity: a.intensity,
@@ -399,7 +469,7 @@ export type ForecastEntry = PlanAction & { date: string }
  * current queue and weekly progress; nothing is written.
  */
 export async function forecastWeek(requestedWeekKey: string, now = new Date()): Promise<ForecastEntry[]> {
-  const { timezone, multipleTarget } = await loadSchedulingSettings()
+  const { timezone, planOptions } = await loadSchedulingSettings()
   const todayKey = toDayKey(now, timezone)
   const requestedEnd = addDaysKey(requestedWeekKey, 6)
   if (requestedEnd <= todayKey) return []
@@ -418,11 +488,88 @@ export async function forecastWeek(requestedWeekKey: string, now = new Date()): 
       appearances = new Map()
       state.appearances = appearances
     }
-    state.blockLoads = await loadBlockLoads(day)
-    const actions = planDay(day, threads, state, { multipleTarget })
+    Object.assign(state, await loadDayLoad(day))
+    const actions = planDay(day, threads, state, planOptions)
     if (day >= requestedWeekKey) {
       for (const a of actions) out.push({ ...a, date: day })
     }
   }
   return out
+}
+
+export type RebalanceResult = {
+  dayKey: string
+  removedPlaceholders: number
+  returnedToQueue: number
+  scheduled: number
+  load: number
+  maxDailyIntensity: number
+}
+
+/**
+ * Re-plan today with the current settings and queue. Undoes only what the
+ * generator placed on today and is still pending: placeholders are removed,
+ * committed queue tasks go back to their thread's queue. Tasks you created
+ * or scheduled yourself, and anything done/skipped, are left alone.
+ */
+let rebalancing: Promise<RebalanceResult> | null = null
+
+export function rebalanceToday(now = new Date()): Promise<RebalanceResult> {
+  // A double-click must not undo/replan twice concurrently
+  if (!rebalancing) rebalancing = doRebalance(now).finally(() => { rebalancing = null })
+  return rebalancing
+}
+
+async function doRebalance(now: Date): Promise<RebalanceResult> {
+  // Don't race the once-a-day generation
+  await ensureTodayGenerated(now)
+  const { timezone, planOptions } = await loadSchedulingSettings()
+  const dayKey = toDayKey(now, timezone)
+  const start = dayKeyToDate(dayKey)
+  const end = dayKeyToDate(addDaysKey(dayKey, 1))
+
+  const placed = await Task.find({
+    date: { $gte: start, $lt: end },
+    status: 'pending',
+    $or: [
+      { scheduledBy: 'generator' },
+      // Placed before scheduledBy existed: generator placeholders, and thread
+      // tasks created on an earlier day (i.e. pulled from the queue today)
+      { scheduledBy: { $exists: false }, source: 'auto-generated' },
+      { scheduledBy: { $exists: false }, source: 'manual', threadId: { $ne: null }, createdAt: { $lt: start } },
+    ],
+  })
+
+  let removedPlaceholders = 0
+  let returnedToQueue = 0
+  const weekStart = dayKeyToDate(weekStartKey(dayKey))
+  for (const t of placed) {
+    if (t.source === 'auto-generated') {
+      await Task.deleteOne({ _id: t._id, status: 'pending' })
+      removedPlaceholders++
+    } else {
+      await Task.updateOne(
+        { _id: t._id, status: 'pending' },
+        { $set: { date: null, timeBlock: 'unscheduled', scheduledBy: null } }
+      )
+      returnedToQueue++
+    }
+    if (t.threadId) {
+      await WeeklyProgress.updateOne(
+        { threadId: t.threadId, weekStart, appearances: { $gt: 0 } },
+        { $inc: { appearances: -1 } }
+      )
+    }
+  }
+
+  const actions = await generateToday(dayKey)
+  const { dayLoad } = await loadDayLoad(dayKey)
+  return {
+    dayKey,
+    removedPlaceholders,
+    returnedToQueue,
+    scheduled: actions.length,
+    load: dayLoad,
+    maxDailyIntensity: planOptions.maxDailyIntensity,
+  }
 }

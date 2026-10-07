@@ -208,7 +208,7 @@ export default function DropView() {
 
   return (
     <MainLayout>
-      <div className="h-[calc(100dvh-5.5rem)] md:h-[calc(100dvh-3rem)] max-w-3xl mx-auto flex flex-col">
+      <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100dvh-6.5rem)] md:h-[calc(100dvh-3rem)] max-w-3xl mx-auto flex flex-col">
         <div className="mb-3">
           <h1 className="text-2xl font-bold">Drop</h1>
           <p className="text-sm text-muted-foreground">Your self-chat across devices</p>

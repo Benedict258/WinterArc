@@ -33,6 +33,10 @@ export async function updateTask(id: string, data: any) {
   if (data.status === 'done' && !data.completedAt) {
     data.completedAt = new Date()
   }
+  // Moving a task yourself makes it yours: Rebalance won't touch it
+  if (data.date !== undefined || data.timeBlock !== undefined) {
+    data.scheduledBy = null
+  }
   return await Task.findByIdAndUpdate(id, data, { new: true, runValidators: true })
 }
 

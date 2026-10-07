@@ -2,13 +2,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import MainLayout from '@/components/MainLayout'
 import TaskRow, { type TaskRowData } from '@/components/TaskRow'
-import { Calendar, Clock, CheckCircle2, Plus } from 'lucide-react'
+import { Calendar, Clock, CheckCircle2, Plus, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTasks, useUpdateTask, useCreateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useThreads } from '@/hooks/useThreads'
 import { useCalendarEvents } from '@/hooks/useCalendar'
 import { useState, useRef } from 'react'
-import { toDayKey, apiDayKey } from '@/lib/utils'
+import { toDayKey, apiDayKey, cn } from '@/lib/utils'
+import { useGridSettings, useRebalanceToday } from '@/hooks/useGrid'
 
 export default function TodayView() {
   const today = new Date()
@@ -26,6 +27,12 @@ export default function TodayView() {
   const { mutate: deleteTask } = useDeleteTask()
 
   const { data: threads = [] } = useThreads()
+  const { data: gridBalancing } = useGridSettings()
+  const { mutate: rebalanceToday, isPending: isRebalancing } = useRebalanceToday()
+  const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
+  const dayLoad = tasks
+    .filter((t: any) => t.status !== 'skipped')
+    .reduce((sum: number, t: any) => sum + (INTENSITY_WEIGHT[t.intensity] ?? 2), 0)
   const { data: calendarEvents = [] } = useCalendarEvents(today)
 
   const threadMap = new Map(threads.map(t => [t._id, t.name]))
@@ -102,9 +109,35 @@ export default function TodayView() {
   return (
     <MainLayout>
       <div className="max-w-3xl mx-auto space-y-5 sm:space-y-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">Today</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">{format(today, 'EEEE, MMMM d, yyyy')}</p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">Today</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1">{format(today, 'EEEE, MMMM d, yyyy')}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {gridBalancing && (
+              <div
+                className="text-right"
+                title="Sum of today's task intensities (light 1, medium 2, heavy 4) vs. your Max Daily Intensity"
+              >
+                <p className={cn('text-sm font-semibold tabular-nums', dayLoad > gridBalancing.maxDailyIntensity && 'text-destructive')}>
+                  {dayLoad}/{gridBalancing.maxDailyIntensity}
+                </p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">load</p>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => rebalanceToday()}
+              disabled={isRebalancing}
+              className="gap-1.5"
+              title="Re-plan today with your current grid balancing and queues. Your own and completed tasks stay put."
+            >
+              <RefreshCw size={14} className={isRebalancing ? 'animate-spin' : ''} />
+              {isRebalancing ? 'Rebalancing…' : 'Rebalance'}
+            </Button>
+          </div>
         </div>
 
         {/* Quick Add Bar */}

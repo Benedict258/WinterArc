@@ -42,8 +42,12 @@ const navItems: NavItem[] = [
 ]
 
 const SIDEBAR_EXPANDED_KEY = 'workspace-sidebar-expanded'
-const SIDEBAR_FULL = 'w-64'
-const SIDEBAR_COLLAPSED = 'w-16'
+
+function isActive(itemPath: string, pathname: string) {
+  if (itemPath === '/') return pathname === '/'
+  // /threads/:id keeps "Threads" highlighted
+  return pathname === itemPath || pathname.startsWith(`${itemPath}/`)
+}
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
@@ -52,25 +56,40 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [mobileOpen, setMobileOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [pinnedExpanded, setPinnedExpanded] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem(SIDEBAR_EXPANDED_KEY) === 'true'
+    try {
+      return localStorage.getItem(SIDEBAR_EXPANDED_KEY) === 'true'
+    } catch {
+      return false
+    }
   })
 
-  // Opened on mobile → show the full labelled menu
-  const desktopExpanded = pinnedExpanded || mobileOpen
+  // The mobile drawer always shows labels; on desktop it's the pinned state
+  const expanded = pinnedExpanded || mobileOpen
+  const isDark = theme === 'dark'
+  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark')
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    localStorage.setItem(SIDEBAR_EXPANDED_KEY, String(pinnedExpanded))
+    try {
+      localStorage.setItem(SIDEBAR_EXPANDED_KEY, String(pinnedExpanded))
+    } catch {
+      // storage unavailable (private mode) — preference just isn't remembered
+    }
   }, [pinnedExpanded])
+
+  // Close the drawer when navigating
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || '').toLowerCase()
-      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
+      if (e.key === 'Escape') {
+        setMobileOpen(false)
         return
       }
-      if (e.key === 'q' || e.key === 'Q') {
+      const activeTag = (document.activeElement?.tagName || '').toLowerCase()
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return
+      if ((e.key === 'q' || e.key === 'Q') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         setQuickAddOpen(true)
       }
@@ -79,133 +98,125 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  const rowClass = cn(
+    'flex items-center h-10 rounded-lg text-sm font-medium transition-colors',
+    expanded ? 'w-full gap-3 px-3' : 'justify-center w-10 mx-auto'
+  )
+
   return (
     <div className="flex h-screen bg-background">
       <aside
         className={cn(
-          'fixed md:relative h-full bg-card border-r border-border z-40',
-          'flex flex-col transition-[width] duration-200 ease-in-out',
-          desktopExpanded ? SIDEBAR_FULL : SIDEBAR_COLLAPSED,
-          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          'fixed inset-y-0 left-0 md:relative z-40 h-full shrink-0',
+          'flex flex-col bg-card border-r border-border',
+          'transition-[width,transform] duration-200 ease-in-out',
+          expanded ? 'w-64' : 'w-16',
+          mobileOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full md:translate-x-0'
         )}
-        aria-expanded={desktopExpanded}
+        aria-label="Main navigation"
       >
-        <div className="flex flex-col h-full p-3 pt-16 md:pt-3 gap-4 overflow-y-auto">
-          <button
-            onClick={() => setPinnedExpanded(prev => !prev)}
-            className={cn(
-              'flex items-center gap-2 px-2 py-2 w-full text-left rounded-lg cursor-pointer',
-              desktopExpanded ? 'justify-start' : 'justify-center'
-            )}
-            aria-label="Toggle sidebar"
-          >
-            <img src="/logo.png" alt="WinterArc Logo" className="w-12 h-12 shrink-0 rounded object-contain" />
-            {desktopExpanded && (
-              <div className="flex flex-col leading-tight">
-                <h1 className="font-bold text-lg whitespace-nowrap overflow-hidden">WinterArc</h1>
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap overflow-hidden">workspace</span>
-              </div>
-            )}
-          </button>
+        {/* Header */}
+        <div className={cn('flex items-center h-16 shrink-0 px-3', expanded ? 'justify-between' : 'justify-center')}>
+          {expanded ? (
+            <>
+              <Link to="/" className="flex items-center gap-2.5 min-w-0">
+                <img src="/logo.png" alt="" className="w-9 h-9 shrink-0 rounded-md object-contain" />
+                <span className="font-bold text-lg tracking-tight truncate">WinterArc</span>
+              </Link>
+              {/* Desktop: collapse. Mobile: close the drawer. */}
+              <button
+                onClick={() => setPinnedExpanded(false)}
+                className="hidden md:inline-flex p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                title="Collapse sidebar"
+                aria-label="Collapse sidebar"
+              >
+                <PanelLeftClose size={18} />
+              </button>
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                aria-label="Close menu"
+              >
+                <X size={18} />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setPinnedExpanded(true)}
+              className="group relative p-1 rounded-lg hover:bg-secondary transition-colors"
+              title="Expand sidebar"
+              aria-label="Pin sidebar open"
+            >
+              <img src="/logo.png" alt="" className="w-9 h-9 rounded-md object-contain group-hover:opacity-0 transition-opacity" />
+              <PanelLeftOpen size={18} className="absolute inset-0 m-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          )}
+        </div>
 
-          <nav className="flex flex-col gap-1 flex-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const active = location.pathname === item.path
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg transition-colors font-medium cursor-pointer',
-                    desktopExpanded
-                      ? 'px-4 py-2 justify-start'
-                      : 'px-0 py-2 justify-center',
-                    active
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-secondary text-foreground'
-                  )}
-                  title={item.label}
-                >
-                  <Icon size={20} className="shrink-0" />
-                  {desktopExpanded && (
-                    <span className="whitespace-nowrap overflow-hidden">
-                      {item.label}
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
-          </nav>
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.path, location.pathname)
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                aria-current={active ? 'page' : undefined}
+                title={expanded ? undefined : item.label}
+                className={cn(
+                  rowClass,
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                )}
+              >
+                <Icon size={18} className="shrink-0" />
+                {expanded && <span className="truncate">{item.label}</span>}
+              </Link>
+            )
+          })}
+        </nav>
 
+        {/* Footer */}
+        <div className="shrink-0 px-3 pt-3 pb-4 space-y-1 border-t border-border">
           <button
             onClick={() => setQuickAddOpen(true)}
             className={cn(
-              'flex items-center gap-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-sm',
-              desktopExpanded
-                ? 'px-4 py-3 justify-center'
-                : 'p-3 justify-center'
+              rowClass,
+              'mb-2 bg-primary text-primary-foreground font-semibold shadow-sm hover:opacity-90',
+              expanded && 'justify-center'
             )}
-            title="Quick Add"
+            title="Quick Add (Q)"
             aria-label="Quick Add"
           >
-            <Plus size={18} />
-            {desktopExpanded && <span>Quick Add</span>}
+            <Plus size={18} className="shrink-0" />
+            {expanded && (
+              <>
+                <span>Quick Add</span>
+                <kbd className="ml-1 hidden md:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-foreground/15">Q</kbd>
+              </>
+            )}
           </button>
 
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className={cn(
-              'flex items-center gap-2 rounded-lg transition-colors border border-transparent hover:border-border',
-              'text-muted-foreground hover:text-foreground hover:bg-secondary text-xs',
-              desktopExpanded
-                ? 'px-3 py-2 justify-start'
-                : 'p-2 justify-center'
-            )}
-            title="Toggle theme"
+            onClick={toggleTheme}
+            className={cn(rowClass, 'w-full text-muted-foreground hover:text-foreground hover:bg-secondary')}
+            title={expanded ? undefined : isDark ? 'Light mode' : 'Dark mode'}
             aria-label="Toggle theme"
           >
-            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-            {desktopExpanded && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
+            {isDark ? <Sun size={18} className="shrink-0" /> : <Moon size={18} className="shrink-0" />}
+            {expanded && <span>{isDark ? 'Light mode' : 'Dark mode'}</span>}
           </button>
 
           <button
             onClick={() => logout()}
-            className={cn(
-              'flex items-center gap-2 rounded-lg transition-colors border border-transparent hover:border-border',
-              'text-muted-foreground hover:text-foreground hover:bg-secondary text-xs',
-              desktopExpanded
-                ? 'px-3 py-2 justify-start'
-                : 'p-2 justify-center'
-            )}
-            title="Lock workspace"
+            className={cn(rowClass, 'w-full text-muted-foreground hover:text-foreground hover:bg-secondary')}
+            title={expanded ? undefined : 'Lock workspace'}
             aria-label="Lock workspace"
           >
-            <Lock size={14} />
-            {desktopExpanded && <span>Lock Workspace</span>}
-          </button>
-
-          <button
-            onClick={() => setPinnedExpanded((prev) => !prev)}
-            className={cn(
-              'flex items-center gap-2 rounded-lg transition-colors',
-              'text-muted-foreground hover:text-foreground hover:bg-secondary text-xs',
-              desktopExpanded
-                ? 'px-3 py-2 justify-start'
-                : 'p-2 justify-center'
-            )}
-            title={pinnedExpanded ? 'Collapse sidebar' : 'Pin sidebar open'}
-            aria-label={pinnedExpanded ? 'Collapse sidebar' : 'Pin sidebar open'}
-          >
-            {pinnedExpanded ? (
-              <PanelLeftClose size={14} />
-            ) : (
-              <PanelLeftOpen size={14} />
-            )}
-            {desktopExpanded && (
-              <span>{pinnedExpanded ? 'Collapse' : 'Pin open'}</span>
-            )}
+            <Lock size={18} className="shrink-0" />
+            {expanded && <span>Lock workspace</span>}
           </button>
         </div>
       </aside>
@@ -214,42 +225,41 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <div
           className="fixed inset-0 bg-black/50 md:hidden z-30"
           onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
         />
       )}
 
       <div className="flex-1 min-w-0 h-full overflow-y-auto">
-        <main className="p-4 pt-16 sm:p-6 sm:pt-16 md:pt-6">{children}</main>
-
-        {/* Floating top-right controls (mobile only; on desktop they live in the sidebar
-            so they don't cover page header buttons) */}
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 md:hidden">
+        {/* Mobile top bar */}
+        <header className="md:hidden sticky top-0 z-20 flex items-center gap-2 h-14 px-3 bg-background/90 backdrop-blur border-b border-border">
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="p-2.5 bg-card border border-border rounded-xl shadow-sm hover:bg-secondary transition-colors"
-            aria-label="Toggle theme"
-            title="Toggle theme"
+            onClick={() => setMobileOpen(true)}
+            className="p-2 -ml-1 rounded-lg hover:bg-secondary transition-colors"
+            aria-label="Toggle menu"
           >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            <Menu size={20} />
           </button>
-
+          <Link to="/" className="flex items-center gap-2 min-w-0 flex-1">
+            <img src="/logo.png" alt="" className="w-7 h-7 rounded object-contain" />
+            <span className="font-bold tracking-tight truncate">WinterArc</span>
+          </Link>
           <button
-            onClick={logout}
-            className="p-2.5 bg-card border border-border rounded-xl shadow-sm hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+            onClick={toggleTheme}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            aria-label="Toggle theme"
+          >
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button
+            onClick={() => logout()}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             aria-label="Lock workspace"
-            title="Lock workspace"
           >
             <Lock size={18} />
           </button>
-        </div>
+        </header>
 
-        {/* Mobile menu toggle */}
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden fixed top-4 left-4 z-50 p-2.5 bg-card border border-border rounded-xl shadow-sm"
-          aria-label="Toggle menu"
-        >
-          {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-        </button>
+        <main className="p-4 sm:p-6">{children}</main>
       </div>
 
       <QuickAddModal
