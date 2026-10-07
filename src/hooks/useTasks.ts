@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { taskSchema } from '@/utils/validation';
-import { initDB, cacheTasks, getCachedTasks, clearCache } from '@/lib/storage';
+import { initDB, cacheTasks, removeCachedTask, getCachedTasks } from '@/lib/storage';
 import { initSyncDB, addToQueue, isOnline, startSyncListener, stopSyncListener, processQueue } from '@/lib/syncQueue';
 
 // Types
@@ -10,7 +10,7 @@ export type Task = {
   _id: string;
   title: string;
   threadId: string | null;
-  date: string;
+  date: string | null;
   dueDate?: string | null;
   timeBlock: string;
   status: string;
@@ -85,7 +85,9 @@ const fetchTasksFromAPI = async (filters: { date?: string; status?: string; thre
   const queryParams = new URLSearchParams();
   if (filters.date) queryParams.append('date', filters.date);
   if (filters.status) queryParams.append('status', filters.status);
-  if (filters.threadId) queryParams.append('threadId', filters.threadId);
+  // null means "no thread" (backlog); undefined means "any thread"
+  if (filters.threadId === null) queryParams.append('threadId', 'null');
+  else if (filters.threadId) queryParams.append('threadId', filters.threadId);
   
   const response = await fetch(`${API_URL}/api/tasks?${queryParams.toString()}`);
   if (!response.ok) {
@@ -122,7 +124,7 @@ export const useCreateTask = () => {
         
         const createdTask = await response.json();
         // Update cache
-        await cacheTasks([createdTask]); // This will replace the cache? We should add to cache.
+        await cacheTasks([createdTask]);
         // Actually, we should get the current cache and add the new task.
         // For simplicity, we'll invalidate the query to refetch.
         // But we want to update optimistically.
@@ -144,8 +146,7 @@ export const useCreateTask = () => {
           updatedAt: new Date().toISOString(),
         };
         // We'll add the temp task to the cache so it shows up immediately
-        const currentTasks = await getCachedTasks();
-        await cacheTasks([...currentTasks, tempTask]);
+        await cacheTasks([tempTask]);
         // Return the temp task so the UI can use it
         return tempTask;
       }
@@ -157,6 +158,7 @@ export const useCreateTask = () => {
       // But we don't want to lose the optimistic update.
       // We'll invalidate the query so that when we come online, we refetch and update the cache properly.
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Task created',
         description: 'Task has been successfully created.',
@@ -203,8 +205,7 @@ export const useUpdateTask = () => {
         
         const updatedTask = await response.json();
         // Update cache
-        await cacheTasks([updatedTask]); // This will replace the cache? We should update the specific task.
-        // We'll invalidate the query to refetch.
+        await cacheTasks([updatedTask]);
         return updatedTask;
       } else {
         // Offline: add to queue
@@ -227,6 +228,7 @@ export const useUpdateTask = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Task updated',
         description: 'Task has been successfully updated.',
@@ -266,9 +268,7 @@ export const useDeleteTask = () => {
         }
         
         // Update cache: remove the task
-        const currentTasks = await getCachedTasks();
-        const filteredTasks = currentTasks.filter(task => task._id !== id);
-        await cacheTasks(filteredTasks);
+        await removeCachedTask(id);
         
         return { success: true };
       } else {
@@ -280,15 +280,14 @@ export const useDeleteTask = () => {
         };
         await addToQueue(operation);
         // Optimistically remove from cache
-        const currentTasks = await getCachedTasks();
-        const filteredTasks = currentTasks.filter(task => task._id !== id);
-        await cacheTasks(filteredTasks);
+        await removeCachedTask(id);
         
         return { success: true };
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Task deleted',
         description: 'Task has been successfully deleted.',
@@ -329,11 +328,7 @@ export const useCompleteTask = () => {
         
         const completedTask = await response.json();
         // Update cache
-        const currentTasks = await getCachedTasks();
-        const updatedTasks = currentTasks.map(task => 
-          task._id === id ? { ...task, ...completedTask, updatedAt: new Date().toISOString() } : task
-        );
-        await cacheTasks(updatedTasks);
+        await cacheTasks([completedTask]);
         
         return completedTask;
       } else {
@@ -342,21 +337,22 @@ export const useCompleteTask = () => {
           type: 'update', // We'll treat complete as an update operation
           endpoint: '/api/tasks',
           id,
-          data: { status: 'completed', completedAt: new Date().toISOString() },
+          data: { status: 'done', completedAt: new Date().toISOString() },
         };
         await addToQueue(operation);
         // Optimistically update cache
         const currentTasks = await getCachedTasks();
         const updatedTasks = currentTasks.map(task => 
-          task._id === id ? { ...task, status: 'completed', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : task
+          task._id === id ? { ...task, status: 'done', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : task
         );
         await cacheTasks(updatedTasks);
         
-        return { ...currentTasks.find(t => t._id === id), status: 'completed', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        return { ...currentTasks.find(t => t._id === id), status: 'done', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       }
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Task completed',
         description: 'Task has been successfully completed.',

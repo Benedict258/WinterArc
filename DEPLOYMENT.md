@@ -85,8 +85,17 @@ Paste (using your actual values):
 
 ```env
 NODE_ENV=production
-MONGO_URI=mongodb+srv://benedictisaac258_db_user:u8piSxxAxpnS6MeQ@workspace.jwh4owf.mongodb.net/workspace
-FRONTEND_URL=https://workspace.benedictisaac.dev
+MONGO_URI=mongodb+srv://benedictisaac258_db_user:<YOUR_PASSWORD>@workspace.jwh4owf.mongodb.net/workspace
+FRONTEND_ORIGIN=https://winterarc.benedictisaac.dev
+# Required. Passcode for the lock screen.
+APP_PASSCODE=<your-passcode>
+# Required in production, 32+ chars. Generate with: openssl rand -hex 32
+SESSION_SECRET=<random-64-hex-chars>
+# S3 for Drop
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=<key-id>
+AWS_SECRET_ACCESS_KEY=<secret>
+S3_DROP_BUCKET=winterarc-drop
 GOOGLE_CLIENT_ID=<your-google-oauth-client-id>
 GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
 GOOGLE_REDIRECT_URI=https://workspace.benedictisaac.dev/api/calendar/callback

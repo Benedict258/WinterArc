@@ -33,7 +33,7 @@ export async function updateTask(id: string, data: any) {
   if (data.status === 'done' && !data.completedAt) {
     data.completedAt = new Date()
   }
-  return await Task.findByIdAndUpdate(id, data, { new: true })
+  return await Task.findByIdAndUpdate(id, data, { new: true, runValidators: true })
 }
 
 export async function deleteTask(id: string) {

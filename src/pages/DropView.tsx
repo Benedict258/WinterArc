@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { Upload, Link as LinkIcon, FileText, Download, Copy, Paperclip, MoreVertical } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { format } from 'date-fns'
+import { safeHref } from '@/lib/utils'
 
 type DropItem = {
   _id: string
@@ -74,21 +75,24 @@ export default function DropView() {
   }, [items])
 
   const uploadFile = async (file: File) => {
+    // Some files report an empty type; the presigned URL is signed with this exact value
+    const mimeType = file.type || 'application/octet-stream'
     try {
       const metaRes = await fetch('/api/drop/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, mimeType: file.type, fileSize: file.size })
+        body: JSON.stringify({ fileName: file.name, mimeType, fileSize: file.size })
       })
       if (!metaRes.ok) throw new Error('Upload URL failed')
       const { uploadUrl, s3Key } = await metaRes.json()
-      const putRes = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      const putRes = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': mimeType } })
       if (!putRes.ok) throw new Error('S3 upload failed')
-      await fetch('/api/drop', {
+      const saveRes = await fetch('/api/drop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'file', s3Key, fileName: file.name, fileSize: file.size, mimeType: file.type })
+        body: JSON.stringify({ type: 'file', s3Key, fileName: file.name, fileSize: file.size, mimeType })
       })
+      if (!saveRes.ok) throw new Error('Saving drop failed')
       toast({ title: 'Dropped', description: file.name })
       fetchItems()
     } catch (e: any) {
@@ -109,12 +113,17 @@ export default function DropView() {
 
   const createTextItem = async () => {
     if (!textInput.trim()) return
-    const isUrl = /^https?:\/\//.test(textInput.trim())
-    await fetch('/api/drop', {
+    const text = textInput.trim()
+    const isUrl = !/\s/.test(text) && !!safeHref(text)
+    const res = await fetch('/api/drop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: isUrl ? 'link' : 'text', textContent: textInput.trim() })
+      body: JSON.stringify({ type: isUrl ? 'link' : 'text', textContent: text })
     })
+    if (!res.ok) {
+      toast({ title: 'Drop failed', variant: 'destructive' })
+      return
+    }
     setTextInput('')
     fetchItems()
   }
@@ -225,7 +234,7 @@ export default function DropView() {
                         <p className="whitespace-pre-wrap break-words text-sm">{item.textContent}</p>
                       )}
                       {item.type === 'link' && (
-                        <a href={item.textContent} target="_blank" rel="noreferrer" className="text-primary underline break-all text-sm">
+                        <a href={safeHref(item.textContent)} target="_blank" rel="noreferrer" className="text-primary underline break-all text-sm">
                           {item.textContent}
                         </a>
                       )}

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { threadSchema } from '@/utils/validation';
-import { initDB, cacheThreads, getCachedThreads, clearCache } from '@/lib/storage';
+import { initDB, cacheThreads, upsertCachedThreads, removeCachedThread, getCachedThreads } from '@/lib/storage';
 import { initSyncDB, addToQueue, isOnline, startSyncListener, stopSyncListener, processQueue } from '@/lib/syncQueue';
 
 // Types
@@ -21,8 +21,10 @@ export type Thread = {
   name: string;
   category: string;
   frequency: string;
+  /** 0 = Monday … 6 = Sunday */
   fixedDay: number | null;
   status: string;
+  taskMode: 'discrete' | 'continuous';
   priority: 'low' | 'medium' | 'high';
   intensity: 'light' | 'medium' | 'heavy';
   notes: string;
@@ -114,7 +116,7 @@ export const useCreateThread = () => {
         
         const createdThread = await response.json();
         // Update cache
-        await cacheThreads([createdThread]); // This will replace the cache? We should add to cache.
+        await upsertCachedThreads([createdThread]);
         // We'll invalidate the query to refetch.
         return createdThread;
       } else {
@@ -133,13 +135,14 @@ export const useCreateThread = () => {
           updatedAt: new Date().toISOString(),
         };
         const currentThreads = await getCachedThreads();
-        await cacheThreads([...currentThreads, tempThread]);
+        await upsertCachedThreads([tempThread]);
         // Return the temp thread so the UI can use it
         return tempThread;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Thread created',
         description: 'Thread has been successfully created.',
@@ -183,7 +186,7 @@ export const useUpdateThread = () => {
         
         const updatedThread = await response.json();
         // Update cache
-        await cacheThreads([updatedThread]); // This will replace the cache? We should update the specific thread.
+        await upsertCachedThreads([updatedThread]);
         // We'll invalidate the query to refetch.
         return updatedThread;
       } else {
@@ -200,13 +203,14 @@ export const useUpdateThread = () => {
         const updatedThreads = currentThreads.map(thread => 
           thread._id === id ? { ...thread, ...updates, updatedAt: new Date().toISOString() } : thread
         );
-        await cacheThreads(updatedThreads);
+        await upsertCachedThreads(updatedThreads);
         // Return the updated thread for UI
         return { ...currentThreads.find(t => t._id === id), ...updates, updatedAt: new Date().toISOString() };
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Thread updated',
         description: 'Thread has been successfully updated.',
@@ -245,9 +249,7 @@ export const useDeleteThread = () => {
         }
         
         // Update cache: remove the thread
-        const currentThreads = await getCachedThreads();
-        const filteredThreads = currentThreads.filter(thread => thread._id !== id);
-        await cacheThreads(filteredThreads);
+        await removeCachedThread(id);
         
         return { success: true };
       } else {
@@ -268,6 +270,7 @@ export const useDeleteThread = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Thread deleted',
         description: 'Thread has been successfully deleted.',

@@ -10,7 +10,7 @@ export async function createThread(data: any) {
 }
 
 export async function updateThread(id: string, data: any) {
-  return await Thread.findByIdAndUpdate(id, data, { new: true })
+  return await Thread.findByIdAndUpdate(id, data, { new: true, runValidators: true })
 }
 
 export async function deleteThread(id: string) {

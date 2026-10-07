@@ -1,24 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodSchema } from 'zod';
+import { ZodError, ZodType } from 'zod';
 
 /**
- * Middleware to validate request body using a Zod schema
- * @param schema - Zod schema to validate against
+ * Middleware to validate request body using a Zod schema.
+ * On success the body is replaced with the parsed value, so unknown
+ * fields are stripped and can't be mass-assigned onto Mongoose documents.
  */
-export const validateRequest = (schema: ZodSchema) => {
+export const validateRequest = (schema: ZodType) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // Parse and validate the request body against the schema
-      schema.parse(req.body);
-      // If validation passes, move to the next middleware
-      next();
-    } catch (error) {
-      // If validation fails, send a 400 Bad Request response
-      if (error instanceof Error) {
-        res.status(400).json({ error: error.message });
-      } else {
-        res.status(400).json({ error: 'Validation failed' });
-      }
+    const result = schema.safeParse(req.body ?? {});
+    if (!result.success) {
+      const error = result.error instanceof ZodError
+        ? result.error.issues.map(i => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ')
+        : 'Validation failed';
+      res.status(400).json({ error });
+      return;
     }
+    req.body = result.data;
+    next();
   };
 };

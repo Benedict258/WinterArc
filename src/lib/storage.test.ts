@@ -1,236 +1,115 @@
-// Mock IndexedDB for testing
-const mockIndexedDB = (() => {
-  let db: any = null;
-  let stores: any = {};
-  
-  return {
-    open: (name: string, version: number) => {
-      const request: any = {
-        onerror: null,
-        onsuccess: null,
-        onupgradeneeded: null,
-        result: db
-      };
-      
-      // Simulate async behavior
-      setTimeout(() => {
-        if (request.onupgradeneeded && !db) {
-          db = {
-            objectStoreNames: {
-              contains: (storeName: string) => stores[storeName] !== undefined
-            },
-            createObjectStore: (storeName: string, options: any) => {
-              stores[storeName] = {};
-              return {
-                put: (value: any) => {
-                  const id = value.id || Math.random().toString(36).substr(2, 9);
-                  value.id = id;
-                  stores[storeName][id] = value;
-                  return id;
-                },
-                clear: () => {
-                  stores[storeName] = {};
-                },
-                openCursor: () => {
-                  const cursorRequest: any = {
-                    onsuccess: null,
-                    onerror: null,
-                    result: null
-                  };
-                  
-                  setTimeout(() => {
-                    let index = 0;
-                    const storeItems = Object.values(stores[stores]);
-                    const cursor: any = {
-                      value: null,
-                      continue: () => {
-                        index++;
-                        if (index < storeItems.length) {
-                          cursor.value = storeItems[index];
-                          if (request.onsuccess) {
-                            request.onsuccess({ target: { result: cursor } });
-                          }
-                        } else {
-                          cursor.value = null;
-                          if (request.onsuccess) {
-                            request.onsuccess({ target: { result: cursor } });
-                          }
-                        }
-                      }
-                    };
-                    
-                    if (storeItems.length > 0) {
-                      cursor.value = storeItems[0];
-                    }
-                    
-                    if (request.onsuccess) {
-                      request.onsuccess({ target: { result: cursor } });
-                    }
-                  }, 1);
-                  
-                  return cursorRequest;
-                }
-              };
-            }
-          };
-          
-          if (request.onupgradeneeded) {
-            request.onupgradeneeded({ target: { result: db } });
-          }
-        }
-        
-        if (request.onsuccess) {
-          request.onsuccess({ target: { result: db } });
-        }
-      }, 1);
-      
-      return request;
-    }
-  };
-})();
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
+import {
+  resetDBConnection,
+  cacheTasks,
+  getCachedTasks,
+  removeCachedTask,
+  cacheThreads,
+  upsertCachedThreads,
+  getCachedThreads,
+  cacheGoals,
+  getCachedGoals,
+  clearCache,
+} from './storage'
+import { addToQueue, getQueue, processQueue } from './syncQueue'
 
-// Replace global indexedDB with our mock before running tests
-// @ts-ignore
-global.indexedDB = mockIndexedDB;
+beforeEach(() => {
+  // Fresh in-memory IndexedDB per test
+  globalThis.indexedDB = new IDBFactory()
+  resetDBConnection()
+})
 
-import { 
-  initDB, 
-  cacheThreads, 
-  getCachedThreads, 
-  cacheTasks, 
-  getCachedTasks, 
-  cacheGoals, 
-  getCachedGoals, 
-  clearCache 
-} from './storage';
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
-describe('IndexedDB Storage', () => {
-  beforeEach(async () => {
-    // Clear all stores before each test
-    const db = await new Promise<IDBDatabase>((resolve) => {
-      const request = indexedDB.open('workspace-db', 1);
-      request.onsuccess = () => resolve(request.result);
-    });
-    
-    const transaction = db.transaction(['threads', 'tasks', 'goals'], 'readwrite');
-    ['threads', 'tasks', 'goals'].forEach(store => {
-      transaction.objectStore(store).clear();
-    });
-    await new Promise((resolve, reject) => {
-      transaction.oncomplete = resolve;
-      transaction.onerror = () => reject(transaction.error);
-    });
-    db.close();
-  });
+describe('storage', () => {
+  it('caching a filtered task list does not wipe other cached tasks', async () => {
+    await cacheTasks([{ _id: 'a', title: 'A' }, { _id: 'b', title: 'B' }])
+    await cacheTasks([{ _id: 'b', title: 'B2' }])
+    const tasks = await getCachedTasks()
+    expect(tasks.map(t => [t._id, t.title]).sort()).toEqual([['a', 'A'], ['b', 'B2']])
+  })
 
-  describe('initDB', () => {
-    it('should initialize the database successfully', async () => {
-      await expect(initDB()).resolves.not.toThrow();
-    });
-  });
+  it('removes a single task', async () => {
+    await cacheTasks([{ _id: 'a' }, { _id: 'b' }])
+    await removeCachedTask('a')
+    expect((await getCachedTasks()).map(t => t._id)).toEqual(['b'])
+  })
 
-  describe('cacheThreads and getCachedThreads', () => {
-    it('should cache and retrieve threads correctly', async () => {
-      const mockThreads = [
-        { id: '1', name: 'Thread 1', status: 'active' },
-        { id: '2', name: 'Thread 2', status: 'parked' }
-      ];
-      
-      await cacheThreads(mockThreads);
-      const cachedThreads = await getCachedThreads();
-      
-      expect(cachedThreads).toHaveLength(2);
-      expect(cachedThreads[0]).toEqual(expect.objectContaining({ id: '1', name: 'Thread 1' }));
-      expect(cachedThreads[1]).toEqual(expect.objectContaining({ id: '2', name: 'Thread 2' }));
-    });
-    
-    it('should return empty array when no threads are cached', async () => {
-      const cachedThreads = await getCachedThreads();
-      expect(cachedThreads).toEqual([]);
-    });
-    
-    it('should overwrite existing threads when caching new ones', async () => {
-      const initialThreads = [{ id: '1', name: 'Initial Thread' }];
-      const newThreads = [{ id: '2', name: 'New Thread' }];
-      
-      await cacheThreads(initialThreads);
-      await cacheThreads(newThreads);
-      
-      const cachedThreads = await getCachedThreads();
-      expect(cachedThreads).toHaveLength(1);
-      expect(cachedThreads[0].name).toBe('New Thread');
-    });
-  });
+  it('cacheThreads mirrors the full list; upsert keeps the rest', async () => {
+    await cacheThreads([{ _id: 't1' }, { _id: 't2' }])
+    await upsertCachedThreads([{ _id: 't3' }])
+    expect((await getCachedThreads()).length).toBe(3)
+    await cacheThreads([{ _id: 't1' }])
+    expect((await getCachedThreads()).map(t => t._id)).toEqual(['t1'])
+  })
 
-  describe('cacheTasks and getCachedTasks', () => {
-    it('should cache and retrieve tasks correctly', async () => {
-      const mockTasks = [
-        { id: '1', title: 'Task 1', status: 'pending' },
-        { id: '2', title: 'Task 2', status: 'done' }
-      ];
-      
-      await cacheTasks(mockTasks);
-      const cachedTasks = await getCachedTasks();
-      
-      expect(cachedTasks).toHaveLength(2);
-      expect(cachedTasks[0]).toEqual(expect.objectContaining({ id: '1', title: 'Task 1' }));
-      expect(cachedTasks[1]).toEqual(expect.objectContaining({ id: '2', title: 'Task 2' }));
-    });
-    
-    it('should return empty array when no tasks are cached', async () => {
-      const cachedTasks = await getCachedTasks();
-      expect(cachedTasks).toEqual([]);
-    });
-  });
+  it('caches goals that only have _id', async () => {
+    await cacheGoals([{ _id: 'g1', text: 'Goal' }])
+    expect((await getCachedGoals())[0]).toMatchObject({ _id: 'g1', text: 'Goal' })
+  })
 
-  describe('cacheGoals and getCachedGoals', () => {
-    it('should cache and retrieve goals correctly', async () => {
-      const mockGoals = [
-        { id: '1', title: 'Goal 1', progress: 50 },
-        { id: '2', title: 'Goal 2', progress: 80 }
-      ];
-      
-      await cacheGoals(mockGoals);
-      const cachedGoals = await getCachedGoals();
-      
-      expect(cachedGoals).toHaveLength(2);
-      expect(cachedGoals[0]).toEqual(expect.objectContaining({ id: '1', title: 'Goal 1', progress: 50 }));
-      expect(cachedGoals[1]).toEqual(expect.objectContaining({ id: '2', title: 'Goal 2', progress: 80 }));
-    });
-    
-    it('should return empty array when no goals are cached', async () => {
-      const cachedGoals = await getCachedGoals();
-      expect(cachedGoals).toEqual([]);
-    });
-  });
+  it('clearCache empties data stores', async () => {
+    await cacheTasks([{ _id: 'a' }])
+    await cacheThreads([{ _id: 't' }])
+    await clearCache()
+    expect(await getCachedTasks()).toEqual([])
+    expect(await getCachedThreads()).toEqual([])
+  })
 
-  describe('clearCache', () => {
-    it('should clear all cached data', async () => {
-      // Cache some data
-      await cacheThreads([{ id: '1', name: 'Thread 1' }]);
-      await cacheTasks([{ id: '1', title: 'Task 1' }]);
-      await cacheGoals([{ id: '1', title: 'Goal 1' }]);
-      
-      // Verify data is cached
-      let threads = await getCachedThreads();
-      let tasks = await getCachedTasks();
-      let goals = await getCachedGoals();
-      
-      expect(threads).toHaveLength(1);
-      expect(tasks).toHaveLength(1);
-      expect(goals).toHaveLength(1);
-      
-      // Clear cache
-      await clearCache();
-      
-      // Verify data is cleared
-      threads = await getCachedThreads();
-      tasks = await getCachedTasks();
-      goals = await getCachedGoals();
-      
-      expect(threads).toHaveLength(0);
-      expect(tasks).toHaveLength(0);
-      expect(goals).toHaveLength(0);
-    });
-  });
-});
+  it('data stores and the sync queue live in the same database', async () => {
+    await cacheTasks([{ _id: 'a' }])
+    await addToQueue({ type: 'create', endpoint: '/api/tasks', data: { title: 'x' } })
+    expect(await getCachedTasks()).toHaveLength(1)
+    expect(await getQueue()).toHaveLength(1)
+  })
+})
+
+describe('syncQueue', () => {
+  it('replays each operation once even if triggered twice concurrently', async () => {
+    vi.stubGlobal('navigator', { onLine: true })
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await addToQueue({ type: 'create', endpoint: '/api/tasks', data: { title: 'x' } })
+    await Promise.all([processQueue(), processQueue()])
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(await getQueue()).toEqual([])
+  })
+
+  it('keeps operations queued on network failure, in order', async () => {
+    vi.stubGlobal('navigator', { onLine: true })
+    const fetchMock = vi.fn(async () => { throw new TypeError('network') })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await addToQueue({ type: 'create', endpoint: '/api/tasks', data: { title: '1' } })
+    await addToQueue({ type: 'create', endpoint: '/api/tasks', data: { title: '2' } })
+    await processQueue()
+
+    // Stops at the first failure so later ops don't jump ahead
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(await getQueue()).toHaveLength(2)
+  })
+
+  it('drops operations the server rejects with 4xx', async () => {
+    vi.stubGlobal('navigator', { onLine: true })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 400 })))
+
+    await addToQueue({ type: 'update', endpoint: '/api/tasks', id: 'temp-1', data: {} })
+    await processQueue()
+    expect(await getQueue()).toEqual([])
+  })
+
+  it('does nothing while offline', async () => {
+    vi.stubGlobal('navigator', { onLine: false })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await addToQueue({ type: 'create', endpoint: '/api/tasks', data: {} })
+    await processQueue()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await getQueue()).toHaveLength(1)
+  })
+})

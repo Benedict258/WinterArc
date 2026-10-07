@@ -7,6 +7,11 @@ const settingsSchema = new mongoose.Schema(
       default: 'Africa/Lagos',
     },
     weeklyGenerationRules: mongoose.Schema.Types.Mixed,
+    // 'YYYY-MM-DD' of the last day generateToday() committed; claimed atomically
+    lastGeneratedDate: {
+      type: String,
+      default: null,
+    },
     multipleThreadsPerWeekTarget: {
       type: Number,
       default: 3,

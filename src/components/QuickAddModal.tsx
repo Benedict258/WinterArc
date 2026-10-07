@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toDayKey } from '@/lib/utils'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCreateTask } from '@/hooks/useTasks'
@@ -10,7 +11,7 @@ interface QuickAddModalProps {
 }
 
 export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
-  const todayString = new Date().toISOString().split('T')[0]
+  const todayString = toDayKey()
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(todayString)
   const [dueDate, setDueDate] = useState('')

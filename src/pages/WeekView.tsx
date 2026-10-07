@@ -3,14 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { format, startOfWeek, addDays, addWeeks, isSameWeek, isToday as fnsIsToday } from 'date-fns'
 import { useQueries } from '@tanstack/react-query'
-import { useWeek, useRegenerateWeek } from '@/hooks/useGrid'
+import { useWeek, type ForecastTask } from '@/hooks/useGrid'
 import { useThreads } from '@/hooks/useThreads'
 import { useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, Plus, ChevronDown, Calendar as CalIcon, Maximize2, Minimize2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, ChevronDown, Calendar as CalIcon, Maximize2, Minimize2, Sparkles } from 'lucide-react'
 import QuickAddModal from '@/components/QuickAddModal'
 import TaskRow, { type TaskRowData } from '@/components/TaskRow'
-import { cn } from '@/lib/utils'
+import { cn, toDayKey, apiDayKey } from '@/lib/utils'
 
 const DAY_LABELS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const BLOCKS = [
@@ -25,19 +25,20 @@ export default function WeekView() {
   )
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>(() => {
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = toDayKey()
     return { [todayStr]: true }
   })
 
   const isCurrentWeek = isSameWeek(currentWeekStart, new Date(), { weekStartsOn: 1 })
-  const weekStartString = currentWeekStart.toISOString().split('T')[0]
+  const weekStartString = toDayKey(currentWeekStart)
 
   const { mutate: updateTask } = useUpdateTask()
   const { mutate: deleteTask } = useDeleteTask()
-  const { mutate: regenerateWeek, isPending: isRegenerating } = useRegenerateWeek()
 
-  const { data: weekData = { week: [] }, isLoading: weekLoading, error: weekError } = useWeek(weekStartString)
-  const tasks = weekData.week || []
+  const { data: weekData, isLoading: weekLoading, error: weekError } = useWeek(weekStartString)
+  const tasks = weekData?.week || []
+  const forecast = weekData?.forecast || []
+  const todayKey = toDayKey()
 
   const { data: threads = [], isLoading: threadsLoading } = useThreads()
 
@@ -57,7 +58,7 @@ export default function WeekView() {
   }
 
   tasks.forEach((task: any) => {
-    const taskDateStr = String(task.date || '').split('T')[0]
+    const taskDateStr = apiDayKey(task.date) || ''
     const normBlock = (task.timeBlock || 'morning').toLowerCase()
     if (
       tasksByDayAndBlock[taskDateStr] &&
@@ -75,6 +76,14 @@ export default function WeekView() {
         dueDate: task.dueDate || null,
       })
     }
+  })
+
+  const forecastByDayAndBlock: Record<string, Record<string, ForecastTask[]>> = {}
+  for (const ds of dayStrings) {
+    forecastByDayAndBlock[ds] = { morning: [], afternoon: [], evening: [] }
+  }
+  forecast.forEach(f => {
+    forecastByDayAndBlock[f.date]?.[f.timeBlock]?.push(f)
   })
 
   const calendarQueries = useQueries({
@@ -174,11 +183,6 @@ export default function WeekView() {
               </Button>
             </div>
 
-            <Button variant="outline" size="sm" onClick={() => regenerateWeek(weekStartString)} disabled={isRegenerating} className="gap-1.5 h-9 text-xs">
-              <RefreshCw size={14} className={isRegenerating ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">{isRegenerating ? 'Rebalancing...' : 'Regenerate'}</span>
-            </Button>
-
             <Button size="sm" onClick={() => setQuickAddOpen(true)} className="gap-1.5 h-9 text-xs">
               <Plus size={14} />
               <span>Add</span>
@@ -212,6 +216,11 @@ export default function WeekView() {
               0
             )
             const isExpanded = !!expandedDays[dayDateStr]
+            const isForecastDay = dayDateStr > todayKey
+            const dayForecastCount = (Object.values(forecastByDayAndBlock[dayDateStr]) as ForecastTask[][]).reduce(
+              (s, arr) => s + arr.length,
+              0
+            )
 
             return (
               <Card
@@ -246,6 +255,14 @@ export default function WeekView() {
                               Today
                             </span>
                           )}
+                          {isForecastDay && (
+                            <span
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-medium"
+                              title="Not committed yet — updates as you add or finish tasks"
+                            >
+                              Forecast
+                            </span>
+                          )}
                         </CardTitle>
                         <CardDescription className="text-xs">
                           {format(dayDate, 'EEEE, MMMM d')}
@@ -257,7 +274,10 @@ export default function WeekView() {
                       {dayTotal > 0 ? (
                         <span className="text-xs text-muted-foreground font-medium">
                           {dayDone}/{dayTotal} done
+                          {dayForecastCount > 0 && ` · ${dayForecastCount} planned`}
                         </span>
+                      ) : dayForecastCount > 0 ? (
+                        <span className="text-xs text-muted-foreground">{dayForecastCount} planned</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">No tasks</span>
                       )}
@@ -276,13 +296,28 @@ export default function WeekView() {
                     <CardContent className="pt-0 space-y-4">
                       {BLOCKS.map(block => {
                         const blockTasks = tasksByDayAndBlock[dayDateStr][block.id]
+                        const blockForecast = forecastByDayAndBlock[dayDateStr][block.id]
                         return (
                           <div key={block.id}>
                             <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
                               {block.label} <span className="font-normal normal-case">· {block.time}</span>
                             </p>
-                            {blockTasks.length > 0 ? (
+                            {blockTasks.length > 0 || blockForecast.length > 0 ? (
                               <div className="space-y-1.5">
+                                {blockForecast.map((f, i) => (
+                                  <div
+                                    key={`fc-${dayDateStr}-${block.id}-${i}`}
+                                    className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border border-dashed border-border text-muted-foreground"
+                                    title="Forecast — committed when this day arrives"
+                                  >
+                                    <Sparkles size={14} className="shrink-0 opacity-60" />
+                                    <span className="flex-1 min-w-0 break-words text-sm">{f.title}</span>
+                                    {f.threadId && f.title !== threadMap.get(f.threadId) && (
+                                      <span className="text-xs hidden sm:inline shrink-0">[{threadMap.get(f.threadId) || 'Unknown'}]</span>
+                                    )}
+                                    {f.kind === 'due' && <span className="text-[10px] font-medium shrink-0">due</span>}
+                                  </div>
+                                ))}
                                 {blockTasks.map(task => (
                                   <TaskRow
                                     key={task.id}

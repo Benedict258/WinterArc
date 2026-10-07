@@ -20,7 +20,9 @@ export default defineConfig({
         ],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/.*/,
+            // Workbox tests RegExps against the full URL, so match on the path.
+            // Never cache auth responses.
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

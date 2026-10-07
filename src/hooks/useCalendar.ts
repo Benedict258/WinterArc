@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
 import { useToast } from '@/components/ui/use-toast'
 
 // Types
@@ -17,7 +18,7 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 
 // Pull calendar events for a given date
 export const useCalendarEvents = (date: Date | string) => {
-  const dateStr = typeof date === 'string' ? date.split('T')[0] : date.toISOString().split('T')[0]
+  const dateStr = typeof date === 'string' ? date.split('T')[0] : format(date, 'yyyy-MM-dd')
   return useQuery({
     queryKey: ['calendar-events', dateStr],
     queryFn: async () => {

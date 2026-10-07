@@ -11,6 +11,7 @@ import {
   ArrowLeft, Edit2, Trash2, ExternalLink, Plus, Flame, BarChart3, Calendar, FileText, Link2, Save, X, Check, ChevronDown
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { safeHref } from '@/lib/utils'
 
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -38,7 +39,7 @@ export default function ThreadDetailView() {
   const [notesDraft, setNotesDraft] = useState('')
   const [editingMeta, setEditingMeta] = useState(false)
   const [expandedSections, setExpandedSections] = useState({ queued:true, notes:true, resources:true })
-  const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium', taskType: 'discrete' as 'discrete' | 'continuous' })
+  const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium', taskMode: 'discrete' as 'discrete' | 'continuous' })
   const [showAddResource, setShowAddResource] = useState(false)
   const [resourceDraft, setResourceDraft] = useState({ title: '', url: '', description: '', kind: 'link' as 'link' | 'resource' })
   const [showAddTask, setShowAddTask] = useState(false)
@@ -55,7 +56,7 @@ export default function ThreadDetailView() {
         status: thread.status,
         priority: thread.priority,
         intensity: thread.intensity,
-        taskType: (thread as any).taskType || 'discrete',
+        taskMode: thread.taskMode || 'continuous',
       })
     }
   }, [thread])
@@ -100,7 +101,7 @@ export default function ThreadDetailView() {
         status: metaDraft.status,
         priority: metaDraft.priority as 'low' | 'medium' | 'high',
         intensity: metaDraft.intensity as 'light' | 'medium' | 'heavy',
-        taskType: metaDraft.taskType,
+        taskMode: metaDraft.taskMode,
       },
     }, {
       onSuccess: () => setEditingMeta(false),
@@ -223,9 +224,8 @@ export default function ThreadDetailView() {
         )}
 
         {thread && (() => {
-          const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
-          if (queued.length === 0) return null
-          const priorityOrder = { high:0, medium:1, low:2 }
+          const queued = allTasks.filter(t => t.threadId === thread._id && !t.date && t.status === 'pending')
+          const priorityOrder: Record<string, number> = { high:0, medium:1, low:2 }
           const sorted = [...queued].sort((a,b) => {
             const aDue = a.dueDate ? new Date(a.dueDate).getTime():Infinity
             const bDue = b.dueDate ? new Date(b.dueDate).getTime():Infinity
@@ -246,6 +246,13 @@ export default function ThreadDetailView() {
             </CardHeader>
             {expandedSections.queued && (
               <CardContent className="space-y-2">
+                {sorted.length === 0 && (
+                  <p className="text-sm text-muted-foreground italic py-2">
+                    {thread.taskMode === 'discrete'
+                      ? 'No tasks queued — add one to see this thread in your week.'
+                      : 'No tasks queued — the thread name is used as a placeholder.'}
+                  </p>
+                )}
                 {sorted.map(t => (
                   <div key={t._id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/40">
                     <span className="flex-1 truncate text-sm">{t.title}</span>
@@ -340,7 +347,7 @@ export default function ThreadDetailView() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <a
-                        href={r.url}
+                        href={safeHref(r.url)}
                         target="_blank"
                         rel="noreferrer"
                         className="text-sm font-medium text-primary hover:underline flex items-center gap-1 break-all"
@@ -412,7 +419,7 @@ export default function ThreadDetailView() {
                     <label className="block text-sm font-medium mb-1">Fixed Day</label>
                     <select
                       value={metaDraft.fixedDay}
-                      onChange={(e) => setMetaDraft(d => ({ ...d, fixedDay: parseInt(e.target.value) }))}
+                      onChange={(e) => setMetaDraft(d => ({ ...d, fixedDay: Number(e.target.value) }))}
                       className="w-full px-3 py-2 border rounded-md bg-background text-sm"
                     >
                       {DAY_LABELS.map((d, i) => <option key={i} value={i}>{d}</option>)}
@@ -461,11 +468,11 @@ export default function ThreadDetailView() {
                   <label className="block text-sm font-medium mb-1">Task Type</label>
                   <div className="flex gap-4">
                     <label className="flex items-center gap-2 text-sm">
-                      <input type="radio" name="taskType" value="discrete" checked={metaDraft.taskType === 'discrete'} onChange={() => setMetaDraft(d => ({ ...d, taskType: 'discrete' }))} />
+                      <input type="radio" name="taskMode" value="discrete" checked={metaDraft.taskMode === 'discrete'} onChange={() => setMetaDraft(d => ({ ...d, taskMode: 'discrete' }))} />
                       Discrete
                     </label>
                     <label className="flex items-center gap-2 text-sm">
-                      <input type="radio" name="taskType" value="continuous" checked={metaDraft.taskType === 'continuous'} onChange={() => setMetaDraft(d => ({ ...d, taskType: 'continuous' }))} />
+                      <input type="radio" name="taskMode" value="continuous" checked={metaDraft.taskMode === 'continuous'} onChange={() => setMetaDraft(d => ({ ...d, taskMode: 'continuous' }))} />
                       Continuous
                     </label>
                   </div>

@@ -8,22 +8,28 @@ interface PasscodeGateProps {
 }
 
 export default function PasscodeGate({ children }: PasscodeGateProps) {
-  const { isAuthenticated, login } = useAuth()
+  const { isAuthenticated, isChecking, login } = useAuth()
   const [passcode, setPasscode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (isAuthenticated) {
     return <>{children}</>
+  }
+
+  if (isChecking) {
+    return <div className="min-h-screen w-full bg-background" />
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!passcode) return
 
-    const success = await login(passcode.trim())
-    if (!success) {
-      setError(true)
+    const result = await login(passcode.trim())
+    if (!result.ok) {
+      setError(result.error || 'Incorrect passcode. Please try again.')
+    } else {
+      setPasscode('')
     }
   }
 
@@ -57,7 +63,7 @@ export default function PasscodeGate({ children }: PasscodeGateProps) {
                   value={passcode}
                   onChange={(e) => {
                     setPasscode(e.target.value)
-                    if (error) setError(false)
+                    if (error) setError(null)
                   }}
                   placeholder="Enter passcode to unlock"
                   className={`w-full px-3 py-2.5 pr-10 border rounded-lg text-sm bg-background transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
@@ -75,7 +81,7 @@ export default function PasscodeGate({ children }: PasscodeGateProps) {
               </div>
               {error && (
                 <p className="text-xs text-destructive font-medium mt-1">
-                  Incorrect passcode. Please try again.
+                  {error}
                 </p>
               )}
             </div>

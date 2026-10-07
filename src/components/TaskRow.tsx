@@ -1,5 +1,5 @@
 import { CheckCircle2, Trash2, Edit2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, dueInDays } from '@/lib/utils'
 import React from 'react'
 
 export interface TaskRowData {
@@ -33,11 +33,8 @@ export default function TaskRow({
 }: TaskRowProps) {
   const isDone = task.status === 'done'
   const dueCountdown = React.useMemo(() => {
-    if (!task.dueDate) return null
-    const due = new Date(task.dueDate)
-    const now = new Date()
-    const diffMs = due.getTime() - now.getTime()
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    const diffDays = dueInDays(task.dueDate)
+    if (diffDays === null) return null
     if (diffDays < 0) return { label: `${Math.abs(diffDays)}d overdue`, color: 'text-red-600', isOverdue: true }
     if (diffDays === 0) return { label: 'Due today', color: 'text-amber-600', isOverdue: false }
     if (diffDays === 1) return { label: 'Due tomorrow', color: 'text-amber-600', isOverdue: false }

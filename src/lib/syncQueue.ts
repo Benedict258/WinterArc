@@ -1,83 +1,34 @@
-// Sync queue for offline operations
+// Sync queue for offline operations. Shares the IndexedDB connection with storage.ts.
 
-const DB_NAME = 'workspace-db'
-const DB_VERSION = 1
-const QUEUE_STORE = 'sync-queue'
+import { openDB, QUEUE_STORE } from './storage'
 
-let db: IDBDatabase | null = null
-const onlineListeners: (() => void)[] = []
+export const initSyncDB = async (): Promise<void> => {
+  await openDB()
+}
 
-export const initSyncDB = (): Promise<void> => {
-  return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-
-    request.onerror = () => {
-      reject(request.error)
-    }
-
-    request.onsuccess = () => {
-      db = request.result
-      resolve()
-    }
-
-    request.onupgradeneeded = () => {
-      const dbInstance = request.result
-      db = dbInstance
-      if (!dbInstance.objectStoreNames.contains(QUEUE_STORE)) {
-        const store = dbInstance.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true })
-        store.createIndex('timestamp', 'timestamp', { unique: false })
-      }
-    }
+const txDone = (tx: IDBTransaction) =>
+  new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
   })
-}
-
-const getQueueStore = (mode: IDBTransactionMode = 'readonly') => {
-  if (!db) {
-    throw new Error('Database not initialized')
-  }
-  const transaction = db.transaction(QUEUE_STORE, mode)
-  return {
-    store: transaction.objectStore(QUEUE_STORE),
-    done: () => new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve()
-      transaction.onerror = () => reject(transaction.error)
-    })
-  }
-}
 
 export const addToQueue = async (operation: any) => {
-  const store = getQueueStore('readwrite')
-  try {
-    const operationWithTimestamp = {
-      ...operation,
-      timestamp: Date.now(),
-    }
-    await store.store.add(operationWithTimestamp)
-    await store.done()
-  } catch (error) {
-    console.error('Failed to add operation to queue:', error)
-    throw error
-  }
+  const db = await openDB()
+  const tx = db.transaction(QUEUE_STORE, 'readwrite')
+  tx.objectStore(QUEUE_STORE).add({ ...operation, timestamp: Date.now() })
+  await txDone(tx)
 }
 
 export const getQueue = async (): Promise<any[]> => {
-  const store = getQueueStore()
   try {
-    const operations: any[] = []
-    await new Promise<void>((resolve, reject) => {
-      const request = store.store.openCursor()
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (cursor) {
-          operations.push(cursor.value)
-          cursor.continue()
-        } else {
-          resolve()
-        }
-      }
+    const db = await openDB()
+    return await new Promise((resolve, reject) => {
+      // Ordered by key (autoIncrement), i.e. the order operations were queued
+      const request = db.transaction(QUEUE_STORE, 'readonly').objectStore(QUEUE_STORE).getAll()
+      request.onsuccess = () => resolve(request.result)
       request.onerror = () => reject(request.error)
     })
-    return operations
   } catch (error) {
     console.error('Failed to get queue:', error)
     return []
@@ -85,25 +36,17 @@ export const getQueue = async (): Promise<any[]> => {
 }
 
 export const removeFromQueue = async (id: number) => {
-  const store = getQueueStore('readwrite')
-  try {
-    await store.store.delete(id)
-    await store.done()
-  } catch (error) {
-    console.error('Failed to remove operation from queue:', error)
-    throw error
-  }
+  const db = await openDB()
+  const tx = db.transaction(QUEUE_STORE, 'readwrite')
+  tx.objectStore(QUEUE_STORE).delete(id)
+  await txDone(tx)
 }
 
 export const clearQueue = async () => {
-  const store = getQueueStore('readwrite')
-  try {
-    await store.store.clear()
-    await store.done()
-  } catch (error) {
-    console.error('Failed to clear queue:', error)
-    throw error
-  }
+  const db = await openDB()
+  const tx = db.transaction(QUEUE_STORE, 'readwrite')
+  tx.objectStore(QUEUE_STORE).clear()
+  await txDone(tx)
 }
 
 export const isOnline = (): boolean => {
@@ -114,68 +57,78 @@ type OperationHandler = (operation: any) => Promise<any>
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-const operationHandlers: Record<string, OperationHandler> = {
-  'create': async (operation: any) => {
-    const response = await fetch(`${API_URL}${operation.endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(operation.data),
-    })
-    if (!response.ok) {
-      throw new Error(`Failed to create: ${response.statusText}`)
-    }
-    return response.json()
-  },
-  'update': async (operation: any) => {
-    const response = await fetch(`${API_URL}${operation.endpoint}/${operation.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(operation.data),
-    })
-    if (!response.ok) {
-      throw new Error(`Failed to update: ${response.statusText}`)
-    }
-    return response.json()
-  },
-  'delete': async (operation: any) => {
-    const response = await fetch(`${API_URL}${operation.endpoint}/${operation.id}`, {
-      method: 'DELETE',
-    })
-    if (!response.ok) {
-      throw new Error(`Failed to delete: ${response.statusText}`)
-    }
-    return { success: true }
+class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message)
   }
 }
 
-export const processQueue = async () => {
-  if (!isOnline()) {
-    console.warn('Cannot process queue: offline')
-    return
-  }
+const send = async (url: string, init: RequestInit) => {
+  const response = await fetch(url, { credentials: 'include', ...init })
+  if (!response.ok) throw new HttpError(response.status, `${init.method} ${url}: ${response.status}`)
+  return response
+}
 
-  const queue = await getQueue()
-  for (const operation of queue) {
-    try {
+const operationHandlers: Record<string, OperationHandler> = {
+  'create': async (operation: any) => {
+    const response = await send(`${API_URL}${operation.endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(operation.data),
+    })
+    return response.json()
+  },
+  'update': async (operation: any) => {
+    const response = await send(`${API_URL}${operation.endpoint}/${operation.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(operation.data),
+    })
+    return response.json()
+  },
+  'delete': async (operation: any) => {
+    await send(`${API_URL}${operation.endpoint}/${operation.id}`, { method: 'DELETE' })
+    return { success: true }
+  },
+}
+
+let processing: Promise<void> | null = null
+
+/**
+ * Replays queued operations in order. Only one run at a time — the online
+ * event and the app's listener both trigger this, and running twice would
+ * replay creates twice.
+ */
+export const processQueue = (): Promise<void> => {
+  if (processing) return processing
+  processing = (async () => {
+    if (!isOnline()) return
+    const queue = await getQueue()
+    for (const operation of queue) {
       const handler = operationHandlers[operation.type]
       if (!handler) {
         console.error(`Unknown operation type: ${operation.type}`)
         await removeFromQueue(operation.id)
         continue
       }
-
-      await handler(operation)
-      await removeFromQueue(operation.id)
-      console.log(`Processed operation: ${operation.type}`)
-    } catch (error) {
-      console.error(`Failed to process operation ${operation.id}:`, error)
-      // Keep the operation in the queue for retry
+      try {
+        await handler(operation)
+        await removeFromQueue(operation.id)
+      } catch (error) {
+        // A 4xx will never succeed on retry (e.g. it was edited offline before
+        // its create synced); drop it. Network errors and 5xx stay queued.
+        if (error instanceof HttpError && error.status >= 400 && error.status < 500 && error.status !== 401 && error.status !== 429) {
+          console.error(`Dropping operation ${operation.id}:`, error.message)
+          await removeFromQueue(operation.id)
+          continue
+        }
+        console.error(`Failed to process operation ${operation.id}, will retry:`, error)
+        // Keep order: stop here so later ops don't run before this one
+        break
+      }
     }
-  }
+  })().finally(() => { processing = null })
+  return processing
 }
 
 // Event listeners for online/offline
@@ -183,7 +136,8 @@ let onlineListener: (() => void) | null = null
 let offlineListener: (() => void) | null = null
 
 export const startSyncListener = (onOnline: () => void, onOffline: () => void) => {
-  if (typeof navigator === 'undefined') return
+  if (typeof window === 'undefined') return
+  stopSyncListener()
 
   onlineListener = () => {
     onOnline()
@@ -195,10 +149,13 @@ export const startSyncListener = (onOnline: () => void, onOffline: () => void) =
 
   window.addEventListener('online', onlineListener)
   window.addEventListener('offline', offlineListener)
+
+  // Flush anything left over from a previous session
+  processQueue().catch(console.error)
 }
 
 export const stopSyncListener = () => {
-  if (typeof navigator === 'undefined') return
+  if (typeof window === 'undefined') return
   if (onlineListener) {
     window.removeEventListener('online', onlineListener)
     onlineListener = null

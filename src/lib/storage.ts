@@ -1,179 +1,121 @@
-// IndexedDB storage layer for offline support
+// IndexedDB storage layer for offline support.
+// One database, one connection, shared with the sync queue (syncQueue.ts).
 
 const DB_NAME = 'workspace-db'
-const DB_VERSION = 1
-const STORES = ['threads', 'tasks', 'goals'] as const
+// v2: every store is created in one place. v1 was opened by two modules with
+// different stores, so whichever ran second never got its stores.
+const DB_VERSION = 2
+const DATA_STORES = ['threads', 'tasks', 'goals'] as const
+export const QUEUE_STORE = 'sync-queue'
 
-let db: IDBDatabase | null = null
+type DataStore = typeof DATA_STORES[number]
 
-export const initDB = (): Promise<void> => {
-  return new Promise<void>((resolve, reject) => {
+let dbPromise: Promise<IDBDatabase> | null = null
+
+export const openDB = (): Promise<IDBDatabase> => {
+  if (dbPromise) return dbPromise
+  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
-
     request.onerror = () => {
+      dbPromise = null
       reject(request.error)
     }
-
-    request.onsuccess = () => {
-      db = request.result
-      resolve()
-    }
-
     request.onupgradeneeded = () => {
-      const dbInstance = request.result
-      db = dbInstance
-      STORES.forEach(storeName => {
-        if (!dbInstance.objectStoreNames.contains(storeName)) {
-          dbInstance.createObjectStore(storeName, { keyPath: 'id' })
-        }
-      })
+      const db = request.result
+      for (const name of DATA_STORES) {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(QUEUE_STORE)) {
+        const store = db.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true })
+        store.createIndex('timestamp', 'timestamp', { unique: false })
+      }
     }
+    request.onsuccess = () => resolve(request.result)
+  })
+  return dbPromise
+}
+
+export const initDB = async (): Promise<void> => {
+  await openDB()
+}
+
+/** Test helper: forget the cached connection. */
+export const resetDBConnection = () => {
+  dbPromise?.then(db => db.close()).catch(() => {})
+  dbPromise = null
+}
+
+const txDone = (tx: IDBTransaction) =>
+  new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+
+const normalize = (record: any) => ({ ...record, id: record.id || record._id, _id: record._id || record.id })
+
+const readAll = async (storeName: string): Promise<any[]> => {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(storeName, 'readonly').objectStore(storeName).getAll()
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
   })
 }
 
-const getStore = (mode: IDBTransactionMode = 'readonly') => {
-  if (!db) {
-    throw new Error('Database not initialized')
-  }
-  const transaction = db.transaction([...STORES], mode)
-  return {
-    threads: transaction.objectStore('threads'),
-    tasks: transaction.objectStore('tasks'),
-    goals: transaction.objectStore('goals'),
-    done: () => new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve()
-      transaction.onerror = () => reject(transaction.error)
-    })
+/** Replace the whole store with `records`. */
+const replaceAll = async (storeName: DataStore, records: any[]) => {
+  const db = await openDB()
+  const tx = db.transaction(storeName, 'readwrite')
+  const store = tx.objectStore(storeName)
+  store.clear()
+  for (const r of records) store.put(normalize(r))
+  await txDone(tx)
+}
+
+/** Insert or update `records`, leaving everything else in place. */
+const upsert = async (storeName: DataStore, records: any[]) => {
+  const db = await openDB()
+  const tx = db.transaction(storeName, 'readwrite')
+  const store = tx.objectStore(storeName)
+  for (const r of records) store.put(normalize(r))
+  await txDone(tx)
+}
+
+const remove = async (storeName: DataStore, id: string) => {
+  const db = await openDB()
+  const tx = db.transaction(storeName, 'readwrite')
+  tx.objectStore(storeName).delete(id)
+  await txDone(tx)
+}
+
+const safe = async <T>(label: string, fallback: T, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn()
+  } catch (error) {
+    console.error(`${label}:`, error)
+    return fallback
   }
 }
 
-export const cacheThreads = async (threads: any[]) => {
-  const store = getStore('readwrite')
-  try {
-    // Clear existing entries
-    store.threads.clear()
-    // Add new entries
-    for (const thread of threads) {
-      const normalized = { ...thread, id: thread.id || thread._id, _id: thread._id || thread.id }
-      store.threads.put(normalized)
-    }
-    await store.done()
-  } catch (error) {
-    console.error('Failed to cache threads:', error)
-    throw error
-  }
-}
+// Threads are always fetched as a full list, so the cache mirrors it exactly.
+export const cacheThreads = (threads: any[]) => safe('Failed to cache threads', undefined, () => replaceAll('threads', threads))
+export const upsertCachedThreads = (threads: any[]) => safe('Failed to cache threads', undefined, () => upsert('threads', threads))
+export const removeCachedThread = (id: string) => safe('Failed to remove cached thread', undefined, () => remove('threads', id))
+export const getCachedThreads = () => safe('Failed to get cached threads', [] as any[], () => readAll('threads'))
 
-export const getCachedThreads = async (): Promise<any[]> => {
-  const store = getStore()
-  try {
-    const threads: any[] = []
-    await new Promise<void>((resolve, reject) => {
-      const request = store.threads.openCursor()
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (cursor) {
-          threads.push(cursor.value)
-          cursor.continue()
-        } else {
-          resolve()
-        }
-      }
-      request.onerror = () => reject(request.error)
-    })
-    return threads
-  } catch (error) {
-    console.error('Failed to get cached threads:', error)
-    return []
-  }
-}
+// Tasks are fetched with filters, so a response only covers part of the cache.
+export const cacheTasks = (tasks: any[]) => safe('Failed to cache tasks', undefined, () => upsert('tasks', tasks))
+export const removeCachedTask = (id: string) => safe('Failed to remove cached task', undefined, () => remove('tasks', id))
+export const getCachedTasks = () => safe('Failed to get cached tasks', [] as any[], () => readAll('tasks'))
 
-export const cacheTasks = async (tasks: any[]) => {
-  const store = getStore('readwrite')
-  try {
-    store.tasks.clear()
-    for (const task of tasks) {
-      const normalized = { ...task, id: task.id || task._id, _id: task._id || task.id }
-      store.tasks.put(normalized)
-    }
-    await store.done()
-  } catch (error) {
-    console.error('Failed to cache tasks:', error)
-    throw error
-  }
-}
+export const cacheGoals = (goals: any[]) => safe('Failed to cache goals', undefined, () => replaceAll('goals', goals))
+export const getCachedGoals = () => safe('Failed to get cached goals', [] as any[], () => readAll('goals'))
 
-export const getCachedTasks = async (): Promise<any[]> => {
-  const store = getStore()
-  try {
-    const tasks: any[] = []
-    await new Promise<void>((resolve, reject) => {
-      const request = store.tasks.openCursor()
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (cursor) {
-          tasks.push(cursor.value)
-          cursor.continue()
-        } else {
-          resolve()
-        }
-      }
-      request.onerror = () => reject(request.error)
-    })
-    return tasks
-  } catch (error) {
-    console.error('Failed to get cached tasks:', error)
-    return []
-  }
-}
-
-export const cacheGoals = async (goals: any[]) => {
-  const store = getStore('readwrite')
-  try {
-    store.goals.clear()
-    for (const goal of goals) {
-      store.goals.put(goal)
-    }
-    await store.done()
-  } catch (error) {
-    console.error('Failed to cache goals:', error)
-    throw error
-  }
-}
-
-export const getCachedGoals = async (): Promise<any[]> => {
-  const store = getStore()
-  try {
-    const goals: any[] = []
-    await new Promise<void>((resolve, reject) => {
-      const request = store.goals.openCursor()
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (cursor) {
-          goals.push(cursor.value)
-          cursor.continue()
-        } else {
-          resolve()
-        }
-      }
-      request.onerror = () => reject(request.error)
-    })
-    return goals
-  } catch (error) {
-    console.error('Failed to get cached goals:', error)
-    return []
-  }
-}
-
-export const clearCache = async () => {
-  const store = getStore('readwrite')
-  try {
-    store.threads.clear()
-    store.tasks.clear()
-    store.goals.clear()
-    await store.done()
-  } catch (error) {
-    console.error('Failed to clear cache:', error)
-    throw error
-  }
-}
+export const clearCache = () =>
+  safe('Failed to clear cache', undefined, async () => {
+    const db = await openDB()
+    const tx = db.transaction([...DATA_STORES], 'readwrite')
+    for (const name of DATA_STORES) tx.objectStore(name).clear()
+    await txDone(tx)
+  })

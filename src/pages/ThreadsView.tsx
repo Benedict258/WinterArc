@@ -7,6 +7,7 @@ import { useThreads, useCreateThread, useUpdateThread, useDeleteThread } from '@
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { dueInDays } from '@/lib/utils'
 
 const PREDEFINED_CATEGORIES = ['Role/Program', 'Active Build', 'Learning Track', 'Application/Outreach', 'Other']
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -55,7 +56,7 @@ export default function ThreadsView() {
     priority: 'medium' as 'low' | 'medium' | 'high',
     intensity: 'medium' as 'light' | 'medium' | 'heavy',
     notes: '',
-    taskType: 'discrete' as 'discrete' | 'continuous',
+    taskMode: 'discrete' as 'discrete' | 'continuous',
   })
 
   const extraCategories = Array.from(new Set(threads.map(t => t.category))).filter(c => !PREDEFINED_CATEGORIES.includes(c))
@@ -67,7 +68,7 @@ export default function ThreadsView() {
     setEditId('new')
     setForm({
       name: '', category: '', frequency: '', fixedDay: null, status: 'active',
-      priority: 'medium', intensity: 'medium', notes: '', taskType: 'discrete',
+      priority: 'medium', intensity: 'medium', notes: '', taskMode: 'discrete',
     })
   }
 
@@ -82,7 +83,7 @@ export default function ThreadsView() {
       priority: thread.priority || 'medium',
       intensity: thread.intensity || 'medium',
       notes: thread.notes || '',
-      taskType: thread.taskType || 'discrete',
+      taskMode: thread.taskMode || 'continuous',
     })
   }
 
@@ -99,7 +100,7 @@ export default function ThreadsView() {
       priority: form.priority,
       intensity: form.intensity,
       notes: form.notes,
-      taskType: form.taskType,
+      taskMode: form.taskMode,
     }
     if (editId === 'new') {
       createThread(payload)
@@ -215,10 +216,10 @@ export default function ThreadsView() {
                           {thread.intensity || 'medium'} int
                         </Badge>
                         {(() => {
-                          const queued = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled')
+                          const queued = allTasks.filter(t => t.threadId === thread._id && !t.date && t.status === 'pending')
                           const queueCount = queued.length
                           if (queueCount === 0) return null
-                          const priorityOrder = { high: 0, medium: 1, low: 2 }
+                          const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
                           const sortedQueued = [...queued].sort((a, b) => {
                             const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Infinity
                             const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Infinity
@@ -231,9 +232,7 @@ export default function ThreadsView() {
                           let dueLabel = ''
                           let isOverdue = false
                           if (firstWithDue) {
-                            const minDue = new Date(firstWithDue.dueDate)
-                            const now = new Date()
-                            const diffDays = Math.ceil((minDue.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                            const diffDays = dueInDays(firstWithDue.dueDate) ?? 0
                             if (diffDays < 0) {
                               dueLabel = ` • ${Math.abs(diffDays)}d overdue`
                               isOverdue = true
@@ -265,8 +264,8 @@ export default function ThreadsView() {
                           >
                             + Add task
                           </Button>
-                         {thread.taskType === 'discrete' && (() => {
-                           const queueCount = allTasks.filter(t => t.threadId === thread._id && t.timeBlock === 'unscheduled').length
+                         {thread.taskMode === 'discrete' && (() => {
+                           const queueCount = allTasks.filter(t => t.threadId === thread._id && !t.date && t.status === 'pending').length
                            return queueCount === 0 ? (
                              <p className="text-[11px] text-muted-foreground italic">No tasks queued — add one to see this thread in your week.</p>
                            ) : null
@@ -345,7 +344,7 @@ export default function ThreadsView() {
                   <label className="block text-sm font-medium mb-1">Fixed Day</label>
                   <select
                     value={form.fixedDay ?? ''}
-                    onChange={(e) => setForm(f => ({ ...f, fixedDay: parseInt(e.target.value) || null }))}
+                    onChange={(e) => setForm(f => ({ ...f, fixedDay: e.target.value === '' ? null : Number(e.target.value) }))}
                     className="w-full px-3 py-2 border rounded-md bg-background text-sm"
                   >
                     <option value="">Select day</option>
@@ -400,11 +399,11 @@ export default function ThreadsView() {
                 <label className="block text-sm font-medium mb-1">Task Type</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 text-sm">
-                    <input type="radio" name="taskType" value="discrete" checked={form.taskType === 'discrete'} onChange={() => setForm(f => ({ ...f, taskType: 'discrete' }))} />
+                    <input type="radio" name="taskMode" value="discrete" checked={form.taskMode === 'discrete'} onChange={() => setForm(f => ({ ...f, taskMode: 'discrete' }))} />
                     Discrete
                   </label>
                   <label className="flex items-center gap-2 text-sm">
-                    <input type="radio" name="taskType" value="continuous" checked={form.taskType === 'continuous'} onChange={() => setForm(f => ({ ...f, taskType: 'continuous' }))} />
+                    <input type="radio" name="taskMode" value="continuous" checked={form.taskMode === 'continuous'} onChange={() => setForm(f => ({ ...f, taskMode: 'continuous' }))} />
                     Continuous
                   </label>
                 </div>
@@ -424,7 +423,7 @@ export default function ThreadsView() {
                 <Button type="button" onClick={closeForm} variant="outline" size="sm" disabled={isCreating || isUpdating}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" disabled={isCreating || isUpdating || !form.name || !form.category || !form.frequency || !form.status}>
+                <Button type="submit" size="sm" disabled={isCreating || isUpdating || !form.name || !form.category || !form.frequency || !form.status || (form.frequency === 'fixed-day' && form.fixedDay === null)}>
                   {editId === 'new' ? 'Create' : 'Save'}
                 </Button>
               </div>

@@ -8,10 +8,11 @@ import { useTasks, useUpdateTask, useCreateTask, useDeleteTask } from '@/hooks/u
 import { useThreads } from '@/hooks/useThreads'
 import { useCalendarEvents } from '@/hooks/useCalendar'
 import { useState, useRef } from 'react'
+import { toDayKey, apiDayKey } from '@/lib/utils'
 
 export default function TodayView() {
   const today = new Date()
-  const todayString = today.toISOString().split('T')[0]
+  const todayString = toDayKey(today)
   const quickInputRef = useRef<HTMLInputElement>(null)
   const [quickTitle, setQuickTitle] = useState('')
   const [quickDueDate, setQuickDueDate] = useState('')
@@ -63,7 +64,7 @@ export default function TodayView() {
   }
 
   const isEventConverted = (eventTitle: string) => {
-    return tasks.some((t: any) => t.title === eventTitle && t.date === todayString)
+    return tasks.some((t: any) => t.title === eventTitle && apiDayKey(t.date) === todayString)
   }
 
   const timeBlocks = [

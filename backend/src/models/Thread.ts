@@ -26,6 +26,7 @@ const threadSchema = new mongoose.Schema(
       enum: ['daily', 'multiple', 'weekly', 'fixed-day'],
       required: true,
     },
+    // 0 = Monday … 6 = Sunday
     fixedDay: {
       type: Number,
       min: 0,
