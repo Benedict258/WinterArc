@@ -83,7 +83,7 @@ export const settingsSchema = z.object({
     try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
   }, 'Invalid timezone'),
   weeklyGenerationRules: z.any().optional(),
-  multipleThreadsPerWeekTarget: z.number().int().positive(),
+  multipleThreadsPerWeekTarget: z.number().int().min(1).max(7),
   gridBalancing: gridBalancingSchema.optional(),
 });
 export const settingsUpdateSchema = settingsSchema.partial();

@@ -142,6 +142,8 @@ export const useCreateThread = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['thread'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Thread created',
@@ -210,6 +212,8 @@ export const useUpdateThread = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['thread'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Thread updated',
@@ -270,6 +274,8 @@ export const useDeleteThread = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
+      queryClient.invalidateQueries({ queryKey: ['thread'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['week'] });
       toast({
         title: 'Thread deleted',

@@ -4,36 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0b1220" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Workspace</title>
+    <title>WinterArc</title>
     <meta name="description" content="Task, schedule, and habit tracker hub with calendar integration, weekly grid planning, and backlog management" />
-    <meta property="og:title" content="Workspace" />
+    <meta property="og:title" content="WinterArc" />
     <meta property="og:description" content="Task, schedule, and habit tracker hub with calendar integration, weekly grid planning, and backlog management" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Handle PWA installation
-      let deferredPrompt;
-      const installButton = document.getElementById('pwa-install-button');
+      // Stash the install prompt where Settings → Install App can use it
       window.addEventListener('beforeinstallprompt', (e) => {
-        // Prevent the mini-infobar from appearing on mobile
         e.preventDefault();
-        // Stash the event so it can be triggered later.
-        deferredPrompt = e;
-        // Update UI to show the install button
-        if (installButton) {
-          installButton.style.display = 'block';
-        }
+        window.deferredPrompt = e;
       });
-      window.addEventListener('appinstalled', (e) => {
-        // Clear deferredPrompt so it can be garbage collected
-        deferredPrompt = null;
-        // Hide the install button
-        if (installButton) {
-          installButton.style.display = 'none';
-        }
+      window.addEventListener('appinstalled', () => {
+        window.deferredPrompt = null;
       });
     </script>
   </body>

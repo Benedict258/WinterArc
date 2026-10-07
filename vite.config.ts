@@ -15,6 +15,8 @@ export default defineConfig({
       },
       manifest: false, // Custom manifest in public/manifest.json
       workbox: {
+        // Never answer /api navigations (e.g. export download) with the SPA shell
+        navigateFallbackDenylist: [/^\/api\//],
         additionalManifestEntries: [
           { url: '/', revision: '1' },
         ],

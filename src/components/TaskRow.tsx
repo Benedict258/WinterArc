@@ -74,7 +74,7 @@ export default function TaskRow({
           {dueCountdown.label}
         </span>
       )}
-      {task.threadId && (
+      {task.threadId && task.threadName !== task.title && (
         <span className="text-xs text-muted-foreground hidden sm:inline shrink-0">
           [{task.threadName}]
         </span>

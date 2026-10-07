@@ -8,6 +8,7 @@ import { useCalendar } from '@/hooks/useCalendar'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
+import { toDayKey } from '@/lib/utils'
 
 export default function SettingsView() {
   const { logout } = useAuth()
@@ -21,8 +22,6 @@ export default function SettingsView() {
   const {
     calendarStatus,
     lastSyncedAt,
-    connectCalendar,
-    isConnecting,
     disconnectCalendar,
     isDisconnecting,
     syncCalendar,
@@ -73,26 +72,16 @@ export default function SettingsView() {
 
   const handleExportData = async () => {
     try {
-      const [threadsRes, tasksRes, goalsRes, wishlistRes, settingsRes] = await Promise.all([
-        fetch('/api/threads'),
-        fetch('/api/tasks'),
-        fetch('/api/goals'),
-        fetch('/api/wishlist'),
-        fetch('/api/settings'),
-      ])
-      const exportData = {
-        threads: await threadsRes.json(),
-        tasks: await tasksRes.json(),
-        goals: await goalsRes.json(),
-        wishlist: await wishlistRes.json(),
-        settings: await settingsRes.json(),
-        exportedAt: new Date().toISOString(),
-      }
+      // Server-side export includes archived threads; fail loudly rather than
+      // saving an error body as a "backup"
+      const res = await fetch('/api/export')
+      if (!res.ok) throw new Error(`Export failed: ${res.status}`)
+      const exportData = await res.json()
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `workspace-backup-${new Date().toISOString().split('T')[0]}.json`
+      a.download = `winterarc-backup-${toDayKey()}.json`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -213,10 +202,14 @@ export default function SettingsView() {
 
                   <div className="flex flex-wrap gap-3 mt-4">
                     {calendarStatus === 'disconnected' ? (
-                      <Button onClick={() => connectCalendar()} disabled={isConnecting} className="gap-2">
-                        <Cloud size={16} />
-                        {isConnecting ? 'Connecting...' : 'Connect Google Calendar'}
-                      </Button>
+                      // Google OAuth isn't implemented on the server yet
+                      <div className="space-y-2">
+                        <Button disabled className="gap-2">
+                          <Cloud size={16} />
+                          Connect Google Calendar
+                        </Button>
+                        <p className="text-xs text-muted-foreground">Calendar sync isn't available yet.</p>
+                      </div>
                     ) : (
                       <>
                         <Button 

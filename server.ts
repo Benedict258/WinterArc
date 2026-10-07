@@ -13,7 +13,7 @@ import { Goal } from './backend/src/models/Goal.ts'
 import { Settings } from './backend/src/models/Settings.ts'
 import { CalendarSync } from './backend/src/models/CalendarSync.ts'
 import { DropItem } from './backend/src/models/DropItem.ts'
-import { getPresignedPutUrl, getPresignedGetUrl, deleteS3Object } from './backend/src/services/s3.ts'
+import { getPresignedPutUrl, getPresignedGetUrl, deleteS3Object, isStorageConfigured, StorageNotConfiguredError } from './backend/src/services/s3.ts'
 import { v4 as uuidv4 } from 'uuid'
 
 import * as threadService from './backend/src/services/threadService.ts'
@@ -182,26 +182,50 @@ async function seedIfEmpty() {
 // ============================================
 const LOGIN_WINDOW_MS = 15 * 60 * 1000
 const LOGIN_MAX_FAILURES = 5
+// Behind Vercel → Render the client IP comes from X-Forwarded-For, which a
+// request sent straight to Render can forge. The global cap bounds brute
+// force even if per-IP keys are spoofed.
+const LOGIN_MAX_GLOBAL_FAILURES = 50
+const GLOBAL_KEY = '__global__'
 const loginFailures = new Map<string, { count: number; first: number }>()
 
-function loginBlocked(ip: string) {
-  const entry = loginFailures.get(ip)
-  if (!entry) return false
+function failureCount(key: string) {
+  const entry = loginFailures.get(key)
+  if (!entry) return 0
   if (Date.now() - entry.first > LOGIN_WINDOW_MS) {
-    loginFailures.delete(ip)
-    return false
+    loginFailures.delete(key)
+    return 0
   }
-  return entry.count >= LOGIN_MAX_FAILURES
+  return entry.count
+}
+
+function loginBlocked(ip: string) {
+  return failureCount(ip) >= LOGIN_MAX_FAILURES || failureCount(GLOBAL_KEY) >= LOGIN_MAX_GLOBAL_FAILURES
 }
 
 function recordLoginFailure(ip: string) {
-  const entry = loginFailures.get(ip)
-  if (!entry || Date.now() - entry.first > LOGIN_WINDOW_MS) {
-    loginFailures.set(ip, { count: 1, first: Date.now() })
-  } else {
-    entry.count++
+  for (const key of [ip, GLOBAL_KEY]) {
+    const entry = loginFailures.get(key)
+    if (!entry || Date.now() - entry.first > LOGIN_WINDOW_MS) {
+      loginFailures.set(key, { count: 1, first: Date.now() })
+    } else {
+      entry.count++
+    }
   }
 }
+
+/** Number of proxy hops in front of the app (Render = 1; Vercel → Render = 2). */
+function trustProxySetting() {
+  const raw = process.env.TRUST_PROXY
+  if (!raw) return 1
+  if (/^\d+$/.test(raw)) return Number(raw)
+  return raw === 'true' ? true : raw
+}
+
+const ALLOWED_ORIGINS = (process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev')
+  .split(',')
+  .map(s => s.trim().replace(/\/$/, ''))
+  .filter(Boolean)
 
 function passcodeMatches(input: string) {
   const expected = crypto.createHash('sha256').update(process.env.APP_PASSCODE!).digest()
@@ -213,6 +237,10 @@ const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error'
+}
+
+function storageErrorStatus(error: unknown) {
+  return error instanceof StorageNotConfiguredError ? 503 : 500
 }
 
 async function startServer() {
@@ -227,7 +255,7 @@ async function startServer() {
   }
 
   const app = express()
-  app.set('trust proxy', 1)
+  app.set('trust proxy', trustProxySetting())
   app.disable('x-powered-by')
 
   app.use((req, res, next) => {
@@ -238,8 +266,10 @@ async function startServer() {
     next()
   })
 
+  // The frontend normally calls /api through a same-origin proxy (Vercel
+  // rewrite), so CORS only matters if it's pointed straight at this server.
   app.use(cors({
-    origin: process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev',
+    origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.includes(origin)),
     credentials: true,
   }))
   app.use(express.json({ limit: '1mb' }))
@@ -299,10 +329,11 @@ async function startServer() {
   // HEALTH CHECK
   // ============================================
   app.get('/api/health', (req, res) => {
-    res.json({
-      status: 'ok',
+    const mongoConnected = mongoose.connection.readyState === 1
+    res.status(mongoConnected ? 200 : 503).json({
+      status: mongoConnected ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
-      mongoConnected: mongoose.connection.readyState === 1,
+      mongoConnected,
     })
   })
 
@@ -686,6 +717,10 @@ async function startServer() {
   // ============================================
   // DROP ENDPOINTS
   // ============================================
+  app.get('/api/drop/status', (req, res) => {
+    res.json({ storageConfigured: isStorageConfigured() })
+  })
+
   app.post('/api/drop/upload-url', validateRequest(dropUploadUrlSchema), async (req, res) => {
     try {
       const { fileName, mimeType, fileSize } = req.body
@@ -697,7 +732,7 @@ async function startServer() {
       const url = await getPresignedPutUrl(key, mimeType, 300)
       res.json({ uploadUrl: url, s3Key: key })
     } catch (error) {
-      res.status(500).json({ error: errorMessage(error) })
+      res.status(storageErrorStatus(error)).json({ error: errorMessage(error) })
     }
   })
 
@@ -740,7 +775,7 @@ async function startServer() {
       const url = await getPresignedGetUrl(item.s3Key, 300)
       res.json({ downloadUrl: url })
     } catch (error) {
-      res.status(500).json({ error: errorMessage(error) })
+      res.status(storageErrorStatus(error)).json({ error: errorMessage(error) })
     }
   })
 
@@ -898,11 +933,28 @@ async function startServer() {
       appType: 'spa',
     })
     app.use(vite.middlewares)
-  } else {
+  } else if (existsSync(path.join(process.cwd(), 'dist', 'index.html'))) {
+    // Single-service deploy: this server also hosts the built frontend.
+    // On Render behind Vercel only the API is built, so this is skipped.
     const distPath = path.join(process.cwd(), 'dist')
-    app.use(express.static(distPath, { index: false }))
+    app.use(express.static(distPath, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        // Service worker and HTML must revalidate so updates roll out
+        if (/(sw\.js|registerSW\.js|index\.html|manifest\.json)$/.test(filePath)) {
+          res.setHeader('Cache-Control', 'no-cache')
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        }
+      },
+    }))
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache')
       res.sendFile(path.join(distPath, 'index.html'))
+    })
+  } else {
+    app.get('/', (req, res) => {
+      res.json({ service: 'winterarc-api', health: '/api/health' })
     })
   }
 

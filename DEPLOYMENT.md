@@ -1,345 +1,139 @@
-# Deployment Guide — Workspace v1
+# Deploying WinterArc (Vercel + Render)
 
-Target: **https://workspace.benedictisaac.dev**
-Stack: Vite + React PWA (frontend) + Express API + MongoDB Atlas (database)
+```
+browser ──► Vercel (static React app, PWA)
+              │  /api/*  rewritten (proxied) to ──► Render (Express API) ──► MongoDB Atlas
+              │                                            └─► S3 / R2 (Drop files, presigned URLs)
+```
+
+- **Vercel** serves the built frontend from `dist/` and proxies every `/api/*`
+  request to Render (`vercel.json`). The browser only ever talks to one origin,
+  so the session cookie is first-party and `SameSite=Lax` keeps working.
+- **Render** runs `dist/server.cjs` — API only (`render.yaml`).
+- **MongoDB Atlas** stays where it is.
+- **Drop files** go straight from the browser to an S3-compatible bucket via
+  presigned URLs. AWS S3 still works from Render; if you're leaving AWS
+  entirely, use Cloudflare R2 (free tier, S3-compatible) — just set `S3_ENDPOINT`.
 
 ---
 
-## Architecture
+## 1. MongoDB Atlas
 
-```
-Internet → Cloudflare DNS → EC2 (Nginx :443 reverse proxy)
-                              ↓
-                          Node.js app (PM2, :3000)
-                              ↓
-                       MongoDB Atlas
+1. **Rotate the database password** (the old one is in git history).
+   Atlas → Database Access → edit user → new password.
+2. **Network Access** → add `0.0.0.0/0`. Render's free tier has no fixed
+   outbound IPs, so the old EC2 IP allow-list won't work.
+
+## 2. Render (API)
+
+1. Render dashboard → **New → Blueprint** → pick the `Benedict258/WinterArc` repo.
+   It reads `render.yaml` and creates the `winterarc-api` web service.
+2. When asked, fill in the secret env vars:
+
+   | Key | Value |
+   |---|---|
+   | `MONGO_URI` | Atlas connection string (with the **new** password) |
+   | `APP_PASSCODE` | your lock-screen passcode |
+   | `S3_DROP_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | storage (see §4); leave empty to run without file uploads |
+   | `S3_ENDPOINT` | empty for AWS, `https://<account-id>.r2.cloudflarestorage.com` for R2 |
+
+   `SESSION_SECRET` is generated automatically; `NODE_ENV`, `TRUST_PROXY=2`
+   and `FRONTEND_ORIGIN` are preset.
+3. Deploy, then check `https://winterarc-api.onrender.com/api/health`
+   → `{"status":"ok","mongoConnected":true}`.
+
+   If Render gave the service a different URL (name taken), update the
+   `destination` in `vercel.json` to match.
+
+**Free plan note:** the service sleeps after 15 min idle and takes ~30–60 s
+to wake. Today's schedule is still generated on the first request after it
+wakes, so nothing is missed. To avoid the wake-up delay, either use a paid
+instance or point a free uptime pinger (e.g. cron-job.org) at `/api/health`
+every 10 minutes.
+
+## 3. Vercel (frontend)
+
+1. Vercel → **Add New → Project** → import `Benedict258/WinterArc`.
+2. Framework preset, build command and output dir come from `vercel.json`
+   (Vite, `npm run build:client`, `dist`). No env vars needed — leave
+   `VITE_API_URL` unset.
+3. Deploy, open the `*.vercel.app` URL and log in.
+4. **Domain:** Project → Settings → Domains → add
+   `winterarc.benedictisaac.dev`, then update the DNS record at your registrar
+   as Vercel instructs (replacing the old EC2 A record).
+
+## 4. Drop storage
+
+Whichever provider you use, the bucket needs a **CORS rule** so the browser
+can upload/download directly:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://winterarc.benedictisaac.dev", "https://<your-project>.vercel.app"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "MaxAgeSeconds": 3000
+  }
+]
 ```
 
-EC2 runs Nginx (HTTPS + static + reverse proxy) + Node.js app via PM2. Free tier eligible (t2.micro/t3.micro for 1 year).
+- **AWS S3 (keep existing `winterarc-drop` bucket):** S3 → bucket →
+  Permissions → CORS → paste the above (replace the old origin). Use an IAM
+  user limited to `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` on
+  `arn:aws:s3:::winterarc-drop/drop/*`.
+- **Cloudflare R2:** create bucket → Settings → CORS policy (same rule) →
+  R2 API token with Object Read & Write on that bucket. Set
+  `S3_REGION=auto` and `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`.
+  Existing files in S3 aren't copied; drops expire after 30 days anyway.
+
+Drop items expire after 30 days (Mongo TTL). With R2/S3 you can add a
+30-day lifecycle rule on the `drop/` prefix to delete the files too.
+
+## 5. One-time data cleanup
+
+The old weekly generator left bare thread-name tasks in the database. Before
+the first request hits the new API (or right after), run locally with the
+production `MONGO_URI` in `.env`:
+
+```bash
+npm run cleanup:legacy-grid            # dry run — shows what it would delete
+npm run cleanup:legacy-grid -- --apply
+```
+
+## 6. Retire AWS
+
+Once Vercel + Render are serving the domain:
+
+- `pm2 delete workspace` on the EC2 box, then stop/terminate the instance
+  and release its Elastic IP.
+- Delete the EC2 key pair (`WinterArc.pem`) in AWS and locally.
+- If you moved Drop to R2: delete the S3 bucket and the IAM user's keys.
 
 ---
 
-## EC2 Setup (Ubuntu 22.04 LTS)
-
-### 1. Launch EC2 Instance
-
-- AWS Console → EC2 → **Launch Instance**
-- **AMI:** Ubuntu Server 22.04 LTS (free tier eligible)
-- **Instance type:** `t3.micro` (1 GB RAM — sufficient; or `t3.small` for headroom)
-- **Key pair:** create or select existing `.pem` (you'll need this to SSH)
-- **Network settings:**
-  - Allow SSH (22) from your IP
-  - Allow HTTPS (443) from anywhere (0.0.0.0/0)
-  - Allow HTTP (80) from anywhere (for Let's Encrypt challenge)
-- **Storage:** 20 GB gp3 (default 8 GB is too tight)
-- **Elastic IP:** allocate and associate (so the IP doesn't change on reboot)
-
-### 2. SSH In & Install Dependencies
+## Local development
 
 ```bash
-ssh -i ~/path/to/your-key.pem ubuntu@<EC2_PUBLIC_IP>
-
-sudo apt update && sudo apt upgrade -y
-
-# Node.js 20 (via NodeSource)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# PM2 (process manager — keeps app alive, auto-restart)
-sudo npm install -g pm2
-
-# Nginx (reverse proxy + static + HTTPS)
-sudo apt install -y nginx
-
-# Certbot (Let's Encrypt)
-sudo apt install -y certbot python3-certbot-nginx
-
-# Build tools (for native modules)
-sudo apt install -y build-essential
-```
-
-### 3. Deploy the App
-
-```bash
-# Clone your repo
-cd ~
-git clone https://github.com/Benedict258/Workspace.git app
-cd app
-
-# Install deps + build
+cp .env.example .env    # fill in MONGO_URI, APP_PASSCODE
 npm install
-npm run build
-
-# Verify the build
-ls dist/        # should have index.html, assets/, server.cjs, sw.js, workbox-*.js
+npm run dev             # http://localhost:3000 (API + Vite dev server)
+npm test                # unit tests
+npm run typecheck
 ```
 
-### 4. Configure Environment
+`.env` points wherever `MONGO_URI` says — use a separate dev database,
+not production.
 
-```bash
-# Create .env (NEVER commit this)
-nano .env
-```
+## Environment variables
 
-Paste (using your actual values):
-
-```env
-NODE_ENV=production
-MONGO_URI=mongodb+srv://benedictisaac258_db_user:<YOUR_PASSWORD>@workspace.jwh4owf.mongodb.net/workspace
-FRONTEND_ORIGIN=https://winterarc.benedictisaac.dev
-# Required. Passcode for the lock screen.
-APP_PASSCODE=<your-passcode>
-# Required in production, 32+ chars. Generate with: openssl rand -hex 32
-SESSION_SECRET=<random-64-hex-chars>
-# S3 for Drop
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=<key-id>
-AWS_SECRET_ACCESS_KEY=<secret>
-S3_DROP_BUCKET=winterarc-drop
-GOOGLE_CLIENT_ID=<your-google-oauth-client-id>
-GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
-GOOGLE_REDIRECT_URI=https://workspace.benedictisaac.dev/api/calendar/callback
-```
-
-```bash
-# Restrict permissions
-chmod 600 .env
-
-# Test that it starts
-node dist/server.cjs
-# Should print "MongoDB connected" + "Workspace full-stack app running on http://0.0.0.0:3000"
-# Ctrl+C to stop
-```
-
-### 5. Start with PM2
-
-```bash
-# Start in background, auto-restart on crash
-pm2 start dist/server.cjs --name workspace --env production
-
-# Save the process list so it survives reboot
-pm2 save
-
-# Enable systemd startup script
-pm2 startup systemd
-# Copy-paste the command it prints (it adds a systemd service for PM2)
-
-# Useful PM2 commands
-pm2 status
-pm2 logs workspace
-pm2 restart workspace
-pm2 stop workspace
-```
-
-### 6. Configure Nginx
-
-```bash
-sudo nano /etc/nginx/sites-available/workspace
-```
-
-Paste (replace `your-ec2-ip-or-domain` with the placeholder; we'll add the real domain after certs):
-
-```nginx
-server {
-    listen 80;
-    server_name workspace.benedictisaac.dev;
-
-    # Allow large uploads (calendar sync payloads, etc.)
-    client_max_body_size 10M;
-
-    # Reverse-proxy all /api/* to Node
-    location /api/ {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-    }
-
-    # Everything else → Node (it serves the SPA + service worker)
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-```bash
-# Enable the site
-sudo ln -s /etc/nginx/sites-available/workspace /etc/nginx/sites-enabled/
-sudo rm /etc/nginx/sites-enabled/default   # remove default site
-sudo nginx -t                              # test config
-sudo systemctl reload nginx
-```
-
-### 7. DNS — Point Your Domain
-
-In your DNS provider (Cloudflare, Namecheap, Route53, etc.):
-
-- **A record:** `workspace.benedictisaac.dev` → `<EC2_ELASTIC_IP>`
-
-Wait 1–5 min for propagation.
-
-### 8. HTTPS with Let's Encrypt
-
-```bash
-sudo certbot --nginx -d workspace.benedictisaac.dev
-```
-
-Certbot will:
-- Issue a cert
-- Modify your Nginx config to redirect HTTP → HTTPS
-- Set up auto-renewal via systemd timer
-
-Verify auto-renewal:
-
-```bash
-sudo systemctl status certbot.timer
-sudo certbot renew --dry-run
-```
-
-### 9. Atlas Network Access
-
-**Critical:** the EC2 instance's outbound IP must be allowed.
-
-- Atlas → Network Access → **Add IP Address**
-- Easiest: `0.0.0.0/0` (allows any IP — fine for a single-user app)
-- Better: add the **Elastic IP** of your EC2 instance
-
-### 10. Final Verify
-
-```bash
-# From your laptop
-curl https://workspace.benedictisaac.dev/api/health
-# Expected: {"status":"ok","timestamp":"...","mongoConnected":true}
-```
-
-Open https://workspace.benedictisaac.dev in browser:
-- Passcode gate appears (`BenedictIsaac#258`)
-- Today / Week / Goals views show live Atlas data
-- 30 seeded threads visible in Threads view
-- 3 seeded wishlist items + 3 goals visible
-
----
-
-## Ongoing Operations
-
-### Deploy updates
-
-```bash
-ssh -i ~/path/to/key.pem ubuntu@<EC2_IP>
-cd ~/app
-git pull origin main
-npm install         # if deps changed
-npm run build       # rebuild
-pm2 restart workspace
-```
-
-### View logs
-
-```bash
-pm2 logs workspace           # live tail
-pm2 logs workspace --lines 200
-```
-
-### MongoDB backup (recommended)
-
-Atlas → Cluster → **Backup** → Continuous backup is enabled by default on M10+ tiers (M0 free tier has daily snapshots only, retained 2 days).
-
-For the free tier:
-- **Manual export:** Atlas → Cluster → Collections → Export → Connect with `mongosh` or Compass
-- **Automated:** set up a cron on EC2:
-
-```bash
-mkdir -p ~/backups
-0 3 * * * cd ~/app && node -e "
-const {execSync} = require('child_process');
-const ts = new Date().toISOString().split('T')[0];
-execSync(\`mongodump --uri=\${process.env.MONGO_URI} --out=~/backups/\${ts}\`);
-" >> ~/backups/cron.log 2>&1
-```
-
-### Security hardening (5 min, worth it)
-
-```bash
-# UFW firewall
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw enable
-
-# Disable root login & password auth (key-only)
-sudo nano /etc/ssh/sshd_config
-# Set: PasswordAuthentication no, PermitRootLogin no
-sudo systemctl restart sshd
-
-# Automatic security updates
-sudo apt install -y unattended-upgrades
-sudo dpkg-reconfigure -plow unattended-upgrades
-```
-
-### Monitoring (free)
-
-- **Uptime:** UptimeRobot free tier → ping `https://workspace.benedictisaac.dev/api/health` every 5 min
-- **Server:** PM2 has built-in monitoring (`pm2 monit`)
-- **CloudWatch:** install the SSM agent for OS-level metrics (optional)
-
----
-
-## Cost Estimate
-
-| Service | Free Tier | Paid |
+| Key | Required | Notes |
 |---|---|---|
-| EC2 t3.micro | 750 hr/mo for 12 months | ~$8/mo after |
-| EBS 20 GB | 30 GB free | ~$2/mo |
-| Elastic IP | Free while attached | — |
-| Route 53 (if used) | — | ~$0.50/mo per zone |
-| Let's Encrypt | Free forever | — |
-| MongoDB Atlas M0 | 512 MB free forever | — |
-| Cloudflare DNS (optional) | Free | — |
-| **Total year 1** | **~$0–$4/mo** | |
-| **Total year 2+** | | **~$10–12/mo** |
-
----
-
-## Rollback
-
-The deploy process is **atomic** via PM2:
-
-```bash
-# Find previous version
-git log --oneline -5
-git checkout <previous-commit>
-npm run build
-pm2 restart workspace
-```
-
-The MongoDB seed function is **idempotent** (only inserts when collections empty), so redeploys never duplicate data.
-
----
-
-## Troubleshooting
-
-**App won't start:**
-```bash
-pm2 logs workspace --lines 50   # check error
-node dist/server.cjs             # run in foreground to see the error
-```
-
-**MongoDB connection fails:**
-- Atlas → Network Access — verify EC2's Elastic IP is whitelisted
-- Check `MONGO_URI` is correct in `.env`
-
-**Cert renewal fails:**
-```bash
-sudo certbot renew --dry-run
-sudo systemctl status certbot.timer
-```
-
-**Nginx 502 Bad Gateway:**
-- App isn't running: `pm2 status`
-- Port mismatch: `sudo ss -tlnp | grep 3000`
+| `MONGO_URI` | yes | |
+| `APP_PASSCODE` | yes | |
+| `SESSION_SECRET` | prod | 32+ chars |
+| `TRUST_PROXY` | | proxy hops: `2` behind Vercel→Render, `1` default |
+| `FRONTEND_ORIGIN` | | comma-separated CORS origins |
+| `PORT` | | set by Render; default 3000 |
+| `S3_DROP_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for Drop files | `AWS_*` names also accepted |
+| `S3_REGION`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | | for non-AWS providers |

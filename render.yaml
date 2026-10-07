@@ -1,0 +1,41 @@
+# Render Blueprint for the WinterArc API (Express + MongoDB).
+# The frontend is deployed separately on Vercel, which proxies /api/* here
+# (see vercel.json). If you rename the service, update the URL in vercel.json.
+services:
+  - type: web
+    name: winterarc-api
+    runtime: node
+    plan: free
+    region: frankfurt # closest Render region to Lagos
+    # NODE_ENV=production makes npm skip devDependencies; esbuild is one.
+    buildCommand: npm ci --include=dev && npm run build:server
+    startCommand: node dist/server.cjs
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Vercel proxy + Render load balancer
+      - key: TRUST_PROXY
+        value: "2"
+      - key: FRONTEND_ORIGIN
+        value: https://winterarc.benedictisaac.dev
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MONGO_URI
+        sync: false
+      - key: APP_PASSCODE
+        sync: false
+      # Drop file storage (AWS S3 or any S3-compatible store, e.g. Cloudflare R2)
+      - key: S3_DROP_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false

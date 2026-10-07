@@ -56,7 +56,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     return localStorage.getItem(SIDEBAR_EXPANDED_KEY) === 'true'
   })
 
-  const desktopExpanded = pinnedExpanded
+  // Opened on mobile → show the full labelled menu
+  const desktopExpanded = pinnedExpanded || mobileOpen
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -89,7 +90,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         )}
         aria-expanded={desktopExpanded}
       >
-        <div className="flex flex-col h-full p-3 gap-4">
+        <div className="flex flex-col h-full p-3 pt-16 md:pt-3 gap-4 overflow-y-auto">
           <button
             onClick={() => setPinnedExpanded(prev => !prev)}
             className={cn(
@@ -154,6 +155,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </button>
 
           <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={cn(
+              'flex items-center gap-2 rounded-lg transition-colors border border-transparent hover:border-border',
+              'text-muted-foreground hover:text-foreground hover:bg-secondary text-xs',
+              desktopExpanded
+                ? 'px-3 py-2 justify-start'
+                : 'p-2 justify-center'
+            )}
+            title="Toggle theme"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            {desktopExpanded && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
+          </button>
+
+          <button
             onClick={() => logout()}
             className={cn(
               'flex items-center gap-2 rounded-lg transition-colors border border-transparent hover:border-border',
@@ -200,11 +217,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         />
       )}
 
-      <div className="flex-1 min-w-0">
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+      <div className="flex-1 min-w-0 h-full overflow-y-auto">
+        <main className="p-4 pt-16 sm:p-6 sm:pt-16 md:pt-6">{children}</main>
 
-        {/* Floating top-right controls */}
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+        {/* Floating top-right controls (mobile only; on desktop they live in the sidebar
+            so they don't cover page header buttons) */}
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 md:hidden">
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="p-2.5 bg-card border border-border rounded-xl shadow-sm hover:bg-secondary transition-colors"

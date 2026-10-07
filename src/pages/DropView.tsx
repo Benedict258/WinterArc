@@ -29,6 +29,15 @@ export default function DropView() {
   const [imgUrls, setImgUrls] = useState<Record<string,string>>({})
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
 
+  const [storageConfigured, setStorageConfigured] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    fetch('/api/drop/status')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => d && setStorageConfigured(!!d.storageConfigured))
+      .catch(() => {})
+  }, [])
+
   const fetchItems = async () => {
     try {
       const res = await fetch('/api/drop')
@@ -83,7 +92,10 @@ export default function DropView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileName: file.name, mimeType, fileSize: file.size })
       })
-      if (!metaRes.ok) throw new Error('Upload URL failed')
+      if (!metaRes.ok) {
+        const body = await metaRes.json().catch(() => ({}))
+        throw new Error(body.error || 'Upload URL failed')
+      }
       const { uploadUrl, s3Key } = await metaRes.json()
       const putRes = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': mimeType } })
       if (!putRes.ok) throw new Error('S3 upload failed')
@@ -196,10 +208,15 @@ export default function DropView() {
 
   return (
     <MainLayout>
-      <div className="h-[calc(100vh-2rem)] max-w-3xl mx-auto flex flex-col">
+      <div className="h-[calc(100dvh-5.5rem)] md:h-[calc(100dvh-3rem)] max-w-3xl mx-auto flex flex-col">
         <div className="mb-3">
           <h1 className="text-2xl font-bold">Drop</h1>
           <p className="text-sm text-muted-foreground">Your self-chat across devices</p>
+          {storageConfigured === false && (
+            <p className="mt-2 text-xs rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-300">
+              File storage isn't configured on the server, so file uploads are off. Text and links still work.
+            </p>
+          )}
         </div>
 
         <div
