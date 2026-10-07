@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://winterarc-api.onrender.com/api/:path*"
+      "destination": "https://winterarc-f74u.onrender.com/api/:path*"
     },
     {
       "source": "/((?!api/).*)",

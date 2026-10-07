@@ -1,6 +1,6 @@
 # Render Blueprint for the WinterArc API (Express + MongoDB).
 # The frontend is deployed separately on Vercel, which proxies /api/* here
-# (see vercel.json). If you rename the service, update the URL in vercel.json.
+# (see vercel.json → https://winterarc-f74u.onrender.com). If the URL changes, update vercel.json.
 services:
   - type: web
     name: winterarc-api

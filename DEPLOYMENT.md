@@ -45,7 +45,7 @@ browser ──► Vercel (static React app, PWA)
 
    `SESSION_SECRET` is generated automatically; `NODE_ENV`, `TRUST_PROXY=2`
    and `FRONTEND_ORIGIN` are preset.
-3. Deploy, then check `https://winterarc-api.onrender.com/api/health`
+3. Deploy, then check `https://winterarc-f74u.onrender.com/api/health`
    → `{"status":"ok","mongoConnected":true}`.
 
    If Render gave the service a different URL (name taken), update the
