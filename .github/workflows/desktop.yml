@@ -1,0 +1,93 @@
+name: Desktop app
+
+# Builds the WinterArc desktop app (Tauri shell around the live site) for
+# Windows, macOS and Linux and publishes the installers as a GitHub Release.
+# The app loads the live site, so it only needs rebuilding when desktop/
+# changes — website updates reach the app automatically.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ''
+          - platform: macos-latest # Apple Silicon
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-13 # Intel
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux build dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build installers
+        working-directory: desktop
+        run: cargo tauri build ${{ matrix.args }}
+
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p out
+          find desktop/src-tauri/target -path '*/release/bundle/*' -type f \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) \
+            -exec cp {} out/ \;
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinterArc-desktop-${{ matrix.platform }}
+          path: out/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-v1.0.${{ github.run_number }}
+          name: WinterArc Desktop 1.0.${{ github.run_number }}
+          body: |
+            **Windows:** download the `*-setup.exe` and run it. Windows may show
+            "Windows protected your PC" because the installer isn't code-signed —
+            click **More info → Run anyway**.
+
+            **macOS:** `aarch64` = Apple Silicon (M1/M2/M3…), `x64` = Intel. Open the
+            `.dmg`, drag WinterArc to Applications, then right-click → **Open** the
+            first time (the app isn't notarized).
+
+            **Linux:** `.AppImage` (any distro), `.deb` (Debian/Ubuntu) or `.rpm` (Fedora).
+          files: out/*

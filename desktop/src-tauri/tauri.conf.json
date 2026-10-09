@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "WinterArc",
+  "version": "1.0.0",
+  "identifier": "dev.benedictisaac.winterarc",
+  "build": {
+    "frontendDist": "https://winterarc.benedictisaac.dev"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Personal task, schedule & thread tracker",
+    "longDescription": "WinterArc — your threads, daily schedule, week plan, backlog and Drop in one place.",
+    "copyright": "© Benedict Isaac",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}
