@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Cloud, Download, Upload, Lock, ShieldCheck, RefreshCw, CheckCircle2, AlertCircle, Sliders } from 'lucide-react'
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings'
-import { useGridSettings, useUpdateGridSettings, useRebalanceToday } from '@/hooks/useGrid'
+import { useGridSettings, useUpdateGridSettings, useRebalanceWeek } from '@/hooks/useGrid'
 import { useCalendar } from '@/hooks/useCalendar'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
@@ -34,7 +34,7 @@ export default function SettingsView() {
 
   const { data: gridBalancing } = useGridSettings()
   const { mutate: updateGridBalancing } = useUpdateGridSettings()
-  const { mutate: rebalanceToday, isPending: isRebalancing } = useRebalanceToday()
+  const { mutate: rebalanceWeek, isPending: isRebalancing } = useRebalanceWeek()
   const [editMaxDailyIntensity, setEditMaxDailyIntensity] = useState(6)
   const [editPreferLow, setEditPreferLow] = useState(true)
   const [gridDirty, setGridDirty] = useState(false)
@@ -350,13 +350,13 @@ export default function SettingsView() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => rebalanceToday()}
+                    onClick={() => rebalanceWeek()}
                     disabled={isRebalancing || gridDirty}
-                    title={gridDirty ? 'Save first' : 'Re-plan today with these limits'}
+                    title={gridDirty ? 'Save first' : 'Re-plan this week with these limits'}
                     className="gap-1.5"
                   >
                     <RefreshCw size={14} className={isRebalancing ? 'animate-spin' : ''} />
-                    {isRebalancing ? 'Rebalancing…' : 'Rebalance today'}
+                    {isRebalancing ? 'Rebalancing…' : 'Rebalance week'}
                   </Button>
                   <Button
                     size="sm"

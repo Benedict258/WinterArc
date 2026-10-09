@@ -499,22 +499,33 @@ export async function forecastWeek(requestedWeekKey: string, now = new Date()): 
 
 export type RebalanceResult = {
   dayKey: string
+  weekStart: string
+  /** generator placeholders removed from today */
   removedPlaceholders: number
+  /** generator-placed queue tasks (today + unfinished earlier this week) sent back to their queue */
   returnedToQueue: number
+  /** leftover old-generator tasks removed from the rest of the week */
+  removedFutureLeftovers: number
   scheduled: number
   load: number
   maxDailyIntensity: number
+  /** forecast load for each remaining day this week, after rebalancing */
+  forecastLoads: Record<string, number>
 }
 
-/**
- * Re-plan today with the current settings and queue. Undoes only what the
- * generator placed on today and is still pending: placeholders are removed,
- * committed queue tasks go back to their thread's queue. Tasks you created
- * or scheduled yourself, and anything done/skipped, are left alone.
- */
 let rebalancing: Promise<RebalanceResult> | null = null
 
-export function rebalanceToday(now = new Date()): Promise<RebalanceResult> {
+/**
+ * Rebalance the current week with the current settings and queues.
+ *
+ * - Earlier days: unfinished queue tasks the generator placed go back to
+ *   their queue so they get rescheduled (your own and finished tasks stay).
+ * - Today: the generator's pending placements are undone and today is
+ *   re-planned under the daily cap.
+ * - Rest of the week: leftover tasks from the old weekly generator are
+ *   removed; those days are forecast live and committed one day at a time.
+ */
+export function rebalanceWeek(now = new Date()): Promise<RebalanceResult> {
   // A double-click must not undo/replan twice concurrently
   if (!rebalancing) rebalancing = doRebalance(now).finally(() => { rebalancing = null })
   return rebalancing
@@ -525,25 +536,29 @@ async function doRebalance(now: Date): Promise<RebalanceResult> {
   await ensureTodayGenerated(now)
   const { timezone, planOptions } = await loadSchedulingSettings()
   const dayKey = toDayKey(now, timezone)
-  const start = dayKeyToDate(dayKey)
-  const end = dayKeyToDate(addDaysKey(dayKey, 1))
+  const weekKey = weekStartKey(dayKey)
+  const weekStartDate = dayKeyToDate(weekKey)
+  const todayStart = dayKeyToDate(dayKey)
+  const tomorrowStart = dayKeyToDate(addDaysKey(dayKey, 1))
+  const weekEnd = dayKeyToDate(addDaysKey(weekKey, 7))
 
-  const placed = await Task.find({
-    date: { $gte: start, $lt: end },
+  const undo = await Task.find({
     status: 'pending',
     $or: [
-      { scheduledBy: 'generator' },
-      // Placed before scheduledBy existed: generator placeholders, and thread
+      // Earlier this week: only what the generator provably placed
+      { date: { $gte: weekStartDate, $lt: todayStart }, scheduledBy: 'generator', source: { $ne: 'auto-generated' } },
+      // Today
+      { date: { $gte: todayStart, $lt: tomorrowStart }, scheduledBy: 'generator' },
+      // Today, placed before scheduledBy existed: placeholders, and thread
       // tasks created on an earlier day (i.e. pulled from the queue today)
-      { scheduledBy: { $exists: false }, source: 'auto-generated' },
-      { scheduledBy: { $exists: false }, source: 'manual', threadId: { $ne: null }, createdAt: { $lt: start } },
+      { date: { $gte: todayStart, $lt: tomorrowStart }, scheduledBy: { $exists: false }, source: 'auto-generated' },
+      { date: { $gte: todayStart, $lt: tomorrowStart }, scheduledBy: { $exists: false }, source: 'manual', threadId: { $ne: null }, createdAt: { $lt: todayStart } },
     ],
   })
 
   let removedPlaceholders = 0
   let returnedToQueue = 0
-  const weekStart = dayKeyToDate(weekStartKey(dayKey))
-  for (const t of placed) {
+  for (const t of undo) {
     if (t.source === 'auto-generated') {
       await Task.deleteOne({ _id: t._id, status: 'pending' })
       removedPlaceholders++
@@ -556,20 +571,40 @@ async function doRebalance(now: Date): Promise<RebalanceResult> {
     }
     if (t.threadId) {
       await WeeklyProgress.updateOne(
-        { threadId: t.threadId, weekStart, appearances: { $gt: 0 } },
+        { threadId: t.threadId, weekStart: weekStartDate, appearances: { $gt: 0 } },
         { $inc: { appearances: -1 } }
       )
     }
   }
 
+  // The daily generator never commits future days, so any pending
+  // auto-generated task after today is a leftover from the old weekly grid.
+  const leftovers = await Task.deleteMany({
+    date: { $gte: tomorrowStart, $lt: weekEnd },
+    status: 'pending',
+    source: 'auto-generated',
+  })
+
   const actions = await generateToday(dayKey)
   const { dayLoad } = await loadDayLoad(dayKey)
+
+  const forecastLoads: Record<string, number> = {}
+  for (let d = addDaysKey(dayKey, 1); d < addDaysKey(weekKey, 7); d = addDaysKey(d, 1)) {
+    forecastLoads[d] = (await loadDayLoad(d)).dayLoad
+  }
+  for (const f of await forecastWeek(weekKey, now)) {
+    forecastLoads[f.date] = (forecastLoads[f.date] ?? 0) + intensityWeight(f.intensity)
+  }
+
   return {
     dayKey,
+    weekStart: weekKey,
     removedPlaceholders,
     returnedToQueue,
+    removedFutureLeftovers: leftovers.deletedCount ?? 0,
     scheduled: actions.length,
     load: dayLoad,
     maxDailyIntensity: planOptions.maxDailyIntensity,
+    forecastLoads,
   }
 }

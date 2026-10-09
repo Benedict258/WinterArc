@@ -19,7 +19,7 @@ import { v4 as uuidv4 } from 'uuid'
 import * as threadService from './backend/src/services/threadService.ts'
 import * as taskService from './backend/src/services/taskService.ts'
 import * as gridService from './backend/src/services/gridService.ts'
-import { ensureTodayGenerated, rebalanceToday, toDayKey, DEFAULT_TIMEZONE } from './backend/src/services/dailyGenerationService.ts'
+import { ensureTodayGenerated, rebalanceWeek, toDayKey, DEFAULT_TIMEZONE } from './backend/src/services/dailyGenerationService.ts'
 import { validateRequest } from './backend/src/middleware/validationMiddleware.ts'
 import {
   threadSchema,
@@ -569,7 +569,7 @@ async function startServer() {
 
   app.post('/api/grid/rebalance', async (req, res) => {
     try {
-      res.json(await rebalanceToday())
+      res.json(await rebalanceWeek())
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }

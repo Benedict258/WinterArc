@@ -9,7 +9,7 @@ import { useThreads } from '@/hooks/useThreads'
 import { useCalendarEvents } from '@/hooks/useCalendar'
 import { useState, useRef } from 'react'
 import { toDayKey, apiDayKey, cn } from '@/lib/utils'
-import { useGridSettings, useRebalanceToday } from '@/hooks/useGrid'
+import { useGridSettings, useRebalanceWeek } from '@/hooks/useGrid'
 
 export default function TodayView() {
   const today = new Date()
@@ -28,7 +28,7 @@ export default function TodayView() {
 
   const { data: threads = [] } = useThreads()
   const { data: gridBalancing } = useGridSettings()
-  const { mutate: rebalanceToday, isPending: isRebalancing } = useRebalanceToday()
+  const { mutate: rebalanceWeek, isPending: isRebalancing } = useRebalanceWeek()
   const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
   const dayLoad = tasks
     .filter((t: any) => t.status !== 'skipped')
@@ -129,13 +129,13 @@ export default function TodayView() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => rebalanceToday()}
+              onClick={() => rebalanceWeek()}
               disabled={isRebalancing}
               className="gap-1.5"
-              title="Re-plan today with your current grid balancing and queues. Your own and completed tasks stay put."
+              title="Re-plan this week with your current grid balancing and queues. Your own and completed tasks stay put."
             >
               <RefreshCw size={14} className={isRebalancing ? 'animate-spin' : ''} />
-              {isRebalancing ? 'Rebalancing…' : 'Rebalance'}
+              {isRebalancing ? 'Rebalancing…' : 'Rebalance week'}
             </Button>
           </div>
         </div>

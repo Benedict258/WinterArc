@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { format, startOfWeek, addDays, addWeeks, isSameWeek, isToday as fnsIsToday } from 'date-fns'
 import { useQueries } from '@tanstack/react-query'
-import { useWeek, useRebalanceToday, type ForecastTask } from '@/hooks/useGrid'
+import { useWeek, useRebalanceWeek, useGridSettings, type ForecastTask } from '@/hooks/useGrid'
 import { useThreads } from '@/hooks/useThreads'
 import { useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useState, useMemo } from 'react'
@@ -12,6 +12,7 @@ import QuickAddModal from '@/components/QuickAddModal'
 import TaskRow, { type TaskRowData } from '@/components/TaskRow'
 import { cn, toDayKey, apiDayKey } from '@/lib/utils'
 
+const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
 const DAY_LABELS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const BLOCKS = [
   { id: 'morning', label: 'Morning', time: '9:00 AM – 12:00 PM' },
@@ -34,7 +35,8 @@ export default function WeekView() {
 
   const { mutate: updateTask } = useUpdateTask()
   const { mutate: deleteTask } = useDeleteTask()
-  const { mutate: rebalanceToday, isPending: isRebalancing } = useRebalanceToday()
+  const { mutate: rebalanceWeek, isPending: isRebalancing } = useRebalanceWeek()
+  const { data: gridBalancing } = useGridSettings()
 
   const { data: weekData, isLoading: weekLoading, error: weekError } = useWeek(weekStartString)
   const tasks = weekData?.week || []
@@ -188,13 +190,13 @@ export default function WeekView() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => rebalanceToday()}
+                onClick={() => rebalanceWeek()}
                 disabled={isRebalancing}
                 className="gap-1.5 h-9 text-xs"
-                title="Re-plan today with your current grid balancing and queues"
+                title="Re-plan this week with your current grid balancing and queues"
               >
                 <RefreshCw size={14} className={isRebalancing ? 'animate-spin' : ''} />
-                <span className="hidden sm:inline">{isRebalancing ? 'Rebalancing…' : 'Rebalance today'}</span>
+                <span className="hidden sm:inline">{isRebalancing ? 'Rebalancing…' : 'Rebalance week'}</span>
               </Button>
             )}
 
@@ -236,6 +238,13 @@ export default function WeekView() {
               (s, arr) => s + arr.length,
               0
             )
+            const dayLoad =
+              (Object.values(tasksByDayAndBlock[dayDateStr]) as TaskRowData[][]).flat()
+                .filter(t => t.status !== 'skipped')
+                .reduce((s, t) => s + (INTENSITY_WEIGHT[t.intensity ?? 'medium'] ?? 2), 0) +
+              (Object.values(forecastByDayAndBlock[dayDateStr]) as ForecastTask[][]).flat()
+                .reduce((s, f) => s + (INTENSITY_WEIGHT[f.intensity] ?? 2), 0)
+            const overCap = !!gridBalancing && dayLoad > gridBalancing.maxDailyIntensity
 
             return (
               <Card
@@ -285,7 +294,18 @@ export default function WeekView() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-3 shrink-0">
+                      {gridBalancing && dayLoad > 0 && (
+                        <span
+                          className={cn(
+                            'text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded',
+                            overCap ? 'bg-destructive/15 text-destructive' : 'bg-secondary text-muted-foreground'
+                          )}
+                          title="Day load (light 1, medium 2, heavy 4) vs. your Max Daily Intensity"
+                        >
+                          {dayLoad}/{gridBalancing.maxDailyIntensity}
+                        </span>
+                      )}
                       {dayTotal > 0 ? (
                         <span className="text-xs text-muted-foreground font-medium">
                           {dayDone}/{dayTotal} done

@@ -84,7 +84,7 @@ export const useUpdateGridSettings = () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       // The forecast for upcoming days uses these limits immediately
       queryClient.invalidateQueries({ queryKey: ['week'] });
-      toast({ title: 'Grid balancing saved', description: 'Upcoming days use it now. Rebalance today to apply it to today.' });
+      toast({ title: 'Grid balancing saved', description: 'Upcoming days use it now. Rebalance week to apply it to today too.' });
     },
     onError: () => {
       toast({ title: 'Error', description: 'Failed to update grid balancing.', variant: 'destructive' });
@@ -94,26 +94,30 @@ export const useUpdateGridSettings = () => {
 
 export type RebalanceResult = {
   dayKey: string;
+  weekStart: string;
   removedPlaceholders: number;
   returnedToQueue: number;
+  removedFutureLeftovers: number;
   scheduled: number;
   load: number;
   maxDailyIntensity: number;
+  forecastLoads: Record<string, number>;
 };
 
 /**
- * Re-plan today with the current grid balancing, frequency targets and
- * queues. Only undoes what the scheduler placed; your own tasks and
- * completed ones stay put.
+ * Rebalance the current week with the current grid balancing, frequency
+ * targets and queues: re-plans today, sends unfinished scheduler-placed
+ * tasks from earlier days back to their queues, clears old-generator
+ * leftovers from the rest of the week. Your own and completed tasks stay put.
  */
-export const useRebalanceToday = () => {
+export const useRebalanceWeek = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (): Promise<RebalanceResult> => {
       const response = await fetch(`${API_URL}/api/grid/rebalance`, { method: 'POST' });
-      if (!response.ok) throw new Error('Failed to rebalance');
+      if (!response.ok) throw new Error(response.status === 404 ? 'Backend is out of date — redeploy it' : 'Failed to rebalance');
       return response.json();
     },
     onSuccess: (r) => {
@@ -121,12 +125,12 @@ export const useRebalanceToday = () => {
         queryClient.invalidateQueries({ queryKey: [key] });
       }
       toast({
-        title: 'Today rebalanced',
-        description: `${r.scheduled} scheduled · load ${r.load}/${r.maxDailyIntensity}`,
+        title: 'Week rebalanced',
+        description: `Today: ${r.scheduled} scheduled, load ${r.load}/${r.maxDailyIntensity}. Rest of the week follows the cap.`,
       });
     },
-    onError: () => {
-      toast({ title: 'Error', description: 'Failed to rebalance today.', variant: 'destructive' });
+    onError: (e) => {
+      toast({ title: "Couldn't rebalance", description: e instanceof Error ? e.message : 'Failed to rebalance.', variant: 'destructive' });
     },
   });
 };
