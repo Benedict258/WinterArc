@@ -346,11 +346,19 @@ export default function WeekView() {
                                     title="Forecast — committed when this day arrives"
                                   >
                                     <Sparkles size={14} className="shrink-0 opacity-60" />
-                                    <span className="flex-1 min-w-0 break-words text-sm">{f.title}</span>
-                                    {f.threadId && f.title !== threadMap.get(f.threadId) && (
-                                      <span className="text-xs hidden sm:inline shrink-0">[{threadMap.get(f.threadId) || 'Unknown'}]</span>
-                                    )}
-                                    {f.kind === 'due' && <span className="text-[10px] font-medium shrink-0">due</span>}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm break-words">{f.title}</p>
+                                      {((f.threadId && f.title !== threadMap.get(f.threadId)) || f.kind === 'due') && (
+                                        <div className="mt-0.5 flex items-center gap-2 min-w-0 text-[11px]">
+                                          {f.kind === 'due' && <span className="font-medium shrink-0">due</span>}
+                                          {f.threadId && f.title !== threadMap.get(f.threadId) && (
+                                            <span className="min-w-0 truncate" title={threadMap.get(f.threadId) || undefined}>
+                                              {threadMap.get(f.threadId) || 'Unknown'}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                                 {blockTasks.map(task => (

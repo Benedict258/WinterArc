@@ -6,6 +6,8 @@ export interface ToastProps {
   description?: React.ReactNode
   action?: React.ReactNode
   variant?: 'default' | 'destructive'
+  /** ms before auto-dismiss; paused while hovered or being swiped */
+  duration?: number
 }
 
 type Action =
@@ -24,13 +26,15 @@ function dispatch(action: Action) {
     case 'ADD_TOAST':
       memoryState = {
         ...memoryState,
-        toasts: [action.toast, ...memoryState.toasts].slice(0, 5),
+        toasts: [action.toast, ...memoryState.toasts].slice(0, 4),
       }
       break
     case 'DISMISS_TOAST':
       memoryState = {
         ...memoryState,
-        toasts: memoryState.toasts.filter((t) => t.id !== action.toastId),
+        toasts: action.toastId
+          ? memoryState.toasts.filter((t) => t.id !== action.toastId)
+          : [],
       }
       break
   }
@@ -41,17 +45,16 @@ export function toast(props: ToastProps) {
   const id = props.id || Math.random().toString(36).substring(2, 9)
   dispatch({
     type: 'ADD_TOAST',
-    toast: { ...props, id },
+    toast: { duration: props.variant === 'destructive' ? 6000 : 4000, ...props, id },
   })
-
-  setTimeout(() => {
-    dispatch({ type: 'DISMISS_TOAST', toastId: id })
-  }, 4000)
-
   return {
     id,
     dismiss: () => dispatch({ type: 'DISMISS_TOAST', toastId: id }),
   }
+}
+
+export function dismissToast(toastId?: string) {
+  dispatch({ type: 'DISMISS_TOAST', toastId })
 }
 
 export function useToast() {
@@ -61,15 +64,13 @@ export function useToast() {
     listeners.push(setState)
     return () => {
       const index = listeners.indexOf(setState)
-      if (index > -1) {
-        listeners.splice(index, 1)
-      }
+      if (index > -1) listeners.splice(index, 1)
     }
-  }, [state])
+  }, [])
 
   return {
     ...state,
     toast,
-    dismiss: (toastId?: string) => dispatch({ type: 'DISMISS_TOAST', toastId }),
+    dismiss: dismissToast,
   }
 }

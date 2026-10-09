@@ -194,6 +194,13 @@ export default function ThreadsView() {
                     <CardContent className="space-y-3">
                       <div className="flex gap-1.5 flex-wrap items-center">
                         <Badge className={`text-[10px] ${frequencyColors[thread.frequency] || ''}`}>{thread.frequency}</Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px]"
+                          title={thread.taskMode === 'discrete' ? 'Only scheduled when it has a queued task' : 'Scheduled on its days even with no tasks (uses the thread name)'}
+                        >
+                          {thread.taskMode === 'discrete' ? 'only with tasks' : 'always on'}
+                        </Badge>
                         <Badge variant={thread.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{thread.status}</Badge>
                         <Badge
                           variant="outline"

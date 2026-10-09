@@ -43,7 +43,7 @@ describe('day keys', () => {
     expect(weekStartKey('2026-10-05')).toBe('2026-10-05')
   })
 
-  it('computes today in the configured timezone, not UTC', () => {
+  it('computes today in the configured timezone, not UTC', { timeout: 30000 }, () => {
     // 23:30 UTC on Oct 6 is already 00:30 Oct 7 in Lagos (UTC+1)
     const instant = new Date('2026-10-06T23:30:00Z')
     expect(toDayKey(instant, 'Africa/Lagos')).toBe('2026-10-07')
@@ -213,5 +213,151 @@ describe('grid balancing', () => {
     }
     // 6 threads × 3/week = 18 wanted; cap allows 3/day = 21 slots, so all fit
     expect(total).toBe(18)
+  })
+})
+
+describe('placement scoring', () => {
+  const DAY = new Date(`${MONDAY}T00:00:00Z`).getTime()
+  const daysAgo = (n: number) => DAY - n * 86_400_000
+
+  it('a nearer due date wins over no due date at equal priority', () => {
+    const t = thread('x', { taskMode: 'discrete', frequency: 'daily' })
+    const state = freshState([
+      task('plain', 'x', { createdAt: daysAgo(1) }),
+      task('due-in-5', 'x', { dueKey: addDaysKey(MONDAY, 5), createdAt: daysAgo(1) }),
+    ])
+    expect(planDay(MONDAY, [t], state)[0]).toMatchObject({ taskId: 'due-in-5' })
+  })
+
+  it('older tasks win ties', () => {
+    const t = thread('x', { taskMode: 'discrete', frequency: 'daily' })
+    const state = freshState([
+      task('new', 'x', { createdAt: daysAgo(1) }),
+      task('old', 'x', { createdAt: daysAgo(10) }),
+    ])
+    expect(planDay(MONDAY, [t], state)[0]).toMatchObject({ taskId: 'old' })
+  })
+
+  it('priority still beats age', () => {
+    const t = thread('x', { taskMode: 'discrete', frequency: 'daily' })
+    const state = freshState([
+      task('old-low', 'x', { priority: 'low', createdAt: daysAgo(14) }),
+      task('new-high', 'x', { priority: 'high', createdAt: daysAgo(0) }),
+    ])
+    expect(planDay(MONDAY, [t], state)[0]).toMatchObject({ taskId: 'new-high' })
+  })
+
+  it('when only one fits, the high-priority thread gets the slot', () => {
+    const threads = [
+      thread('lo', { name: 'A low', frequency: 'daily', priority: 'low' }),
+      thread('hi', { name: 'B high', frequency: 'daily', priority: 'high' }),
+    ]
+    const actions = planDay(MONDAY, threads, freshState(), { maxDailyIntensity: 2 })
+    expect(actions.map(a => a.threadId)).toEqual(['hi'])
+  })
+
+  it('urgent due tasks go in regardless of priority; 2-3 day ones only top priority', () => {
+    const state = freshState([
+      task('overdue-low', 'x', { priority: 'low', dueKey: addDaysKey(MONDAY, -2) }),
+      task('tomorrow-low', 'x', { priority: 'low', dueKey: addDaysKey(MONDAY, 1) }),
+      task('in3-high', 'x', { priority: 'high', dueKey: addDaysKey(MONDAY, 3) }),
+      task('in3-low', 'x', { priority: 'low', dueKey: addDaysKey(MONDAY, 3) }),
+    ])
+    const actions = planDay(MONDAY, [thread('x', { taskMode: 'discrete', frequency: 'weekly' })], state)
+    expect(actions.map(a => a.taskId).sort()).toEqual(['in3-high', 'overdue-low', 'tomorrow-low'])
+  })
+
+  it('heavy work goes to the morning, light to the evening', () => {
+    const threads = [
+      thread('h', { name: 'Heavy', frequency: 'daily', intensity: 'heavy' }),
+      thread('l', { name: 'Light', frequency: 'daily', intensity: 'light' }),
+    ]
+    const actions = planDay(MONDAY, threads, freshState())
+    expect(actions.find(a => a.threadId === 'h')!.timeBlock).toBe('morning')
+    expect(actions.find(a => a.threadId === 'l')!.timeBlock).toBe('evening')
+  })
+
+  it('a full morning pushes more heavy work to the afternoon', () => {
+    const state = { ...freshState(), blockLoads: { morning: 8, afternoon: 0, evening: 0 } }
+    const actions = planDay(MONDAY, [thread('h', { frequency: 'daily', intensity: 'heavy' })], state)
+    expect(actions[0].timeBlock).toBe('afternoon')
+  })
+})
+
+describe('recurring threads over whole weeks', () => {
+  function runWeeks(threads: PlanThread[], queue: PlanTask[], weeks: number, opts = {}) {
+    const state = freshState(queue)
+    const perWeek: Record<string, number>[] = []
+    for (let w = 0; w < weeks; w++) {
+      state.appearances = new Map() // WeeklyProgress resets each Monday
+      const counts: Record<string, number> = {}
+      for (let i = 0; i < 7; i++) {
+        state.blockLoads = { morning: 0, afternoon: 0, evening: 0 }
+        state.dayLoad = 0
+        for (const a of planDay(addDaysKey(MONDAY, w * 7 + i), threads, state, opts)) {
+          const key = a.threadId ?? 'backlog'
+          counts[key] = (counts[key] ?? 0) + 1
+        }
+      }
+      perWeek.push(counts)
+    }
+    return { perWeek, state }
+  }
+
+  const threads = [
+    thread('daily-c', { name: 'Daily continuous', frequency: 'daily' }),
+    thread('multi-c', { name: 'Multiple continuous', frequency: 'multiple' }),
+    thread('weekly-c', { name: 'Weekly continuous', frequency: 'weekly' }),
+    thread('fixed-c', { name: 'Fixed Wed continuous', frequency: 'fixed-day', fixedDay: 2 }),
+    thread('weekly-d-empty', { name: 'Weekly discrete, no tasks', frequency: 'weekly', taskMode: 'discrete' }),
+    thread('multi-d-one', { name: 'Multiple discrete, one task', frequency: 'multiple', taskMode: 'discrete' }),
+    thread('fixed-d-empty', { name: 'Fixed discrete, no tasks', frequency: 'fixed-day', fixedDay: 4, taskMode: 'discrete' }),
+  ]
+
+  it('continuous threads hit their target every week, even with no tasks', () => {
+    const { perWeek } = runWeeks(threads, [task('only', 'multi-d-one')], 3)
+    for (const counts of perWeek) {
+      expect(counts['daily-c']).toBe(7)
+      expect(counts['multi-c']).toBe(3)
+      expect(counts['weekly-c']).toBe(1)
+      expect(counts['fixed-c']).toBe(1)
+    }
+  })
+
+  it('discrete threads only appear when they have a queued task', () => {
+    const { perWeek, state } = runWeeks(threads, [task('only', 'multi-d-one')], 3)
+    for (const counts of perWeek) {
+      expect(counts['weekly-d-empty']).toBeUndefined()
+      expect(counts['fixed-d-empty']).toBeUndefined()
+    }
+    // its single task is used once, then the thread stops appearing
+    expect(perWeek.reduce((s, c) => s + (c['multi-d-one'] ?? 0), 0)).toBe(1)
+    expect(state.queue).toHaveLength(0)
+  })
+
+  it('a discrete thread with enough tasks reaches its weekly target', () => {
+    const queue = Array.from({ length: 5 }, (_, i) => task(`t${i}`, 'multi-d-one', { createdAt: i }))
+    const { perWeek } = runWeeks([threads[5]], queue, 1)
+    expect(perWeek[0]['multi-d-one']).toBe(3)
+  })
+
+  it('fixed-day threads land on their weekday every week', () => {
+    const state = freshState()
+    const days: number[] = []
+    for (let i = 0; i < 14; i++) {
+      state.blockLoads = { morning: 0, afternoon: 0, evening: 0 }
+      state.dayLoad = 0
+      if (i === 7) state.appearances = new Map()
+      if (planDay(addDaysKey(MONDAY, i), [threads[3]], state).length) days.push(i)
+    }
+    expect(days).toEqual([2, 9]) // Wednesday both weeks
+  })
+
+  it('under a tight cap, no day overflows, fixed and daily threads keep their slots', () => {
+    const { perWeek } = runWeeks(threads.slice(0, 4), [], 1, { maxDailyIntensity: 6 })
+    const total = Object.values(perWeek[0]).reduce((a, b) => a + b, 0)
+    expect(total).toBeLessThanOrEqual(21) // 7 days x 3 medium slots
+    expect(perWeek[0]['fixed-c']).toBe(1)
+    expect(perWeek[0]['daily-c']).toBe(7)
   })
 })

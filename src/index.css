@@ -75,6 +75,8 @@
 
   body {
     @apply bg-background text-foreground;
+    /* Long unbroken words/URLs wrap instead of pushing layouts wider */
+    overflow-wrap: anywhere;
     font-family: 'Space Grotesk', 'Manrope', sans-serif;
   }
 

@@ -140,19 +140,58 @@ export function paceQuota(target: number, dayIdx: number, phase: number): number
   return Math.max(0, Math.ceil((target * (dayIdx + 1)) / 7 - phase))
 }
 
-function pickBlock(loads: Record<TimeBlock, number>): TimeBlock {
-  return [...TIME_BLOCKS].sort((a, b) => loads[a] - loads[b])[0]
+
+// ============================================
+// Scoring
+// ============================================
+// Placement weighs several factors instead of a single sort key. The
+// numbers are relative weights; only the ordering they produce matters.
+
+const DAY_MS = 86_400_000
+
+/** How good a queued task is to do on `dayKey`. */
+export function taskScore(task: PlanTask, dayKey: string): number {
+  const day = dayKeyToDate(dayKey).getTime()
+  let score = (PRIORITY_RANK[task.priority] ?? 2) * 10
+  if (task.dueKey) {
+    const daysLeft = Math.round((dayKeyToDate(task.dueKey).getTime() - day) / DAY_MS)
+    // Far-off due dates still pull a little; it grows as the date nears
+    score += daysLeft <= 0 ? 40 : 24 / Math.max(1, daysLeft - 1)
+  }
+  if (task.createdAt) {
+    const ageDays = Math.max(0, (day - task.createdAt) / DAY_MS)
+    score += Math.min(ageDays, 14) * 0.5 // waiting longer nudges it up, capped
+  }
+  return score
 }
 
-function byPriorityThenDue(a: PlanTask, b: PlanTask): number {
-  const pri = (PRIORITY_RANK[b.priority] ?? 2) - (PRIORITY_RANK[a.priority] ?? 2)
-  if (pri !== 0) return pri
-  if (a.dueKey !== b.dueKey) {
-    if (a.dueKey === null) return 1
-    if (b.dueKey === null) return -1
-    return a.dueKey < b.dueKey ? -1 : 1
+function bestTasksFirst(dayKey: string) {
+  return (a: PlanTask, b: PlanTask) =>
+    taskScore(b, dayKey) - taskScore(a, dayKey) ||
+    a.createdAt - b.createdAt ||
+    a.id.localeCompare(b.id)
+}
+
+// Heavy work in the morning, light work in the evening — then balance load.
+const BLOCK_PREFERENCE: Record<string, Record<TimeBlock, number>> = {
+  heavy: { morning: 0, afternoon: 2, evening: 4 },
+  medium: { morning: 1, afternoon: 0, evening: 1 },
+  light: { morning: 2, afternoon: 1, evening: 0 },
+}
+
+/** Block for a task of this intensity, given the load already in each block. */
+export function pickBlock(loads: Record<TimeBlock, number>, intensity: string = 'medium'): TimeBlock {
+  const pref = BLOCK_PREFERENCE[intensity] ?? BLOCK_PREFERENCE.medium
+  let best: TimeBlock = 'morning'
+  let bestCost = Infinity
+  for (const block of TIME_BLOCKS) {
+    const cost = loads[block] + pref[block]
+    if (cost < bestCost) {
+      best = block
+      bestCost = cost
+    }
   }
-  return a.createdAt - b.createdAt
+  return best
 }
 
 /**
@@ -160,27 +199,35 @@ function byPriorityThenDue(a: PlanTask, b: PlanTask): number {
  * bumps appearances, block loads and day load) so it can be called day after
  * day to simulate a week.
  *
- * Grid balancing: due-date tasks and fixed-day threads are always placed
- * (they can't move). Everything else only goes in if it fits under
- * `maxDailyIntensity`; a thread that doesn't fit stays behind pace and is
- * picked up on a later day.
+ * 1. Due pass — overdue and due today/tomorrow always go in; tasks due in
+ *    2–3 days go in for the highest priority per thread. Ignores the cap.
+ * 2. Rotation — threads behind their weekly pace (or on their fixed day)
+ *    are ranked by score: how far behind they are, thread priority, the best
+ *    queued task's score (priority, due date, age) and daily habits.
+ *    Continuous threads with an empty queue get a placeholder; discrete ones
+ *    are skipped. Everything except fixed-day threads must fit under the cap;
+ *    on busy days heavy work waits and lighter work is preferred.
+ * Each placement goes to a time block by intensity and current block load.
  */
 export function planDay(dayKey: string, threads: PlanThread[], state: PlanState, opts: PlanOptions = {}): PlanAction[] {
   const dueWindowEnd = addDaysKey(dayKey, opts.dueWindowDays ?? 3)
+  const urgentEnd = addDaysKey(dayKey, 1)
   const dayIdx = mondayIndex(dayKey)
   const threadById = new Map(threads.map(t => [t.id, t]))
   const actions: PlanAction[] = []
   const scheduledThreadIds = new Set<string>()
   const cap = opts.maxDailyIntensity ?? Infinity
+  const byScore = bestTasksFirst(dayKey)
   state.dayLoad = state.dayLoad ?? 0
 
   const isBusy = () => opts.preferLowIntensityOnBusyDays === true && state.dayLoad! >= cap / 2
   const fits = (weight: number) => state.dayLoad! + weight <= cap && !(isBusy() && weight >= HEAVY)
 
   const place = (action: Omit<PlanAction, 'timeBlock'>) => {
-    const block = pickBlock(state.blockLoads)
-    state.blockLoads[block] += 1
-    state.dayLoad! += intensityWeight(action.intensity)
+    const weight = intensityWeight(action.intensity)
+    const block = pickBlock(state.blockLoads, action.intensity)
+    state.blockLoads[block] += weight
+    state.dayLoad! += weight
     actions.push({ ...action, timeBlock: block })
   }
 
@@ -202,9 +249,7 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
     scheduledThreadIds.add(threadId)
   }
 
-  // 1. Due-date pass. Anything due within the window — or already overdue —
-  //    is placed today, ahead of the normal rotation and regardless of the
-  //    cap. Per thread, only the highest-priority due tasks go in.
+  // 1. Due pass
   const dueTasks = state.queue.filter(t => t.dueKey !== null && t.dueKey <= dueWindowEnd)
   const dueByThread = new Map<string, PlanTask[]>()
   for (const t of dueTasks) {
@@ -213,19 +258,21 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
     dueByThread.get(k)!.push(t)
   }
   for (const [key, tasks] of dueByThread) {
-    const maxRank = Math.max(...tasks.map(t => PRIORITY_RANK[t.priority] ?? 2))
-    const eligible = key === '__backlog__'
-      ? tasks
-      : tasks.filter(t => (PRIORITY_RANK[t.priority] ?? 2) === maxRank)
-    eligible.sort((a, b) => (a.dueKey! < b.dueKey! ? -1 : a.dueKey! > b.dueKey! ? 1 : a.createdAt - b.createdAt))
+    const urgent = tasks.filter(t => t.dueKey! <= urgentEnd)
+    const soon = tasks.filter(t => t.dueKey! > urgentEnd)
+    const maxRank = Math.max(0, ...soon.map(t => PRIORITY_RANK[t.priority] ?? 2))
+    const eligible = [
+      ...urgent,
+      ...(key === '__backlog__' ? soon : soon.filter(t => (PRIORITY_RANK[t.priority] ?? 2) === maxRank)),
+    ].sort((a, b) => (a.dueKey! < b.dueKey! ? -1 : a.dueKey! > b.dueKey! ? 1 : byScore(a, b)))
     for (const task of eligible) {
       consume(task, 'due')
       if (task.threadId && threadById.has(task.threadId)) bump(task.threadId)
     }
   }
 
-  // 2. Normal pass over threads that are behind their pace for the week.
-  type Candidate = { thread: PlanThread; deficit: number }
+  // 2. Rotation
+  type Candidate = { thread: PlanThread; target: number; appearances: number }
   const candidates: Candidate[] = []
   for (const thread of threads) {
     if (scheduledThreadIds.has(thread.id)) continue
@@ -238,55 +285,59 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
     } else if (appearances >= paceQuota(target, dayIdx, threadPhase(thread.id))) {
       continue
     }
-    candidates.push({ thread, deficit: target - appearances })
+    candidates.push({ thread, target, appearances })
   }
 
-  const byNeed = (a: Candidate, b: Candidate) =>
-    (b.deficit - a.deficit) ||
-    ((PRIORITY_RANK[b.thread.priority] ?? 2) - (PRIORITY_RANK[a.thread.priority] ?? 2)) ||
-    a.thread.name.localeCompare(b.thread.name)
-
-  /** What this thread would put on the day, given the current load. */
-  const pickFor = (thread: PlanThread): { task: PlanTask | null; weight: number } | null => {
-    const queued = state.queue.filter(t => t.threadId === thread.id).sort(byPriorityThenDue)
+  /** What this thread would put on the day right now, or null if nothing fits. */
+  const pickFor = (thread: PlanThread): { task: PlanTask | null; weight: number; taskScore: number } | null => {
+    const queued = state.queue.filter(t => t.threadId === thread.id).sort(byScore)
     if (queued.length) {
-      if (thread.frequency === 'fixed-day') return { task: queued[0], weight: intensityWeight(queued[0].intensity) }
-      // Best-priority task that fits; on busy days the lightest that fits
+      if (thread.frequency === 'fixed-day') {
+        return { task: queued[0], weight: intensityWeight(queued[0].intensity), taskScore: taskScore(queued[0], dayKey) }
+      }
       const options = isBusy()
-        ? [...queued].sort((a, b) => intensityWeight(a.intensity) - intensityWeight(b.intensity) || byPriorityThenDue(a, b))
+        ? [...queued].sort((a, b) => intensityWeight(a.intensity) - intensityWeight(b.intensity) || byScore(a, b))
         : queued
       const task = options.find(t => fits(intensityWeight(t.intensity)))
-      return task ? { task, weight: intensityWeight(task.intensity) } : null
+      return task ? { task, weight: intensityWeight(task.intensity), taskScore: taskScore(task, dayKey) } : null
     }
-    if (thread.taskMode !== 'continuous') return null // discrete, empty queue: skip
+    if (thread.taskMode !== 'continuous') return null // discrete with an empty queue: not today
     const weight = intensityWeight(thread.intensity)
     if (thread.frequency !== 'fixed-day' && !fits(weight)) return null
-    return { task: null, weight }
+    return { task: null, weight, taskScore: (PRIORITY_RANK[thread.priority] ?? 2) * 10 }
   }
 
-  const remaining = [...candidates].sort(byNeed)
-  while (remaining.length) {
-    // On busy days, take the lightest available work next; otherwise most-behind first
-    let index = 0
-    let pick = pickFor(remaining[0].thread)
-    if (isBusy()) {
-      let best = -1
-      let bestPick: ReturnType<typeof pickFor> = null
-      remaining.forEach((c, i) => {
-        const p = pickFor(c.thread)
-        if (p && (bestPick === null || p.weight < bestPick.weight)) {
-          best = i
-          bestPick = p
-        }
-      })
-      if (best >= 0) {
-        index = best
-        pick = bestPick
-      }
-    }
-    const [{ thread }] = remaining.splice(index, 1)
-    if (!pick) continue // doesn't fit today; stays behind pace for a later day
+  const candidateScore = (c: Candidate, pick: NonNullable<ReturnType<typeof pickFor>>) => {
+    let score = 0
+    if (c.thread.frequency === 'fixed-day') score += 1000 // its only day
+    score += ((c.target - c.appearances) / c.target) * 30 // how far behind for the week
+    score += (PRIORITY_RANK[c.thread.priority] ?? 2) * 8
+    score += pick.taskScore
+    if (c.thread.frequency === 'daily') score += 5 // keep daily habits going
+    if (isBusy()) score -= pick.weight * 6 // lighter work first when the day is filling up
+    return score
+  }
 
+  const remaining = [...candidates]
+  while (remaining.length) {
+    // Re-score each round: load, busy state and the queue change as we place
+    let bestIndex = -1
+    let bestPick: ReturnType<typeof pickFor> = null
+    let bestScore = -Infinity
+    remaining.forEach((c, i) => {
+      const pick = pickFor(c.thread)
+      if (!pick) return
+      const score = candidateScore(c, pick)
+      if (score > bestScore || (score === bestScore && c.thread.name < remaining[bestIndex].thread.name)) {
+        bestIndex = i
+        bestPick = pick
+        bestScore = score
+      }
+    })
+    if (bestIndex < 0) break // nothing else fits today; the rest catch up later in the week
+
+    const [{ thread }] = remaining.splice(bestIndex, 1)
+    const pick = bestPick!
     if (pick.task) {
       consume(pick.task, 'queued')
     } else {
@@ -355,7 +406,8 @@ async function loadDayLoad(dayKey: string): Promise<{ blockLoads: Record<TimeBlo
   const blockLoads: Record<TimeBlock, number> = { morning: 0, afternoon: 0, evening: 0 }
   let dayLoad = 0
   for (const t of tasks) {
-    if (t.timeBlock && t.timeBlock in blockLoads) blockLoads[t.timeBlock as TimeBlock] += 1
+    // Block load is summed intensity, so heavy work spreads across the day
+    if (t.timeBlock && t.timeBlock in blockLoads) blockLoads[t.timeBlock as TimeBlock] += intensityWeight(t.intensity ?? undefined)
     dayLoad += intensityWeight(t.intensity ?? undefined)
   }
   return { blockLoads, dayLoad }

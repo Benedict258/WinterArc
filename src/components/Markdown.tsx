@@ -90,7 +90,7 @@ export default function Markdown({ source }: { source: string }) {
   }
 
   return (
-    <div className="space-y-3 text-sm">
+    <div className="space-y-3 text-sm [overflow-wrap:anywhere]">
       {blocks.map((block, idx) => {
         const key = `md-${idx}`
         switch (block.type) {

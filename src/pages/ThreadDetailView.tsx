@@ -137,6 +137,13 @@ export default function ThreadDetailView() {
             </h1>
             <div className="flex gap-1.5 flex-wrap mt-2">
               <Badge className={`text-[10px] ${frequencyColors[thread.frequency]}`}>{thread.frequency}</Badge>
+              <Badge
+                variant="outline"
+                className="text-[10px]"
+                title={thread.taskMode === 'discrete' ? 'Only scheduled when it has a queued task' : 'Scheduled on its days even with no tasks (uses the thread name)'}
+              >
+                {thread.taskMode === 'discrete' ? 'only with tasks' : 'always on'}
+              </Badge>
               <Badge variant={thread.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{thread.status}</Badge>
               <Badge variant="outline" className="text-[10px]">{thread.category}</Badge>
               <Badge variant="outline" className={`text-[10px] ${
@@ -356,7 +363,7 @@ export default function ThreadDetailView() {
                         <ExternalLink size={12} className="shrink-0" />
                       </a>
                       <p className="text-xs text-muted-foreground break-all mt-0.5">{r.url}</p>
-                      {r.description && <p className="text-xs text-muted-foreground mt-1">{r.description}</p>}
+                      {r.description && <p className="text-xs text-muted-foreground mt-1 [overflow-wrap:anywhere]">{r.description}</p>}
                     </div>
                     <Button
                       size="sm"
