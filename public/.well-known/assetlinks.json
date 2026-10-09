@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "dev.benedictisaac.winterarc",
+      "sha256_cert_fingerprints": ["C2:67:92:E8:E8:51:8B:A9:37:58:0D:00:DB:10:2D:40:E7:EC:CB:39:EA:B3:C8:4D:B9:D8:5F:9B:31:87:BB:FD"]
+    }
+  }
+]
