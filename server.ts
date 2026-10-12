@@ -376,7 +376,9 @@ async function startServer() {
   app.get('/api/cron/tick', async (req, res) => {
     const secret = process.env.CRON_SECRET
     const given = typeof req.query.key === 'string' ? req.query.key : ''
-    const ok = !!secret && given.length === secret.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))
+    // Hash both sides first so the comparison is constant-time and length-independent
+    const digest = (v: string) => crypto.createHash('sha256').update(v).digest()
+    const ok = !!secret && crypto.timingSafeEqual(digest(given), digest(secret))
     if (!ok) return res.status(401).json({ error: 'Unauthorized' })
     try {
       const synced = await syncIfStale().catch(err => { console.error('Calendar sync failed:', errorMessage(err)); return null })
