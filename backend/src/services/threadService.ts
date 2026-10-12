@@ -1,18 +1,18 @@
-import { createIdempotent } from '../utils/idempotentCreate'
 import { Thread } from '../models/Thread'
+import { createIdempotent } from '../utils/idempotentCreate'
 
-export async function getThreads() {
-  return await Thread.find({ status: { $ne: 'archived' } })
+export async function getThreads(userId: string) {
+  return await Thread.find({ userId, status: { $ne: 'archived' } })
 }
 
-export async function createThread(data: any) {
-  return await createIdempotent(Thread, data)
+export async function createThread(userId: string, data: any) {
+  return await createIdempotent(Thread, userId, data)
 }
 
-export async function updateThread(id: string, data: any) {
-  return await Thread.findByIdAndUpdate(id, data, { new: true, runValidators: true })
+export async function updateThread(userId: string, id: string, data: any) {
+  return await Thread.findOneAndUpdate({ _id: id, userId }, data, { new: true, runValidators: true })
 }
 
-export async function deleteThread(id: string) {
-  return await Thread.findByIdAndUpdate(id, { status: 'archived' }, { new: true })
+export async function deleteThread(userId: string, id: string) {
+  return await Thread.findOneAndUpdate({ _id: id, userId }, { status: 'archived' }, { new: true })
 }

@@ -124,7 +124,7 @@ export const dropUploadUrlSchema = z.object({
 export const dropItemSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('file'),
-    s3Key: z.string().regex(/^drop\/[0-9a-f-]{36}-[a-zA-Z0-9._-]+$/, 'Invalid s3Key'),
+    s3Key: z.string().regex(/^drop\/[0-9a-f]{24}\/[0-9a-f-]{36}-[a-zA-Z0-9._-]+$/, 'Invalid s3Key'),
     fileName: z.string().min(1).max(255),
     fileSize: z.number().int().nonnegative(),
     mimeType: z.string().min(1).max(255),
@@ -137,11 +137,37 @@ export const dropUpdateSchema = z.object({
   expiresAt: z.string().refine(s => !Number.isNaN(Date.parse(s)), 'Invalid date'),
 });
 
+const emailField = z.string().trim().toLowerCase().email().max(254);
+const passwordField = z.string().min(1).max(128);
+
+export const signupSchema = z.object({
+  email: emailField,
+  password: passwordField,
+  name: z.string().trim().max(80).optional(),
+  inviteCode: z.string().trim().max(64).optional(),
+  timezone: z.string().max(64).refine(tz => {
+    try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
+  }, 'Invalid timezone').optional(),
+  client: z.enum(['web', 'native']).optional(),
+});
+
 export const loginSchema = z.object({
-  passcode: z.string().min(1).max(256),
+  email: emailField,
+  password: passwordField,
   // 'native' asks for a bearer token instead of a session cookie
   client: z.enum(['web', 'native']).optional(),
 });
+
+export const googleLoginSchema = z.object({
+  credential: z.string().min(10).max(4096),
+  inviteCode: z.string().trim().max(64).optional(),
+  timezone: z.string().max(64).optional(),
+  client: z.enum(['web', 'native']).optional(),
+});
+
+export const tokenSchema = z.object({ token: z.string().min(16).max(256) });
+export const forgotPasswordSchema = z.object({ email: emailField });
+export const resetPasswordSchema = z.object({ token: z.string().min(16).max(256), password: passwordField });
 
 export type ThreadInput = z.infer<typeof threadSchema>;
 export type TaskInput = z.infer<typeof taskSchema>;

@@ -1,6 +1,7 @@
 import { Thread } from '../models/Thread'
 import { Task } from '../models/Task'
 import { Settings } from '../models/Settings'
+import { User } from '../models/User'
 
 // ============================================
 // Day keys
@@ -10,7 +11,7 @@ import { Settings } from '../models/Settings'
 // frontend produces when it sends a 'YYYY-MM-DD' string, and what
 // taskService.getTasks() filters on.
 
-export const DEFAULT_TIMEZONE = 'Africa/Lagos'
+export const DEFAULT_TIMEZONE = 'UTC'
 const TIME_BLOCKS = ['morning', 'afternoon', 'evening'] as const
 type TimeBlock = typeof TIME_BLOCKS[number]
 
@@ -441,8 +442,8 @@ function toPlanTask(t: any): PlanTask {
   }
 }
 
-async function loadSchedulingSettings() {
-  const settings = await Settings.findOne()
+async function loadSchedulingSettings(userId: string) {
+  const settings = await Settings.findOne({ userId })
   return {
     timezone: settings?.timezone || DEFAULT_TIMEZONE,
     multipleTarget: settings?.multipleThreadsPerWeekTarget || 3,
@@ -455,10 +456,10 @@ async function loadSchedulingSettings() {
 }
 
 /** Tasks already on a day: per-block counts and summed intensity (skipped tasks don't count). */
-async function loadDayLoad(dayKey: string): Promise<{ blockLoads: Record<TimeBlock, number>; dayLoad: number }> {
+async function loadDayLoad(userId: string, dayKey: string): Promise<{ blockLoads: Record<TimeBlock, number>; dayLoad: number }> {
   const start = dayKeyToDate(dayKey)
   const end = dayKeyToDate(addDaysKey(dayKey, 1))
-  const tasks = await Task.find({ date: { $gte: start, $lt: end }, status: { $ne: 'skipped' }, isEvent: { $ne: true } }, { timeBlock: 1, intensity: 1 })
+  const tasks = await Task.find({ userId, date: { $gte: start, $lt: end }, status: { $ne: 'skipped' }, isEvent: { $ne: true } }, { timeBlock: 1, intensity: 1 })
   const blockLoads: Record<TimeBlock, number> = { morning: 0, afternoon: 0, evening: 0 }
   let dayLoad = 0
   for (const t of tasks) {
@@ -469,8 +470,8 @@ async function loadDayLoad(dayKey: string): Promise<{ blockLoads: Record<TimeBlo
   return { blockLoads, dayLoad }
 }
 
-async function loadQueue(): Promise<PlanTask[]> {
-  const docs = await Task.find({ date: null, status: 'pending' })
+async function loadQueue(userId: string): Promise<PlanTask[]> {
+  const docs = await Task.find({ userId, date: null, status: 'pending' })
   return docs.map(toPlanTask)
 }
 
@@ -479,9 +480,10 @@ async function loadQueue(): Promise<PlanTask[]> {
  * not an event). Counting real tasks means work you add by hand counts toward
  * the weekly target, and undoing a placement never leaves the count off.
  */
-async function loadAppearances(threadIds: string[], weekKey: string): Promise<Map<string, number>> {
+async function loadAppearances(userId: string, threadIds: string[], weekKey: string): Promise<Map<string, number>> {
   const docs = await Task.find(
     {
+      userId,
       threadId: { $in: threadIds },
       date: { $gte: dayKeyToDate(weekKey), $lt: dayKeyToDate(addDaysKey(weekKey, 7)) },
       status: { $ne: 'skipped' },
@@ -509,39 +511,46 @@ const ROLLOVER_DAYS = 14
  * Every moved item records `missedOn`. Returns the fixed-day threads whose slot
  * was missed yesterday — they get one makeup today.
  */
-export async function rolloverMissed(dayKey: string, threads: PlanThread[]): Promise<Set<string>> {
+export async function rolloverMissed(userId: string, dayKey: string, threads: PlanThread[]): Promise<Set<string>> {
   const todayStart = dayKeyToDate(dayKey)
-  const range = { status: 'pending', date: { $gte: dayKeyToDate(addDaysKey(dayKey, -ROLLOVER_DAYS)), $lt: todayStart } }
-  const skip = [{ $set: { status: 'skipped', missedOn: '$date' } }]
+  const past = await Task.find({
+    userId,
+    status: 'pending',
+    date: { $gte: dayKeyToDate(addDaysKey(dayKey, -ROLLOVER_DAYS)), $lt: todayStart },
+  })
 
-  await Task.updateMany({ ...range, isEvent: true }, skip)
-  await Task.updateMany({ ...range, isEvent: { $ne: true }, source: 'auto-generated' }, skip)
-  await Task.updateMany(
-    { ...range, isEvent: { $ne: true }, source: { $ne: 'auto-generated' }, scheduledBy: 'generator' },
-    [{ $set: { missedOn: '$date', date: null, timeBlock: 'unscheduled', scheduledBy: null } }]
-  )
+  const ops: any[] = []
+  for (const t of past) {
+    const where = { _id: t._id, userId, status: 'pending' }
+    if (t.isEvent || t.source === 'auto-generated') {
+      ops.push({ updateOne: { filter: where, update: { $set: { status: 'skipped', missedOn: t.date } } } })
+    } else if (t.scheduledBy === 'generator') {
+      ops.push({ updateOne: { filter: where, update: { $set: { missedOn: t.date, date: null, timeBlock: 'unscheduled', scheduledBy: null } } } })
+    }
+  }
+  if (ops.length) await Task.bulkWrite(ops)
 
   const yesterday = addDaysKey(dayKey, -1)
   const owed = threads.filter(t => t.frequency === 'fixed-day' && t.taskMode !== 'event' &&
     t.fixedDay === mondayIndex(yesterday) && t.fixedDay !== mondayIndex(dayKey))
   if (!owed.length) return new Set()
-  const missed = await Task.find({ threadId: { $in: owed.map(t => t.id) }, missedOn: dayKeyToDate(yesterday) }, { threadId: 1 })
+  const missed = await Task.find({ userId, threadId: { $in: owed.map(t => t.id) }, missedOn: dayKeyToDate(yesterday) }, { threadId: 1 })
   return new Set(missed.map(t => String(t.threadId)))
 }
 
 /** Plan `dayKey` and write it to the database. */
-export async function generateToday(dayKey: string) {
-  const { planOptions } = await loadSchedulingSettings()
-  const threadDocs = await Thread.find({ status: 'active' })
+export async function generateToday(userId: string, dayKey: string) {
+  const { planOptions } = await loadSchedulingSettings(userId)
+  const threadDocs = await Thread.find({ userId, status: 'active' })
   const threads = threadDocs.map(toPlanThread)
   const weekKey = weekStartKey(dayKey)
 
-  const makeup = await rolloverMissed(dayKey, threads)
+  const makeup = await rolloverMissed(userId, dayKey, threads)
   const state: PlanState = {
-    appearances: await loadAppearances(threads.map(t => t.id), weekKey),
-    queue: await loadQueue(),
+    appearances: await loadAppearances(userId, threads.map(t => t.id), weekKey),
+    queue: await loadQueue(userId),
     makeup,
-    ...(await loadDayLoad(dayKey)),
+    ...(await loadDayLoad(userId, dayKey)),
   }
 
   const actions = planDay(dayKey, threads, state, planOptions)
@@ -550,9 +559,10 @@ export async function generateToday(dayKey: string) {
   for (const a of actions) {
     if (a.kind === 'event') {
       // Rebalance re-plans today; don't duplicate an event that survived (e.g. already done)
-      const exists = await Task.exists({ threadId: a.threadId, date, isEvent: true })
+      const exists = await Task.exists({ userId, threadId: a.threadId, date, isEvent: true })
       if (!exists) {
         await Task.create({
+          userId,
           title: a.title,
           threadId: a.threadId,
           date,
@@ -571,9 +581,10 @@ export async function generateToday(dayKey: string) {
     }
     if (a.taskId) {
       // Only commit if it's still unscheduled — guards against a concurrent edit.
-      await Task.updateOne({ _id: a.taskId, date: null }, { $set: { date, timeBlock: a.timeBlock, scheduledBy: 'generator' } })
+      await Task.updateOne({ _id: a.taskId, userId, date: null }, { $set: { date, timeBlock: a.timeBlock, scheduledBy: 'generator' } })
     } else {
       await Task.create({
+        userId,
         title: a.title,
         threadId: a.threadId,
         date,
@@ -590,48 +601,51 @@ export async function generateToday(dayKey: string) {
   return actions
 }
 
-let inFlight: Promise<{ dayKey: string; generated: boolean }> | null = null
-// Fast path so per-request calls don't hit Mongo once today is done
-let knownGenerated: { dayKey: string; timezone: string } | null = null
+const inFlight = new Map<string, Promise<{ dayKey: string; generated: boolean }>>()
+// Fast path so per-request calls don't hit Mongo once a user's day is done
+const knownGenerated = new Map<string, { dayKey: string; timezone: string }>()
 
 /**
- * Runs generateToday() at most once per day. The day is claimed atomically
- * on the Settings document so a restart (or a second process) can't double
+ * Runs generateToday() at most once per user per day. The day is claimed atomically
+ * on the user's Settings document so a restart (or a second process) can't double
  * schedule. Safe to call on every request.
  */
-export function ensureTodayGenerated(now = new Date()): Promise<{ dayKey: string; generated: boolean }> {
-  if (knownGenerated && toDayKey(now, knownGenerated.timezone) === knownGenerated.dayKey) {
-    return Promise.resolve({ dayKey: knownGenerated.dayKey, generated: false })
+export function ensureTodayGenerated(userId: string, now = new Date()): Promise<{ dayKey: string; generated: boolean }> {
+  const known = knownGenerated.get(userId)
+  if (known && toDayKey(now, known.timezone) === known.dayKey) {
+    return Promise.resolve({ dayKey: known.dayKey, generated: false })
   }
-  if (inFlight) return inFlight
-  inFlight = (async () => {
-    const { timezone } = await loadSchedulingSettings()
+  const running = inFlight.get(userId)
+  if (running) return running
+  const job = (async () => {
+    const { timezone } = await loadSchedulingSettings(userId)
     const dayKey = toDayKey(now, timezone)
 
-    let settings = await Settings.findOne()
-    if (!settings) settings = await Settings.create({ timezone })
+    let settings = await Settings.findOne({ userId })
+    if (!settings) settings = await Settings.create({ userId, timezone })
     if (settings.lastGeneratedDate === dayKey) {
-      knownGenerated = { dayKey, timezone }
+      knownGenerated.set(userId, { dayKey, timezone })
       return { dayKey, generated: false }
     }
 
     const previous = settings.lastGeneratedDate ?? null
     const claim = await Settings.updateOne(
-      { _id: settings._id, lastGeneratedDate: previous },
+      { _id: settings._id, userId, lastGeneratedDate: previous },
       { $set: { lastGeneratedDate: dayKey } }
     )
     if (claim.modifiedCount === 0) return { dayKey, generated: false }
 
     try {
-      await generateToday(dayKey)
+      await generateToday(userId, dayKey)
     } catch (err) {
-      await Settings.updateOne({ _id: settings._id, lastGeneratedDate: dayKey }, { $set: { lastGeneratedDate: previous } })
+      await Settings.updateOne({ _id: settings._id, userId, lastGeneratedDate: dayKey }, { $set: { lastGeneratedDate: previous } })
       throw err
     }
-    knownGenerated = { dayKey, timezone }
+    knownGenerated.set(userId, { dayKey, timezone })
     return { dayKey, generated: true }
-  })().finally(() => { inFlight = null })
-  return inFlight
+  })().finally(() => { inFlight.delete(userId) })
+  inFlight.set(userId, job)
+  return job
 }
 
 export type ForecastEntry = PlanAction & { date: string }
@@ -641,16 +655,16 @@ export type ForecastEntry = PlanAction & { date: string }
  * `requestedWeekKey`. Simulates every day from tomorrow forward using the
  * current queue and weekly progress; nothing is written.
  */
-export async function forecastWeek(requestedWeekKey: string, now = new Date()): Promise<ForecastEntry[]> {
-  const { timezone, planOptions } = await loadSchedulingSettings()
+export async function forecastWeek(userId: string, requestedWeekKey: string, now = new Date()): Promise<ForecastEntry[]> {
+  const { timezone, planOptions } = await loadSchedulingSettings(userId)
   const todayKey = toDayKey(now, timezone)
   const requestedEnd = addDaysKey(requestedWeekKey, 6)
   if (requestedEnd <= todayKey) return []
 
-  const threads = (await Thread.find({ status: 'active' })).map(toPlanThread)
-  const queue = await loadQueue()
+  const threads = (await Thread.find({ userId, status: 'active' })).map(toPlanThread)
+  const queue = await loadQueue(userId)
   let currentWeek = weekStartKey(todayKey)
-  let appearances = await loadAppearances(threads.map(t => t.id), currentWeek)
+  let appearances = await loadAppearances(userId, threads.map(t => t.id), currentWeek)
   const state: PlanState = { appearances, queue, blockLoads: { morning: 0, afternoon: 0, evening: 0 } }
 
   const out: ForecastEntry[] = []
@@ -661,7 +675,7 @@ export async function forecastWeek(requestedWeekKey: string, now = new Date()): 
       appearances = new Map()
       state.appearances = appearances
     }
-    Object.assign(state, await loadDayLoad(day))
+    Object.assign(state, await loadDayLoad(userId, day))
     const actions = planDay(day, threads, state, planOptions)
     if (day >= requestedWeekKey) {
       for (const a of actions) out.push({ ...a, date: day })
@@ -686,7 +700,7 @@ export type RebalanceResult = {
   forecastLoads: Record<string, number>
 }
 
-let rebalancing: Promise<RebalanceResult> | null = null
+const rebalancing = new Map<string, Promise<RebalanceResult>>()
 
 /**
  * Rebalance the current week with the current settings and queues.
@@ -698,16 +712,20 @@ let rebalancing: Promise<RebalanceResult> | null = null
  * - Rest of the week: leftover tasks from the old weekly generator are
  *   removed; those days are forecast live and committed one day at a time.
  */
-export function rebalanceWeek(now = new Date()): Promise<RebalanceResult> {
+export function rebalanceWeek(userId: string, now = new Date()): Promise<RebalanceResult> {
   // A double-click must not undo/replan twice concurrently
-  if (!rebalancing) rebalancing = doRebalance(now).finally(() => { rebalancing = null })
-  return rebalancing
+  let job = rebalancing.get(userId)
+  if (!job) {
+    job = doRebalance(userId, now).finally(() => { rebalancing.delete(userId) })
+    rebalancing.set(userId, job)
+  }
+  return job
 }
 
-async function doRebalance(now: Date): Promise<RebalanceResult> {
+async function doRebalance(userId: string, now: Date): Promise<RebalanceResult> {
   // Don't race the once-a-day generation
-  await ensureTodayGenerated(now)
-  const { timezone, planOptions } = await loadSchedulingSettings()
+  await ensureTodayGenerated(userId, now)
+  const { timezone, planOptions } = await loadSchedulingSettings(userId)
   const dayKey = toDayKey(now, timezone)
   const weekKey = weekStartKey(dayKey)
   const weekStartDate = dayKeyToDate(weekKey)
@@ -716,6 +734,7 @@ async function doRebalance(now: Date): Promise<RebalanceResult> {
   const weekEnd = dayKeyToDate(addDaysKey(weekKey, 7))
 
   const undo = await Task.find({
+    userId,
     status: 'pending',
     $or: [
       // Earlier this week: only what the generator provably placed
@@ -733,11 +752,11 @@ async function doRebalance(now: Date): Promise<RebalanceResult> {
   let returnedToQueue = 0
   for (const t of undo) {
     if (t.source === 'auto-generated') {
-      await Task.deleteOne({ _id: t._id, status: 'pending' })
+      await Task.deleteOne({ _id: t._id, userId, status: 'pending' })
       removedPlaceholders++
     } else {
       await Task.updateOne(
-        { _id: t._id, status: 'pending' },
+        { _id: t._id, userId, status: 'pending' },
         { $set: { date: null, timeBlock: 'unscheduled', scheduledBy: null } }
       )
       returnedToQueue++
@@ -747,19 +766,20 @@ async function doRebalance(now: Date): Promise<RebalanceResult> {
   // The daily generator never commits future days, so any pending
   // auto-generated task after today is a leftover from the old weekly grid.
   const leftovers = await Task.deleteMany({
+    userId,
     date: { $gte: tomorrowStart, $lt: weekEnd },
     status: 'pending',
     source: 'auto-generated',
   })
 
-  const actions = await generateToday(dayKey)
-  const { dayLoad } = await loadDayLoad(dayKey)
+  const actions = await generateToday(userId, dayKey)
+  const { dayLoad } = await loadDayLoad(userId, dayKey)
 
   const forecastLoads: Record<string, number> = {}
   for (let d = addDaysKey(dayKey, 1); d < addDaysKey(weekKey, 7); d = addDaysKey(d, 1)) {
-    forecastLoads[d] = (await loadDayLoad(d)).dayLoad
+    forecastLoads[d] = (await loadDayLoad(userId, d)).dayLoad
   }
-  for (const f of await forecastWeek(weekKey, now)) {
+  for (const f of await forecastWeek(userId, weekKey, now)) {
     forecastLoads[f.date] = (forecastLoads[f.date] ?? 0) + intensityWeight(f.intensity)
   }
 
@@ -774,4 +794,26 @@ async function doRebalance(now: Date): Promise<RebalanceResult> {
     maxDailyIntensity: planOptions.maxDailyIntensity,
     forecastLoads,
   }
+}
+
+/**
+ * Scheduler: make sure every recently active user's day is committed (each in their own
+ * timezone). Users who haven't opened the app for a while are skipped; their day is
+ * generated the moment they come back.
+ */
+export async function generateForActiveUsers(withinDays = 45, concurrency = 5) {
+  const since = new Date(Date.now() - withinDays * 86_400_000)
+  const users = await User.find({ status: 'active', lastSeenAt: { $gt: since } }, { _id: 1 })
+  let generated = 0
+  for (let i = 0; i < users.length; i += concurrency) {
+    await Promise.all(users.slice(i, i + concurrency).map(async u => {
+      try {
+        const r = await ensureTodayGenerated(String(u._id))
+        if (r.generated) generated++
+      } catch (error) {
+        console.error('Daily generation failed for a user:', error instanceof Error ? error.message : error)
+      }
+    }))
+  }
+  return { users: users.length, generated }
 }

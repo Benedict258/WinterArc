@@ -1,10 +1,12 @@
 import mongoose from 'mongoose'
+import { tenantField, tenantGuard } from '../plugins/tenant'
 
 const settingsSchema = new mongoose.Schema(
   {
+    userId: { type: tenantField.type, ref: 'User', required: true, unique: true }, // one document per user
     timezone: {
       type: String,
-      default: 'Africa/Lagos',
+      default: 'UTC',
     },
     weeklyGenerationRules: mongoose.Schema.Types.Mixed,
     // 'YYYY-MM-DD' of the last day generateToday() committed; claimed atomically
@@ -42,5 +44,7 @@ const settingsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 )
+
+settingsSchema.plugin(tenantGuard)
 
 export const Settings = mongoose.model('Settings', settingsSchema)

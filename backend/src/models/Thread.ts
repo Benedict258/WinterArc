@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { tenantField, tenantGuard } from '../plugins/tenant'
 
 const resourceSchema = new mongoose.Schema(
   {
@@ -12,6 +13,7 @@ const resourceSchema = new mongoose.Schema(
 
 const threadSchema = new mongoose.Schema(
   {
+    userId: tenantField,
     name: {
       type: String,
       required: true,
@@ -61,5 +63,8 @@ const threadSchema = new mongoose.Schema(
   },
   { timestamps: true }
 )
+
+threadSchema.index({ userId: 1, status: 1 })
+threadSchema.plugin(tenantGuard)
 
 export const Thread = mongoose.model('Thread', threadSchema)

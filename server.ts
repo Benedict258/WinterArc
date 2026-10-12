@@ -8,9 +8,8 @@ import { MongoStore } from 'connect-mongo'
 
 import { Thread } from './backend/src/models/Thread.ts'
 import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
-import { ApiToken } from './backend/src/models/ApiToken.ts'
 import { PushSubscription } from './backend/src/models/PushSubscription.ts'
-import { pushConfigured, vapidPublicKey, sendToAll, runNotificationTick, startNotificationScheduler } from './backend/src/services/notificationService.ts'
+import { pushConfigured, vapidPublicKey, sendToUser, runNotificationTick, startNotificationScheduler } from './backend/src/services/notificationService.ts'
 import {
   calendarConfigured,
   getAuthUrl,
@@ -20,7 +19,7 @@ import {
   syncCalendar,
   eventsForDay,
   deleteRemoteEvent,
-  syncIfStale,
+  syncAllStale,
 } from './backend/src/services/calendarService.ts'
 import { createIdempotent } from './backend/src/utils/idempotentCreate.ts'
 import { Task } from './backend/src/models/Task.ts'
@@ -35,8 +34,10 @@ import { v4 as uuidv4 } from 'uuid'
 import * as threadService from './backend/src/services/threadService.ts'
 import * as taskService from './backend/src/services/taskService.ts'
 import * as gridService from './backend/src/services/gridService.ts'
-import { ensureTodayGenerated, rebalanceWeek, toDayKey, DEFAULT_TIMEZONE } from './backend/src/services/dailyGenerationService.ts'
+import { ensureTodayGenerated, generateForActiveUsers, rebalanceWeek, toDayKey, DEFAULT_TIMEZONE } from './backend/src/services/dailyGenerationService.ts'
 import { validateRequest } from './backend/src/middleware/validationMiddleware.ts'
+import { authenticate, requireAuth, requireVerified, uid } from './backend/src/middleware/auth.ts'
+import { authRouter } from './backend/src/routes/auth.ts'
 import {
   threadSchema,
   threadUpdateSchema,
@@ -52,15 +53,8 @@ import {
   dropUploadUrlSchema,
   dropItemSchema,
   dropUpdateSchema,
-  loginSchema,
   pushSubscriptionSchema,
 } from './backend/src/utils/validation.ts'
-
-declare module 'express-session' {
-  interface SessionData {
-    authenticated?: boolean
-  }
-}
 
 // Load .env (dev convenience — works without dotenv dependency)
 import { readFileSync, existsSync } from 'fs'
@@ -82,139 +76,18 @@ function loadEnv() {
 loadEnv()
 
 const PORT = Number(process.env.PORT) || 3000
-const MONGO_URI = process.env.MONGO_URI
 const IS_PROD = process.env.NODE_ENV === 'production'
+const IS_TEST = process.env.NODE_ENV === 'test'
 
-if (!MONGO_URI) {
-  console.error('ERROR: MONGO_URI is required. Set it in your .env file.')
-  process.exit(1)
-}
-if (!process.env.APP_PASSCODE) {
-  console.error('ERROR: APP_PASSCODE is required. Set it in your .env file.')
-  process.exit(1)
-}
 if (IS_PROD && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32)) {
   console.error('ERROR: SESSION_SECRET (32+ chars) is required in production.')
   process.exit(1)
 }
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex')
 
-// ============================================
-// INITIAL SEED DATA (PRD Section 7)
-// fixedDay: 0 = Monday … 6 = Sunday
-// ============================================
-const seedThreads = [
-  { name: 'Blockchain Club FUTMinna Technical Lead', category: 'Role/Program', frequency: 'weekly', status: 'active', taskMode: 'discrete', notes: 'Weekly team sync and initiatives' },
-  { name: 'TEDx FUTMinna Website Manager', category: 'Role/Program', frequency: 'fixed-day', fixedDay: 2, status: 'active', taskMode: 'discrete', notes: 'Wednesday website updates' },
-  { name: 'Wesonline', category: 'Role/Program', frequency: 'weekly', status: 'active', taskMode: 'discrete', notes: 'Platform maintenance and updates' },
-  { name: 'AWS Builder Group Technical Lead', category: 'Role/Program', frequency: 'fixed-day', fixedDay: 5, status: 'active', taskMode: 'discrete', notes: 'Saturday tech sessions' },
-  { name: 'Suiaah Learn sessions', category: 'Role/Program', frequency: 'fixed-day', fixedDay: 2, status: 'active', taskMode: 'discrete', notes: 'Wednesday learning track' },
-  { name: 'Safroi', category: 'Active Build', frequency: 'weekly', status: 'active', taskMode: 'discrete' },
-  { name: 'Buiry', category: 'Active Build', frequency: 'weekly', status: 'active', taskMode: 'discrete' },
-  { name: 'Tenaxai', category: 'Active Build', frequency: 'weekly', status: 'active', taskMode: 'discrete' },
-  { name: 'Cight', category: 'Active Build', frequency: 'weekly', status: 'active', taskMode: 'discrete' },
-  { name: 'ECAPs R&D', category: 'Active Build', frequency: 'multiple', status: 'active', taskMode: 'discrete', notes: 'Sensor calibration & embedded research' },
-  { name: 'Agentic Architecture (Engineering/Robotics) R&D', category: 'Active Build', frequency: 'multiple', status: 'active', taskMode: 'discrete' },
-  { name: 'Prive/PriveStudios', category: 'Active Build', frequency: 'multiple', status: 'active', taskMode: 'discrete' },
-  { name: 'Pathfinder.io', category: 'Active Build', frequency: 'multiple', status: 'active', taskMode: 'discrete' },
-  { name: 'Solar Panel/Renewable Energy R&D', category: 'Active Build', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'ESS', category: 'Active Build', frequency: 'multiple', status: 'active', taskMode: 'discrete' },
-  { name: 'Computer Vision', category: 'Learning Track', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'HackerRank/LeetCode', category: 'Learning Track', frequency: 'daily', status: 'active', taskMode: 'continuous', notes: 'Daily problem solving' },
-  { name: 'Python relearning', category: 'Learning Track', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'Nvidia Courses/CUDA', category: 'Learning Track', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'System design & architecture', category: 'Learning Track', frequency: 'weekly', status: 'active', taskMode: 'continuous' },
-  { name: 'Backend projects', category: 'Learning Track', frequency: 'weekly', status: 'active', taskMode: 'continuous' },
-  { name: 'Java — RedHat course', category: 'Learning Track', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'AI Automation', category: 'Learning Track', frequency: 'weekly', status: 'active', taskMode: 'continuous' },
-  { name: 'Mechatronics skills — Matlab/Proteus/Arduino', category: 'Learning Track', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'Learning new tech by building with it', category: 'Learning Track', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'Jobs & gigs applications', category: 'Application/Outreach', frequency: 'daily', status: 'active', taskMode: 'continuous', notes: 'Daily outreach and pipeline' },
-  { name: 'Scholarships/grants applications', category: 'Application/Outreach', frequency: 'daily', status: 'active', taskMode: 'continuous' },
-  { name: 'LinkedIn posting', category: 'Application/Outreach', frequency: 'multiple', status: 'active', taskMode: 'continuous' },
-  { name: 'Huawei Competition prep', category: 'Application/Outreach', frequency: 'multiple', status: 'active', taskMode: 'discrete' },
-  { name: 'Kebbi Plan', category: 'Other', frequency: 'fixed-day', fixedDay: 5, status: 'active', taskMode: 'continuous', notes: 'Saturday rest & catch-up' },
-]
-
-const seedWishlist = [
-  { item: 'Webcam', note: 'High resolution streaming/meetings', acquired: false },
-  { item: 'VGA-to-HDMI adapter', note: 'External monitor setup', acquired: false },
-  { item: 'Phone', note: 'Hardware upgrade for mobile testing', acquired: false },
-]
-
-const seedGoals = [
-  { period: 'Q3-2026', text: 'Ship production-ready offline-first PWA Workspace hub replacing Notion' },
-  { period: 'Q4-2026', text: 'Maintain 90%+ daily completion consistency across all Active Threads' },
-  { period: 'Q4-2026', text: 'Secure AWS Builder Group milestone & complete Nvidia CUDA certification' },
-]
-
-async function getTimezone() {
-  const settings = await Settings.findOne()
+async function getTimezone(userId: string) {
+  const settings = await Settings.findOne({ userId })
   return settings?.timezone || DEFAULT_TIMEZONE
-}
-
-async function seedIfEmpty() {
-  const threadCount = await Thread.countDocuments()
-  if (threadCount === 0) {
-    await Thread.insertMany(seedThreads)
-    console.log(`Seeded ${seedThreads.length} threads`)
-  }
-  const wishCount = await WishlistItem.countDocuments()
-  if (wishCount === 0) {
-    await WishlistItem.insertMany(seedWishlist)
-    console.log(`Seeded ${seedWishlist.length} wishlist items`)
-  }
-  const goalCount = await Goal.countDocuments()
-  if (goalCount === 0) {
-    await Goal.insertMany(seedGoals)
-    console.log(`Seeded ${seedGoals.length} goals`)
-  }
-  const settingsCount = await Settings.countDocuments()
-  if (settingsCount === 0) {
-    await Settings.create({
-      timezone: 'Africa/Lagos',
-      multipleThreadsPerWeekTarget: 3,
-      gridBalancing: { maxDailyIntensity: 6, preferLowIntensityOnBusyDays: true },
-    })
-    console.log('Seeded default settings')
-  }
-}
-
-// ============================================
-// LOGIN RATE LIMITING (single-process, in-memory)
-// ============================================
-const LOGIN_WINDOW_MS = 15 * 60 * 1000
-const LOGIN_MAX_FAILURES = 5
-// Behind Vercel → Render the client IP comes from X-Forwarded-For, which a
-// request sent straight to Render can forge. The global cap bounds brute
-// force even if per-IP keys are spoofed.
-const LOGIN_MAX_GLOBAL_FAILURES = 50
-const GLOBAL_KEY = '__global__'
-const loginFailures = new Map<string, { count: number; first: number }>()
-
-function failureCount(key: string) {
-  const entry = loginFailures.get(key)
-  if (!entry) return 0
-  if (Date.now() - entry.first > LOGIN_WINDOW_MS) {
-    loginFailures.delete(key)
-    return 0
-  }
-  return entry.count
-}
-
-function loginBlocked(ip: string) {
-  return failureCount(ip) >= LOGIN_MAX_FAILURES || failureCount(GLOBAL_KEY) >= LOGIN_MAX_GLOBAL_FAILURES
-}
-
-function recordLoginFailure(ip: string) {
-  for (const key of [ip, GLOBAL_KEY]) {
-    const entry = loginFailures.get(key)
-    if (!entry || Date.now() - entry.first > LOGIN_WINDOW_MS) {
-      loginFailures.set(key, { count: 1, first: Date.now() })
-    } else {
-      entry.count++
-    }
-  }
 }
 
 /** Number of proxy hops in front of the app (Render = 1; Vercel → Render = 2). */
@@ -237,28 +110,6 @@ const ALLOWED_ORIGINS = [
   ...NATIVE_ORIGINS,
 ]
 
-const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex')
-const NATIVE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000
-
-function bearerToken(req: express.Request) {
-  const header = req.headers.authorization
-  return header?.startsWith('Bearer ') ? header.slice(7).trim() : null
-}
-
-/** Logged in by session cookie (web) or bearer token (native app). */
-async function isAuthenticated(req: express.Request) {
-  if (req.session?.authenticated) return true
-  const token = bearerToken(req)
-  if (!token) return false
-  return !!(await ApiToken.exists({ tokenHash: hashToken(token), expiresAt: { $gt: new Date() } }))
-}
-
-function passcodeMatches(input: string) {
-  const expected = crypto.createHash('sha256').update(process.env.APP_PASSCODE!).digest()
-  const actual = crypto.createHash('sha256').update(input).digest()
-  return crypto.timingSafeEqual(expected, actual)
-}
-
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function errorMessage(error: unknown) {
@@ -269,17 +120,14 @@ function storageErrorStatus(error: unknown) {
   return error instanceof StorageNotConfiguredError ? 503 : 500
 }
 
-async function startServer() {
-  // MongoDB connection (required) — before the session store, which uses it
-  try {
-    await mongoose.connect(MONGO_URI!, { serverSelectionTimeoutMS: 8000 })
-    console.log('MongoDB connected successfully')
-    await seedIfEmpty()
-  } catch (err) {
-    console.error('MongoDB connection failed:', errorMessage(err))
-    process.exit(1)
-  }
+/** Paths under /api that work without being logged in. */
+const PUBLIC_PATHS = new Set(['/health', '/cron/tick', '/calendar/callback'])
 
+/**
+ * Builds the Express app (API only). Needs an open Mongoose connection.
+ * Kept separate from startServer() so tests can run the real app against a test database.
+ */
+export function createApp() {
   const app = express()
   app.set('trust proxy', trustProxySetting())
   app.disable('x-powered-by')
@@ -304,8 +152,8 @@ async function startServer() {
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    // Persist sessions in Mongo so a PM2 restart doesn't log you out
-    store: MongoStore.create({
+    // Persist sessions in Mongo so a restart doesn't log everyone out (tests use the in-memory store)
+    store: IS_TEST ? undefined : MongoStore.create({
       client: mongoose.connection.getClient() as any,
       collectionName: 'sessions',
       ttl: 60 * 60 * 24 * 30,
@@ -318,46 +166,13 @@ async function startServer() {
     },
   }))
 
-  // ============================================
-  // AUTH
-  // ============================================
-  app.post('/api/auth/login', validateRequest(loginSchema), (req, res) => {
-    const ip = req.ip || 'unknown'
-    if (loginBlocked(ip)) {
-      return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' })
-    }
-    if (!passcodeMatches(req.body.passcode)) {
-      recordLoginFailure(ip)
-      return res.status(401).json({ error: 'Invalid passcode' })
-    }
-    loginFailures.delete(ip)
-    if (req.body.client === 'native') {
-      const token = crypto.randomBytes(32).toString('hex')
-      return ApiToken.create({ tokenHash: hashToken(token), label: 'native app', expiresAt: new Date(Date.now() + NATIVE_TOKEN_TTL_MS) })
-        .then(() => res.json({ ok: true, token }))
-        .catch(() => res.status(500).json({ error: 'Login failed' }))
-    }
-    // New session id on login (prevents session fixation)
-    req.session.regenerate((err) => {
-      if (err) return res.status(500).json({ error: 'Login failed' })
-      req.session.authenticated = true
-      req.session.save(() => res.json({ ok: true }))
-    })
-  })
+  // Who is calling? (session cookie or bearer token) — sets req.user
+  app.use('/api', authenticate)
 
-  app.post('/api/auth/logout', async (req, res) => {
-    const token = bearerToken(req)
-    if (token) await ApiToken.deleteOne({ tokenHash: hashToken(token) }).catch(() => {})
-    req.session.destroy(() => {
-      res.clearCookie('winterarc.sid')
-      res.json({ ok: true })
-    })
-  })
-
-  app.get('/api/auth/me', async (req, res) => {
-    res.setHeader('Cache-Control', 'no-store')
-    res.json({ authenticated: await isAuthenticated(req).catch(() => false) })
-  })
+  // ============================================
+  // AUTH (sign-up, login, verify, reset, Google)
+  // ============================================
+  app.use('/api/auth', authRouter)
 
   // ============================================
   // HEALTH CHECK
@@ -381,24 +196,23 @@ async function startServer() {
     const ok = !!secret && crypto.timingSafeEqual(digest(given), digest(secret))
     if (!ok) return res.status(401).json({ error: 'Unauthorized' })
     try {
-      const synced = await syncIfStale().catch(err => { console.error('Calendar sync failed:', errorMessage(err)); return null })
-      res.json({ ...(await runNotificationTick()), calendar: synced ? { imported: synced.imported, pushed: synced.pushed } : null })
+      const calendar = await syncAllStale().catch(err => { console.error('Calendar sync failed:', errorMessage(err)); return null })
+      res.json({ ...(await runNotificationTick()), calendar })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
   })
 
-  // Protect all API routes except auth/health
-  app.use('/api', async (req, res, next) => {
-    if (req.path.startsWith('/auth') || req.path === '/health' || req.path === '/cron/tick' || req.path === '/calendar/callback') return next()
-    if (await isAuthenticated(req).catch(() => false)) return next()
-    return res.status(401).json({ error: 'Unauthorized' })
+  // Everything below needs a logged-in, active user
+  app.use('/api', (req, res, next) => {
+    if (PUBLIC_PATHS.has(req.path)) return next()
+    return requireAuth(req, res, next)
   })
 
   // Lazily commit today's schedule the first time anything asks for tasks
-  const withToday = async (_req: express.Request, _res: express.Response, next: express.NextFunction) => {
+  const withToday = async (req: express.Request, _res: express.Response, next: express.NextFunction) => {
     try {
-      await ensureTodayGenerated()
+      await ensureTodayGenerated(uid(req))
     } catch (err) {
       console.error('Daily generation failed:', errorMessage(err))
     }
@@ -410,7 +224,7 @@ async function startServer() {
   // ============================================
   app.get('/api/threads', async (req, res) => {
     try {
-      const threads = await threadService.getThreads()
+      const threads = await threadService.getThreads(uid(req))
       res.json(threads)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -419,7 +233,7 @@ async function startServer() {
 
   app.post('/api/threads', validateRequest(threadSchema), async (req, res) => {
     try {
-      const thread = await threadService.createThread(req.body)
+      const thread = await threadService.createThread(uid(req), req.body)
       res.status(201).json(thread)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -428,7 +242,7 @@ async function startServer() {
 
   app.put('/api/threads/:id', validateRequest(threadUpdateSchema), async (req, res) => {
     try {
-      const thread = await threadService.updateThread(req.params.id, req.body)
+      const thread = await threadService.updateThread(uid(req), req.params.id, req.body)
       if (!thread) return res.status(404).json({ error: 'Thread not found' })
       res.json(thread)
     } catch (error) {
@@ -438,7 +252,7 @@ async function startServer() {
 
   app.delete('/api/threads/:id', async (req, res) => {
     try {
-      const result = await threadService.deleteThread(req.params.id)
+      const result = await threadService.deleteThread(uid(req), req.params.id)
       res.json(result)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -448,17 +262,17 @@ async function startServer() {
   app.get('/api/threads/:id/stats', async (req, res) => {
     try {
       const { id } = req.params
-      const thread = await Thread.findById(id)
+      const thread = await Thread.findOne({ _id: id, userId: uid(req) })
       if (!thread) {
         res.status(404).json({ error: 'Thread not found' })
         return
       }
 
-      const timezone = await getTimezone()
+      const timezone = await getTimezone(uid(req))
       const now = new Date()
       const { start: quarterStart, end: quarterEnd } = quarterRange(now, timezone)
 
-      const tasks = await Task.find({ threadId: id })
+      const tasks = await Task.find({ userId: uid(req), threadId: id })
       const quarterTasks = tasks.filter(t => {
         if (!t.date) return false
         const d = new Date(t.date)
@@ -504,10 +318,10 @@ async function startServer() {
       const resource = { ...(_id ? { _id } : {}), title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' }
       // One atomic update: a replayed add (same _id) matches nothing and is a no-op
       const result = await Thread.updateOne(
-        { _id: req.params.id, ...(_id ? { 'resources._id': { $ne: _id } } : {}) },
+        { _id: req.params.id, userId: uid(req), ...(_id ? { 'resources._id': { $ne: _id } } : {}) },
         { $push: { resources: resource } }
       )
-      const thread = await Thread.findById(req.params.id)
+      const thread = await Thread.findOne({ _id: req.params.id, userId: uid(req) })
       if (!thread) {
         res.status(404).json({ error: 'Thread not found' })
         return
@@ -521,7 +335,7 @@ async function startServer() {
 
   app.delete('/api/threads/:id/resources/:resourceId', async (req, res) => {
     try {
-      const thread = await Thread.findById(req.params.id)
+      const thread = await Thread.findOne({ _id: req.params.id, userId: uid(req) })
       if (!thread) {
         res.status(404).json({ error: 'Thread not found' })
         return
@@ -555,7 +369,7 @@ async function startServer() {
       }
       if (str(req.query.status)) filters.status = str(req.query.status)
       if (str(req.query.threadId) !== undefined) filters.threadId = str(req.query.threadId)
-      const tasks = await taskService.getTasks(filters)
+      const tasks = await taskService.getTasks(uid(req), filters)
       res.json(tasks)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -564,7 +378,7 @@ async function startServer() {
 
   app.post('/api/tasks', validateRequest(taskSchema), async (req, res) => {
     try {
-      const task = await taskService.createTask(req.body)
+      const task = await taskService.createTask(uid(req), req.body)
       res.status(201).json(task)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -573,7 +387,7 @@ async function startServer() {
 
   app.put('/api/tasks/:id', validateRequest(taskUpdateSchema), async (req, res) => {
     try {
-      const task = await taskService.updateTask(req.params.id, req.body)
+      const task = await taskService.updateTask(uid(req), req.params.id, req.body)
       if (!task) return res.status(404).json({ error: 'Task not found' })
       res.json(task)
     } catch (error) {
@@ -583,7 +397,7 @@ async function startServer() {
 
   app.patch('/api/tasks/:id/complete', async (req, res) => {
     try {
-      const task = await taskService.completeTask(req.params.id)
+      const task = await taskService.completeTask(uid(req), req.params.id)
       if (!task) return res.status(404).json({ error: 'Task not found' })
       res.json(task)
     } catch (error) {
@@ -593,9 +407,9 @@ async function startServer() {
 
   app.delete('/api/tasks/:id', async (req, res) => {
     try {
-      const result = await taskService.deleteTask(req.params.id)
+      const result = await taskService.deleteTask(uid(req), req.params.id)
       // An event we pushed to Google goes away there too (imported ones are left alone, or they'd just re-import)
-      if (result?.calendarEventId && result.source !== 'google-calendar') void deleteRemoteEvent(result.calendarEventId)
+      if (result?.calendarEventId && result.source !== 'google-calendar') void deleteRemoteEvent(uid(req), result.calendarEventId)
       res.json(result)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -608,7 +422,7 @@ async function startServer() {
   app.get('/api/grid/week/:date', withToday, async (req, res) => {
     try {
       if (!DAY_KEY_RE.test(req.params.date)) return res.status(400).json({ error: 'Date must be YYYY-MM-DD' })
-      const { weekStart, tasks, forecast } = await gridService.getWeek(req.params.date)
+      const { weekStart, tasks, forecast } = await gridService.getWeek(uid(req), req.params.date)
       res.json({
         weekStart,
         week: tasks.map((t: any) => ({
@@ -635,7 +449,7 @@ async function startServer() {
 
   app.post('/api/grid/rebalance', async (req, res) => {
     try {
-      res.json(await rebalanceWeek())
+      res.json(await rebalanceWeek(uid(req)))
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
@@ -643,7 +457,7 @@ async function startServer() {
 
   app.get('/api/grid/settings', async (req, res) => {
     try {
-      const balancing = await gridService.getGridSettings()
+      const balancing = await gridService.getGridSettings(uid(req))
       res.json(balancing)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -652,7 +466,7 @@ async function startServer() {
 
   app.put('/api/grid/settings', validateRequest(gridBalancingUpdateSchema), async (req, res) => {
     try {
-      const balancing = await gridService.updateGridSettings(req.body)
+      const balancing = await gridService.updateGridSettings(uid(req), req.body)
       res.json(balancing)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -664,7 +478,7 @@ async function startServer() {
   // ============================================
   app.get('/api/wishlist', async (req, res) => {
     try {
-      const items = await WishlistItem.find().sort({ acquired: 1, createdAt: -1 })
+      const items = await WishlistItem.find({ userId: uid(req) }).sort({ acquired: 1, createdAt: -1 })
       res.json(items)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -673,7 +487,7 @@ async function startServer() {
 
   app.post('/api/wishlist', validateRequest(wishlistItemSchema), async (req, res) => {
     try {
-      const item = await createIdempotent(WishlistItem, req.body)
+      const item = await createIdempotent(WishlistItem, uid(req), req.body)
       res.status(201).json(item)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -682,7 +496,7 @@ async function startServer() {
 
   app.put('/api/wishlist/:id', validateRequest(wishlistItemUpdateSchema), async (req, res) => {
     try {
-      const item = await WishlistItem.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
+      const item = await WishlistItem.findOneAndUpdate({ _id: req.params.id, userId: uid(req) }, req.body, { new: true, runValidators: true })
       if (!item) return res.status(404).json({ error: 'Not found' })
       res.json(item)
     } catch (error) {
@@ -692,7 +506,7 @@ async function startServer() {
 
   app.delete('/api/wishlist/:id', async (req, res) => {
     try {
-      await WishlistItem.findByIdAndDelete(req.params.id)
+      await WishlistItem.findOneAndDelete({ _id: req.params.id, userId: uid(req) })
       res.json({ success: true })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -704,7 +518,7 @@ async function startServer() {
   // ============================================
   app.get('/api/goals', async (req, res) => {
     try {
-      const goals = await Goal.find().sort({ period: -1, createdAt: -1 })
+      const goals = await Goal.find({ userId: uid(req) }).sort({ period: -1, createdAt: -1 })
       res.json(goals)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -713,7 +527,7 @@ async function startServer() {
 
   app.post('/api/goals', validateRequest(goalSchema), async (req, res) => {
     try {
-      const goal = await createIdempotent(Goal, req.body)
+      const goal = await createIdempotent(Goal, uid(req), req.body)
       res.status(201).json(goal)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -722,7 +536,7 @@ async function startServer() {
 
   app.put('/api/goals/:id', validateRequest(goalUpdateSchema), async (req, res) => {
     try {
-      const goal = await Goal.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
+      const goal = await Goal.findOneAndUpdate({ _id: req.params.id, userId: uid(req) }, req.body, { new: true, runValidators: true })
       if (!goal) return res.status(404).json({ error: 'Not found' })
       res.json(goal)
     } catch (error) {
@@ -732,7 +546,7 @@ async function startServer() {
 
   app.delete('/api/goals/:id', async (req, res) => {
     try {
-      await Goal.findByIdAndDelete(req.params.id)
+      await Goal.findOneAndDelete({ _id: req.params.id, userId: uid(req) })
       res.json({ success: true })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -744,10 +558,11 @@ async function startServer() {
   // ============================================
   app.get('/api/settings', async (req, res) => {
     try {
-      let settings = await Settings.findOne()
+      let settings = await Settings.findOne({ userId: uid(req) })
       if (!settings) {
         settings = await Settings.create({
-          timezone: 'Africa/Lagos',
+          userId: uid(req),
+          timezone: 'UTC',
           multipleThreadsPerWeekTarget: 3,
           gridBalancing: { maxDailyIntensity: 6, preferLowIntensityOnBusyDays: true },
         })
@@ -760,8 +575,8 @@ async function startServer() {
 
   app.put('/api/settings', validateRequest(settingsUpdateSchema), async (req, res) => {
     try {
-      let settings = await Settings.findOne()
-      if (!settings) settings = new Settings()
+      let settings = await Settings.findOne({ userId: uid(req) })
+      if (!settings) settings = new Settings({ userId: uid(req) })
       Object.assign(settings, req.body)
       await settings.save()
       res.json(settings)
@@ -777,13 +592,14 @@ async function startServer() {
     res.json({ enabled: pushConfigured(), publicKey: vapidPublicKey() })
   })
 
-  app.post('/api/push/subscribe', validateRequest(pushSubscriptionSchema), async (req, res) => {
+  app.post('/api/push/subscribe', requireVerified, validateRequest(pushSubscriptionSchema), async (req, res) => {
     try {
+      // A device belongs to whoever registered it last (shared browser, new account), so this one lookup spans users
       await PushSubscription.findOneAndUpdate(
         { endpoint: req.body.endpoint },
-        { ...req.body, userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) },
+        { ...req.body, userId: uid(req), userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) },
         { upsert: true, new: true }
-      )
+      ).setOptions({ crossUser: true })
       res.status(201).json({ ok: true })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -792,17 +608,17 @@ async function startServer() {
 
   app.post('/api/push/unsubscribe', async (req, res) => {
     try {
-      if (typeof req.body?.endpoint === 'string') await PushSubscription.deleteOne({ endpoint: req.body.endpoint })
+      if (typeof req.body?.endpoint === 'string') await PushSubscription.deleteOne({ userId: uid(req), endpoint: req.body.endpoint })
       res.json({ ok: true })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
   })
 
-  app.post('/api/push/test', async (req, res) => {
+  app.post('/api/push/test', requireVerified, async (req, res) => {
     try {
       if (!pushConfigured()) return res.status(503).json({ error: 'Push is not configured on the server (VAPID keys missing).' })
-      const result = await sendToAll({ title: 'WinterArc', body: 'Notifications are working on this device.', url: '/', tag: 'test' })
+      const result = await sendToUser(uid(req), { title: 'WinterArc', body: 'Notifications are working on this device.', url: '/', tag: 'test' })
       res.json(result)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -811,11 +627,12 @@ async function startServer() {
 
   app.get('/api/export', async (req, res) => {
     try {
-      const threads = await Thread.find()
-      const tasks = await Task.find()
-      const wishlist = await WishlistItem.find()
-      const goals = await Goal.find()
-      const settings = await Settings.findOne()
+      const userId = uid(req)
+      const threads = await Thread.find({ userId })
+      const tasks = await Task.find({ userId })
+      const wishlist = await WishlistItem.find({ userId })
+      const goals = await Goal.find({ userId })
+      const settings = await Settings.findOne({ userId })
       const data = { exportedAt: new Date().toISOString(), threads, tasks, wishlist, goals, settings }
       res.setHeader('Content-Type', 'application/json')
       res.setHeader('Content-Disposition', 'attachment; filename="workspace-export.json"')
@@ -839,7 +656,7 @@ async function startServer() {
       if (fileSize > MAX_SIZE) {
         return res.status(400).json({ error: 'File exceeds 100MB limit' })
       }
-      const key = `drop/${uuidv4()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '-')}`
+      const key = `drop/${uid(req)}/${uuidv4()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '-')}`
       const url = await getPresignedPutUrl(key, mimeType, 300)
       res.json({ uploadUrl: url, s3Key: key })
     } catch (error) {
@@ -850,9 +667,12 @@ async function startServer() {
   app.post('/api/drop', validateRequest(dropItemSchema), async (req, res) => {
     try {
       const body = req.body
+      // Files live under the owner's own prefix; refuse keys that point anywhere else
+      if (body.type === 'file' && !body.s3Key.startsWith(`drop/${uid(req)}/`)) return res.status(400).json({ error: 'Invalid file key' })
       const now = new Date()
       const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
       const doc = await DropItem.create({
+        userId: uid(req),
         type: body.type,
         s3Key: body.type === 'file' ? body.s3Key : null,
         fileName: body.type === 'file' ? body.fileName : null,
@@ -870,7 +690,7 @@ async function startServer() {
 
   app.get('/api/drop', async (req, res) => {
     try {
-      const items = await DropItem.find({ expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 })
+      const items = await DropItem.find({ userId: uid(req), expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 })
       res.json(items)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -879,7 +699,7 @@ async function startServer() {
 
   app.get('/api/drop/:id/download-url', async (req, res) => {
     try {
-      const item = await DropItem.findById(req.params.id)
+      const item = await DropItem.findOne({ _id: req.params.id, userId: uid(req) })
       if (!item || item.type !== 'file' || !item.s3Key) {
         return res.status(404).json({ error: 'File not found' })
       }
@@ -893,11 +713,11 @@ async function startServer() {
   // Start afresh: remove every drop item and its stored file
   app.delete('/api/drop', async (req, res) => {
     try {
-      const items = await DropItem.find({}, { type: 1, s3Key: 1 })
+      const items = await DropItem.find({ userId: uid(req) }, { type: 1, s3Key: 1 })
       await Promise.all(items
         .filter(i => i.type === 'file' && i.s3Key)
         .map(i => deleteS3Object(i.s3Key!).catch(() => {})))
-      const result = await DropItem.deleteMany({})
+      const result = await DropItem.deleteMany({ userId: uid(req) })
       res.json({ ok: true, deleted: result.deletedCount ?? 0 })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -906,12 +726,12 @@ async function startServer() {
 
   app.delete('/api/drop/:id', async (req, res) => {
     try {
-      const item = await DropItem.findById(req.params.id)
+      const item = await DropItem.findOne({ _id: req.params.id, userId: uid(req) })
       if (!item) return res.status(404).json({ error: 'Not found' })
       if (item.type === 'file' && item.s3Key) {
         await deleteS3Object(item.s3Key).catch(() => {})
       }
-      await DropItem.deleteOne({ _id: req.params.id })
+      await DropItem.deleteOne({ _id: req.params.id, userId: uid(req) })
       res.json({ ok: true })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -920,8 +740,8 @@ async function startServer() {
 
   app.patch('/api/drop/:id', validateRequest(dropUpdateSchema), async (req, res) => {
     try {
-      const item = await DropItem.findByIdAndUpdate(
-        req.params.id,
+      const item = await DropItem.findOneAndUpdate(
+        { _id: req.params.id, userId: uid(req) },
         { expiresAt: new Date(req.body.expiresAt) },
         { new: true }
       )
@@ -939,17 +759,17 @@ async function startServer() {
   // Overall summary for the dashboard cards
   app.get('/api/analytics/summary', async (req, res) => {
     try {
-      const timezone = await getTimezone()
+      const timezone = await getTimezone(uid(req))
       const { start, end, label } = quarterRange(new Date(), timezone)
 
-      const tasksInPeriod = await Task.find({ date: { $gte: start, $lte: end } }, { status: 1 })
+      const tasksInPeriod = await Task.find({ userId: uid(req), date: { $gte: start, $lte: end } }, { status: 1 })
       const { completed, total, rate } = completionStats(tasksInPeriod)
 
-      const activeThreads = await Thread.countDocuments({ status: 'active' })
-      const totalThreads = await Thread.countDocuments()
+      const activeThreads = await Thread.countDocuments({ userId: uid(req), status: 'active' })
+      const totalThreads = await Thread.countDocuments({ userId: uid(req) })
 
       // Streak spans quarters, so it looks at every completed task
-      const doneTasks = await Task.find({ status: 'done', completedAt: { $ne: null } }, { completedAt: 1 })
+      const doneTasks = await Task.find({ userId: uid(req), status: 'done', completedAt: { $ne: null } }, { completedAt: 1 })
       const streak = computeStreak(doneTasks.map(t => t.completedAt), timezone)
 
       res.json({
@@ -971,10 +791,11 @@ async function startServer() {
   // Per-thread performance for the current period
   app.get('/api/analytics/threads', async (req, res) => {
     try {
-      const { start, end } = quarterRange(new Date(), await getTimezone())
+      const { start, end } = quarterRange(new Date(), await getTimezone(uid(req)))
 
-      const threads = await Thread.find({ status: { $ne: 'archived' } })
+      const threads = await Thread.find({ userId: uid(req), status: { $ne: 'archived' } })
       const tasks = await Task.find({
+        userId: uid(req),
         date: { $gte: start, $lte: end },
         threadId: { $ne: null },
       })
@@ -1016,7 +837,7 @@ async function startServer() {
   // ============================================
   app.get('/api/calendar/status', async (req, res) => {
     try {
-      const calendarSync = await CalendarSync.findOne()
+      const calendarSync = await CalendarSync.findOne({ userId: uid(req) })
       const isConnected = !!calendarSync && !!(calendarSync.accessToken || calendarSync.refreshToken)
       res.json({ connected: isConnected, configured: calendarConfigured(), lastSyncedAt: calendarSync?.lastSyncedAt ?? null })
     } catch (error) {
@@ -1027,7 +848,7 @@ async function startServer() {
   // Start OAuth: the app opens the returned URL in a browser
   app.get('/api/calendar/auth', (req, res) => {
     try {
-      res.json({ authUrl: getAuthUrl() })
+      res.json({ authUrl: getAuthUrl(uid(req)) })
     } catch (error) {
       res.status(503).json({ error: errorMessage(error) })
     }
@@ -1040,9 +861,10 @@ async function startServer() {
     const back = (status: string) => res.redirect(`${origin}/settings?calendar=${status}`)
     try {
       const { code, state } = req.query
-      if (typeof code !== 'string' || typeof state !== 'string' || !verifyState(state)) return back('error')
-      await calendarHandleCallback(code)
-      await syncCalendar().catch(err => console.error('Initial calendar sync failed:', errorMessage(err)))
+      const userId = typeof state === 'string' ? verifyState(state) : null
+      if (typeof code !== 'string' || !userId) return back('error')
+      await calendarHandleCallback(userId, code)
+      await syncCalendar(userId).catch(err => console.error('Initial calendar sync failed:', errorMessage(err)))
       back('connected')
     } catch (error) {
       console.error('Calendar callback failed:', errorMessage(error))
@@ -1052,7 +874,7 @@ async function startServer() {
 
   app.delete('/api/calendar/disconnect', async (req, res) => {
     try {
-      await calendarDisconnect()
+      await calendarDisconnect(uid(req))
       res.json({ ok: true })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -1061,7 +883,7 @@ async function startServer() {
 
   app.post('/api/calendar/sync', async (req, res) => {
     try {
-      res.json(await syncCalendar())
+      res.json(await syncCalendar(uid(req)))
     } catch (error) {
       res.status(502).json({ error: errorMessage(error) })
     }
@@ -1071,8 +893,8 @@ async function startServer() {
     try {
       const date = typeof req.query.date === 'string' ? req.query.date.slice(0, 10) : ''
       if (!DAY_KEY_RE.test(date)) return res.status(400).json({ error: 'Invalid date' })
-      if (!(await CalendarSync.exists({ accessToken: { $ne: null } }))) return res.json({ events: [] })
-      const events = await eventsForDay(date, await getTimezone())
+      if (!(await CalendarSync.exists({ userId: uid(req), accessToken: { $ne: null } }))) return res.json({ events: [] })
+      const events = await eventsForDay(uid(req), date, await getTimezone(uid(req)))
       res.json({ events: events.map(e => ({ id: e.id, title: e.summary ?? '(no title)', start: e.start!.dateTime, end: e.end?.dateTime ?? e.start!.dateTime })) })
     } catch (error) {
       console.error('Calendar events failed:', errorMessage(error))
@@ -1084,6 +906,27 @@ async function startServer() {
   app.use('/api', (req, res) => {
     res.status(404).json({ error: 'Not found' })
   })
+
+  return app
+}
+
+async function startServer() {
+  const MONGO_URI = process.env.MONGO_URI
+  if (!MONGO_URI) {
+    console.error('ERROR: MONGO_URI is required. Set it in your .env file.')
+    process.exit(1)
+  }
+
+  // MongoDB connection (required) — before the session store, which uses it
+  try {
+    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 8000 })
+    console.log('MongoDB connected successfully')
+  } catch (err) {
+    console.error('MongoDB connection failed:', errorMessage(err))
+    process.exit(1)
+  }
+
+  const app = createApp()
 
   // ============================================
   // VITE MIDDLEWARE (DEV) OR STATIC FILES (PROD)
@@ -1120,10 +963,10 @@ async function startServer() {
     })
   }
 
-  // Commit today's schedule at startup, then keep checking so the day rolls
-  // over at midnight even if nobody opens the app.
-  const runDaily = () => ensureTodayGenerated()
-    .then(r => { if (r.generated) console.log(`Generated schedule for ${r.dayKey}`) })
+  // Commit each recently active user's schedule at startup, then keep checking so
+  // days roll over at their local midnight even if nobody opens the app.
+  const runDaily = () => generateForActiveUsers()
+    .then(r => { if (r.generated) console.log(`Generated schedules for ${r.generated} user(s)`) })
     .catch(err => console.error('Daily generation failed:', errorMessage(err)))
   runDaily()
   setInterval(runDaily, 10 * 60 * 1000)
@@ -1136,7 +979,10 @@ async function startServer() {
   })
 }
 
-startServer().catch((err) => {
-  console.error('Server failed to start:', err)
-  process.exit(1)
-})
+// Start only when run directly (tests import createApp instead)
+if (!IS_TEST) {
+  startServer().catch((err) => {
+    console.error('Server failed to start:', err)
+    process.exit(1)
+  })
+}

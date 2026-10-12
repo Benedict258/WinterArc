@@ -16,17 +16,18 @@ function defaultBalancing(): GridBalancing {
  * forecast for the days that haven't been reached yet. Nothing is written —
  * days are committed one at a time by ensureTodayGenerated().
  */
-export async function getWeek(dayKey: string) {
+export async function getWeek(userId: string, dayKey: string) {
   const weekKey = weekStartKey(dayKey)
   const tasks = await Task.find({
+    userId,
     date: { $gte: dayKeyToDate(weekKey), $lt: dayKeyToDate(addDaysKey(weekKey, 7)) },
   }).sort({ date: 1, createdAt: 1 })
-  const forecast = await forecastWeek(weekKey)
+  const forecast = await forecastWeek(userId, weekKey)
   return { weekStart: weekKey, tasks, forecast }
 }
 
-export async function getGridSettings() {
-  const settings = await Settings.findOne()
+export async function getGridSettings(userId: string) {
+  const settings = await Settings.findOne({ userId })
   if (!settings) {
     return defaultBalancing()
   }
@@ -36,11 +37,12 @@ export async function getGridSettings() {
   }
 }
 
-export async function updateGridSettings(updates: Partial<GridBalancing>) {
-  let settings = await Settings.findOne()
+export async function updateGridSettings(userId: string, updates: Partial<GridBalancing>) {
+  let settings = await Settings.findOne({ userId })
   if (!settings) {
     settings = await Settings.create({
-      timezone: 'Africa/Lagos',
+      userId,
+      timezone: 'UTC',
       gridBalancing: { ...defaultBalancing(), ...updates },
     })
   } else {

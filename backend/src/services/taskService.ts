@@ -1,8 +1,9 @@
-import { createIdempotent } from '../utils/idempotentCreate'
 import { Task } from '../models/Task'
+import { Thread } from '../models/Thread'
+import { createIdempotent } from '../utils/idempotentCreate'
 
-export async function getTasks(filters: any = {}) {
-  const query: any = {}
+export async function getTasks(userId: string, filters: any = {}) {
+  const query: any = { userId }
 
   if (filters.date) {
     // Accept either YYYY-MM-DD or ISO; build a [start, next-day) range in UTC
@@ -33,11 +34,20 @@ export async function getTasks(filters: any = {}) {
   return await Task.find(query).sort({ date: 1, createdAt: 1 })
 }
 
-export async function createTask(data: any) {
-  return await createIdempotent(Task, data)
+/** A task may only point at one of the user's own threads. */
+async function assertOwnThread(userId: string, threadId: unknown) {
+  if (threadId && !(await Thread.exists({ _id: threadId, userId }))) {
+    throw new Error('Thread not found')
+  }
 }
 
-export async function updateTask(id: string, data: any) {
+export async function createTask(userId: string, data: any) {
+  await assertOwnThread(userId, data.threadId)
+  return await createIdempotent(Task, userId, data)
+}
+
+export async function updateTask(userId: string, id: string, data: any) {
+  await assertOwnThread(userId, data.threadId)
   if (data.status === 'done' && !data.completedAt) {
     data.completedAt = new Date()
   }
@@ -45,16 +55,16 @@ export async function updateTask(id: string, data: any) {
   if (data.date !== undefined || data.timeBlock !== undefined) {
     data.scheduledBy = null
   }
-  return await Task.findByIdAndUpdate(id, data, { new: true, runValidators: true })
+  return await Task.findOneAndUpdate({ _id: id, userId }, data, { new: true, runValidators: true })
 }
 
-export async function deleteTask(id: string) {
-  return await Task.findByIdAndDelete(id)
+export async function deleteTask(userId: string, id: string) {
+  return await Task.findOneAndDelete({ _id: id, userId })
 }
 
-export async function completeTask(id: string) {
-  return await Task.findByIdAndUpdate(
-    id,
+export async function completeTask(userId: string, id: string) {
+  return await Task.findOneAndUpdate(
+    { _id: id, userId },
     { status: 'done', completedAt: new Date() },
     { new: true }
   )

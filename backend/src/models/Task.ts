@@ -1,7 +1,9 @@
 import mongoose from 'mongoose'
+import { tenantField, tenantGuard } from '../plugins/tenant'
 
 const taskSchema = new mongoose.Schema(
   {
+    userId: tenantField,
     title: {
       type: String,
       required: true,
@@ -62,5 +64,10 @@ const taskSchema = new mongoose.Schema(
   },
   { timestamps: true }
 )
+
+taskSchema.index({ userId: 1, date: 1 })
+taskSchema.index({ userId: 1, threadId: 1, date: 1 })
+taskSchema.index({ userId: 1, status: 1, date: 1 })
+taskSchema.plugin(tenantGuard)
 
 export const Task = mongoose.model('Task', taskSchema)
