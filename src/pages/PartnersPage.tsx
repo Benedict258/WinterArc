@@ -37,7 +37,8 @@ function PartnerCard({ partner, onChanged }: { partner: Partner; onChanged: () =
   const [open, setOpen] = useState(false)
   // tick boxes respond instantly; the saved value takes over once it comes back
   const [pending, setPending] = useState<Partial<Shares>>({})
-  useEffect(() => { setPending({}) }, [JSON.stringify(partner.youShare)])
+  const savedShares = JSON.stringify(partner.youShare)
+  useEffect(() => { setPending({}) }, [savedShares])
   const { data: progress } = useQuery({ queryKey: ['partner-progress', partner.id], queryFn: () => call<Progress>(`/api/partners/${partner.id}/progress`), refetchInterval: 60_000 })
   const share = useMutation({
     mutationFn: (change: Partial<Shares>) => call(`/api/partners/${partner.id}/sharing`, 'PUT', change),

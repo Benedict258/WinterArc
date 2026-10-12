@@ -75,7 +75,7 @@ export default function ImportPage() {
     if (table && mapping) return buildRows(table, mapping, { source, dateOrder, defaultThread: defaultThread.trim() || undefined })
     if (checklist.trim() && !table) return parseChecklist(checklist, { plainBullets: bullets, headingsAsThreads })
     return null
-  }, [table, mapping, source, dateOrder, defaultThread, checklist, bullets, headingsAsThreads])
+  }, [tab, table, mapping, source, dateOrder, defaultThread, checklist, bullets, headingsAsThreads])
 
   const waCounts = useMemo(() => {
     if (!waText) return null
