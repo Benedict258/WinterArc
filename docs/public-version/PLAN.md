@@ -1,6 +1,6 @@
 # WinterArc Public Version — Plan
 
-Status: draft for review. Lives on branch `public-app`; the personal app (`main`) is untouched and keeps running.
+Status: draft for review. Lives on branch `WinterArcBeta`; the personal app (`main`) is untouched and keeps running.
 
 ## 1. Decisions so far
 
@@ -27,10 +27,10 @@ Status: draft for review. Lives on branch `public-app`; the personal app (`main`
 
 ## 2. Separation from the current app
 
-- Branch `public-app`, built from the current code. Never merged back into `main`.
+- Branch `WinterArcBeta`, built from the current code. Never merged back into `main`.
 - Own deployment: separate Render service, Vercel project, MongoDB database (a new database on the same Atlas cluster is fine at first), Backblaze bucket, and VAPID keys.
 - Android gets a **new application id** (e.g. `dev.benedictisaac.winterarc.app`) so it installs next to the personal app and gets its own Play listing. Needs its own signing key.
-- GitHub Actions for this branch deploy only from `public-app`.
+- GitHub Actions for this branch deploy only from `WinterArcBeta`.
 
 ## 3. Architecture changes
 
@@ -77,7 +77,7 @@ Not automatic. An optional "Import from WinterArc export" (the app already has `
 Order is chosen so each stage is usable and the riskiest parts (tenancy, auth) land first. Nothing is removed or postponed indefinitely; "beta" is simply the first release point.
 
 **Stage 1 — Foundation (beta-critical)**
-1. **M0 Setup:** branch, new Render/Vercel/Atlas/B2/Resend, new app id + signing key, CI deploys from `public-app`. *Also: submit the Google OAuth verification application as early as the domain and privacy policy exist, because it runs in the background for weeks.*
+1. **M0 Setup:** branch, new Render/Vercel/Atlas/B2/Resend, new app id + signing key, CI deploys from `WinterArcBeta`. *Also: submit the Google OAuth verification application as early as the domain and privacy policy exist, because it runs in the background for weeks.*
 2. **M1 Identity & tenancy:** User model, signup/login/logout, email verify + reset, Google sign-in, `userId` on everything, scoped data layer, isolation tests. Per-user native bearer tokens.
 3. **M2 Per-user settings & planner:** UserSettings, planner takes day structure/rules, per-user daily generation by timezone.
 4. **M3 Onboarding & templates:** wizard + starter packs.
@@ -131,10 +131,14 @@ Setup A (cheapest): free tiers + external pinger, accept cold starts. Setup B: p
 - **Scope is large.** With nothing dropped, the schedule is the lever: each milestone ends in something usable, and the order (not the contents) is what flexes.
 - **Abuse** (spam signups, storage, AI): email verification, rate limits, quotas, caps, admin suspend.
 
-## 11. Still to decide
+## 11. Decisions
 
-1. Branch name (`public-app` proposed) and Android application id.
-2. Domain and email sender domain.
-3. Where the admin account comes from (first verified email matching an env var).
-4. Whether beta needs invite codes from day one (recommended: yes).
-5. Template content and privacy-policy wording (I draft, you review).
+Decided:
+- Branch: `WinterArcBeta`.
+- Invite codes: required from day one of the beta (sign-up needs a valid code; admin can create and revoke codes, set max uses and expiry).
+- Domain and email sender domain: to be set up later (the app reads them from config, so nothing blocks development).
+
+Still open:
+1. Android application id for the beta app (a new id is needed so it installs beside the personal app). Placeholder until you choose: `dev.benedictisaac.winterarc.beta`.
+2. Where the admin account comes from (proposal: the first verified email that matches an `ADMIN_EMAIL` environment variable).
+3. Template content and privacy-policy wording (I draft, you review).
