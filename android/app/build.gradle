@@ -10,7 +10,7 @@ android {
     namespace = "dev.benedictisaac.winterarc"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "dev.benedictisaac.winterarc"
+        applicationId "dev.benedictisaac.winterarc.beta"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode buildNumber as int

@@ -103,7 +103,7 @@ function trustProxySetting() {
 const NATIVE_ORIGINS = ['https://localhost', 'http://localhost', 'capacitor://localhost']
 
 const ALLOWED_ORIGINS = [
-  ...(process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev')
+  ...(process.env.FRONTEND_ORIGIN || 'http://localhost:3000')
     .split(',')
     .map(s => s.trim().replace(/\/$/, ''))
     .filter(Boolean),

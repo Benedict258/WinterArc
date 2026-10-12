@@ -1,15 +1,19 @@
-name: Android app
+name: Android app (beta)
 
-# Builds the native WinterArc Android app (Capacitor: the web app is bundled
+# Builds the WinterArc BETA Android app (Capacitor: the web app is bundled
 # inside, so it opens and works offline without the network) and publishes the
 # signed APK (sideload) and AAB (Play Store) as a GitHub Release.
-# Unlike the old web-wrapper, the UI ships inside the app, so rebuild whenever
-# the web code changes.
+# Runs only for the WinterArcBeta branch and uses its own signing key and API address,
+# so it never touches the personal app.
+#
+# One-time setup (repo Settings -> Secrets and variables -> Actions):
+#   secrets:   ANDROID_BETA_KEYSTORE_BASE64, ANDROID_BETA_KEYSTORE_PASSWORD, ANDROID_BETA_KEY_ALIAS
+#   variables: BETA_API_BASE  (e.g. https://winterarc-beta-api.onrender.com)
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [WinterArcBeta]
     paths:
       - 'android/**'
       - 'src/**'
@@ -28,7 +32,7 @@ jobs:
     env:
       VERSION_CODE: ${{ github.run_number }}
       # The bundled app talks to the API directly (see src/lib/api.ts)
-      VITE_API_BASE: https://winterarc-f74u.onrender.com
+      VITE_API_BASE: ${{ vars.BETA_API_BASE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +48,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Check build settings
+        run: |
+          if [ -z "$VITE_API_BASE" ]; then echo "::error::Repository variable BETA_API_BASE is missing"; exit 1; fi
+
       - name: Build the web app and copy it into the Android project
         run: |
           npm ci
@@ -52,10 +60,10 @@ jobs:
 
       - name: Restore signing key
         env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_BETA_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing"; exit 1
+            echo "::error::ANDROID_BETA_KEYSTORE_BASE64 secret is missing"; exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
@@ -63,31 +71,31 @@ jobs:
       - name: Build signed APK and AAB
         working-directory: android
         env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_BETA_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_BETA_KEY_ALIAS }}
         run: ./gradlew --no-daemon assembleRelease bundleRelease
 
       - name: Collect outputs
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk "out/WinterArc-1.0.${VERSION_CODE}.apk"
-          cp android/app/build/outputs/bundle/release/app-release.aab "out/WinterArc-1.0.${VERSION_CODE}.aab"
+          cp android/app/build/outputs/apk/release/app-release.apk "out/WinterArcBeta-1.0.${VERSION_CODE}.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "out/WinterArcBeta-1.0.${VERSION_CODE}.aab"
           ls -la out
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WinterArc-android-1.0.${{ github.run_number }}
+          name: WinterArcBeta-android-1.0.${{ github.run_number }}
           path: out/*
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-v1.0.${{ github.run_number }}
-          name: WinterArc Android 1.0.${{ github.run_number }}
+          tag_name: beta-android-v1.0.${{ github.run_number }}
+          name: WinterArc Beta Android 1.0.${{ github.run_number }}
           body: |
-            Install on your phone: download **WinterArc-1.0.${{ github.run_number }}.apk** and open it
+            Install on your phone: download **WinterArcBeta-1.0.${{ github.run_number }}.apk** and open it
             (allow "install unknown apps" for your browser or file manager when asked).
-            It installs over the previous WinterArc app (same signing key).
+            It installs next to the personal WinterArc app and updates itself from newer beta builds.
 
             The `.aab` file is for uploading to Google Play.
           files: out/*

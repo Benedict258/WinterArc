@@ -1,6 +1,6 @@
 # WinterArc Public Version — Plan
 
-Status: draft for review. Lives on branch `WinterArcBeta`; the personal app (`main`) is untouched and keeps running.
+Status: M0 and M1 built (accounts, per-user data, auth screens, isolation tests, beta deployment config). Next: M2 per-user settings and planner. Lives on branch `WinterArcBeta`; the personal app (`main`) is untouched and keeps running.
 
 ## 1. Decisions so far
 

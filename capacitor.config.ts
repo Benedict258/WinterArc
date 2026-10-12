@@ -1,10 +1,10 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
-// The native app bundles the built web app (dist/) so it opens instantly and
+// Public-beta build. The native app bundles the built web app (dist/) so it opens instantly and
 // works offline from the first launch. API calls go to the Render backend
 // (see VITE_API_BASE in the build) with a bearer token instead of cookies.
 const config: CapacitorConfig = {
-  appId: 'dev.benedictisaac.winterarc', // same id + signing key as the old TWA, so installs upgrade in place
+  appId: 'dev.benedictisaac.winterarc.beta', // different from the personal app so both can be installed side by side
   appName: 'WinterArc',
   webDir: 'dist',
   android: { backgroundColor: '#0b1220' },

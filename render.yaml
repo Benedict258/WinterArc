@@ -1,12 +1,14 @@
-# Render Blueprint for the WinterArc API (Express + MongoDB).
-# The frontend is deployed separately on Vercel, which proxies /api/* here
-# (see vercel.json → https://winterarc-f74u.onrender.com). If the URL changes, update vercel.json.
+# Render Blueprint for the WinterArc BETA API (Express + MongoDB), deployed from the WinterArcBeta branch.
+# Separate service, database and keys from the personal app.
+# The frontend is deployed on Vercel (also from WinterArcBeta), which proxies /api/* here
+# (see vercel.json). If this service's URL differs, update vercel.json and the BETA_API_BASE variable.
 services:
   - type: web
-    name: winterarc-api
+    name: winterarc-beta-api
     runtime: node
     plan: free
-    region: frankfurt # closest Render region to Lagos
+    region: frankfurt
+    branch: WinterArcBeta
     # NODE_ENV=production makes npm skip devDependencies; esbuild is one.
     buildCommand: npm ci --include=dev && npm run build:server
     startCommand: node dist/server.cjs
@@ -20,17 +22,42 @@ services:
       # Vercel proxy + Render load balancer
       - key: TRUST_PROXY
         value: "2"
-      - key: FRONTEND_ORIGIN
-        value: https://winterarc.benedictisaac.dev
       - key: SESSION_SECRET
         generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      # Where the web app lives (CORS, links in emails)
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: APP_URL
+        sync: false
+      # Atlas connection string for the BETA database (use a different database name from the personal app)
       - key: MONGO_URI
         sync: false
-      - key: APP_PASSCODE
+      # Beta sign-up needs an invite code. Set to "false" to open sign-up.
+      - key: INVITE_REQUIRED
+        value: "true"
+      # Comma-separated emails that become admins once verified
+      - key: ADMIN_EMAIL
         sync: false
-      # Drop file storage: Backblaze B2 via its S3-compatible API (DEPLOYMENT.md §4)
-      # S3_ACCESS_KEY_ID = B2 keyID, S3_SECRET_ACCESS_KEY = B2 applicationKey,
-      # S3_REGION e.g. us-west-004, S3_ENDPOINT e.g. https://s3.us-west-004.backblazeb2.com
+      # Email (Resend): verification, password reset
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # "Continue with Google" (optional)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Push notifications (npm run push:keys)
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      # Drop file storage (Backblaze B2, S3-compatible)
       - key: S3_DROP_BUCKET
         sync: false
       - key: S3_ACCESS_KEY_ID
@@ -40,18 +67,4 @@ services:
       - key: S3_REGION
         sync: false
       - key: S3_ENDPOINT
-        sync: false
-      # Push notifications: `npm run push:keys` prints a pair; CRON_SECRET guards /api/cron/tick
-      - key: VAPID_PUBLIC_KEY
-        sync: false
-      - key: VAPID_PRIVATE_KEY
-        sync: false
-      - key: VAPID_SUBJECT
-        sync: false
-      - key: CRON_SECRET
-        generateValue: true
-      # Google Calendar sync (optional, see DEPLOYMENT.md)
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_CLIENT_SECRET
         sync: false
