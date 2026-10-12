@@ -4,7 +4,7 @@ import { processQueue, clearQueue } from '@/lib/syncQueue'
 import { clearCache } from '@/lib/storage'
 import { isNative, setToken, clearToken } from '@/lib/native'
 
-export type AuthUser = { id: string; email: string; name: string; role: 'user' | 'admin'; emailVerified: boolean }
+export type AuthUser = { id: string; email: string; name: string; role: 'user' | 'admin'; emailVerified: boolean; onboarded?: boolean }
 export type AuthConfig = { inviteRequired: boolean; googleClientId: string | null }
 type Result = { ok: boolean; error?: string; code?: string }
 export type SignupInput = { email: string; password: string; name?: string; inviteCode?: string }

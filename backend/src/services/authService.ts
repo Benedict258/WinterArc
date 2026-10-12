@@ -26,9 +26,9 @@ export const inviteRequired = () => process.env.INVITE_REQUIRED !== 'false'
 const isAdminEmail = (email: string) =>
   (process.env.ADMIN_EMAIL || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean).includes(email)
 
-export type PublicUser = { id: string; email: string; name: string; role: string; emailVerified: boolean }
+export type PublicUser = { id: string; email: string; name: string; role: string; emailVerified: boolean; onboarded: boolean }
 export const toPublicUser = (u: any): PublicUser => ({
-  id: String(u._id), email: u.email, name: u.name ?? '', role: u.role, emailVerified: !!u.emailVerifiedAt,
+  id: String(u._id), email: u.email, name: u.name ?? '', role: u.role, emailVerified: !!u.emailVerifiedAt, onboarded: !!u.onboardedAt,
 })
 
 // ---------------------------------------------------------------- invites

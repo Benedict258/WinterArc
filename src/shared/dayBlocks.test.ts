@@ -57,3 +57,12 @@ describe('day blocks', () => {
     expect(blockRange(DEFAULT_BLOCKS, 2)).toBe('from 5 PM')
   })
 })
+
+import { focusOf, weightsForFocus } from './dayBlocks'
+describe('block focus', () => {
+  it('round-trips and reads template weights', () => {
+    for (const f of ['heavy', 'medium', 'light', 'any'] as const) expect(focusOf(weightsForFocus(f))).toBe(f)
+    expect(focusOf({ light: 2, medium: 0, heavy: 0 })).toBe('heavy') // tie → heavier
+    expect(focusOf({ light: 1, medium: 0, heavy: 4 })).toBe('medium')
+  })
+})

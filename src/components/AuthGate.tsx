@@ -3,6 +3,7 @@ import { Eye, EyeOff, ArrowRight, Snowflake } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
 import { isNative } from '@/lib/native'
+import OnboardingPage from '@/pages/OnboardingPage'
 
 type Mode = 'signin' | 'signup' | 'forgot'
 
@@ -188,8 +189,10 @@ function SignedOut() {
 }
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isChecking } = useAuth()
+  const { isAuthenticated, isChecking, user } = useAuth()
   if (isChecking) return <div className="min-h-screen w-full bg-background" />
+  // `onboarded` is undefined for a cached user from before this existed; only an explicit false triggers setup
+  if (isAuthenticated && user?.onboarded === false) return <OnboardingPage />
   if (isAuthenticated) return <>{children}</>
   return <SignedOut />
 }

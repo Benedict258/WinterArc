@@ -34,6 +34,8 @@ import { v4 as uuidv4 } from 'uuid'
 import * as threadService from './backend/src/services/threadService.ts'
 import * as taskService from './backend/src/services/taskService.ts'
 import * as gridService from './backend/src/services/gridService.ts'
+import { applyOnboarding, AlreadyOnboardedError } from './backend/src/services/onboardingService.ts'
+import { TEMPLATES, PRESETS } from './src/shared/templates.ts'
 import { ensureTodayGenerated, generateForActiveUsers, rebalanceWeek, toDayKey, DEFAULT_TIMEZONE } from './backend/src/services/dailyGenerationService.ts'
 import { validateRequest } from './backend/src/middleware/validationMiddleware.ts'
 import { authenticate, requireAuth, requireVerified, uid } from './backend/src/middleware/auth.ts'
@@ -49,6 +51,7 @@ import {
   goalSchema,
   goalUpdateSchema,
   settingsUpdateSchema,
+  onboardingSchema,
   gridBalancingUpdateSchema,
   dropUploadUrlSchema,
   dropItemSchema,
@@ -590,6 +593,21 @@ export function createApp() {
       res.json(settings)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
+    }
+  })
+
+  // ============================================
+  // ONBOARDING
+  // ============================================
+  app.get('/api/templates', (_req, res) => {
+    res.json({ templates: TEMPLATES, presets: PRESETS })
+  })
+
+  app.post('/api/onboarding', validateRequest(onboardingSchema), async (req, res) => {
+    try {
+      res.status(201).json(await applyOnboarding(uid(req), req.body))
+    } catch (error) {
+      res.status(error instanceof AlreadyOnboardedError ? 409 : 400).json({ error: errorMessage(error) })
     }
   })
 

@@ -159,6 +159,55 @@ describe.skipIf(!available)('planner rules against the database', () => {
     expect(await Task.countDocuments({ userId: otherId, date: day(MONDAY) })).toBe(1)
   })
 
+  it('onboarding: applies a template once, saves the structure, keeps users apart', async () => {
+    const a = await signedUpAgent(ctx, 'onboard-a@example.com')
+    const b = await signedUpAgent(ctx, 'onboard-b@example.com')
+    expect((await a.agent.get('/api/auth/me')).body.user.onboarded).toBe(false)
+    const list = await a.agent.get('/api/templates')
+    expect(list.body.templates.map((t: any) => t.id)).toContain('developer')
+
+    expect((await a.agent.post('/api/onboarding').send({ templateId: 'nope' })).status).toBe(400)
+    expect((await a.agent.post('/api/onboarding').send({ templateId: 'student', threads: ['ghost'] })).status).toBe(400)
+    expect((await a.agent.post('/api/onboarding').send({ templateId: 'student', preset: 'wild' })).status).toBe(400)
+    expect((await a.agent.get('/api/auth/me')).body.user.onboarded).toBe(false) // failures don't use up the setup
+
+    const done = await a.agent.post('/api/onboarding').send({ templateId: 'student', threads: ['study', 'assignments'], preset: 'strict', timezone: 'Africa/Lagos' })
+    expect(done.status).toBe(201)
+    const names = (await Thread.find({ userId: a.userId })).map(t => t.name).sort()
+    expect(names).toEqual(['Assignments & deadlines', 'Study sessions'])
+    const tasks = await Task.find({ userId: a.userId, source: 'manual' })
+    expect(tasks.map(t => t.title)).toEqual(expect.arrayContaining(["List this term's courses and deadlines"]))
+    expect(tasks.some(t => t.title === 'Draft a weekly study timetable')).toBe(true)
+    const settings = (await a.agent.get('/api/settings')).body
+    expect(settings.timezone).toBe('Africa/Lagos')
+    expect(settings.planner.blocks.map((x: any) => x.id)).toEqual(['morning', 'midday', 'afternoon', 'evening'])
+    expect(settings.planner.backlogPerDay).toBe(3)
+    expect(settings.gridBalancing.maxDailyIntensity).toBe(8)
+    expect((await a.agent.get('/api/auth/me')).body.user.onboarded).toBe(true)
+
+    // second time: refused, nothing duplicated
+    expect((await a.agent.post('/api/onboarding').send({ templateId: 'developer' })).status).toBe(409)
+    expect(await Thread.countDocuments({ userId: a.userId })).toBe(2)
+
+    // the other user is untouched, and can skip with Blank
+    expect(await Thread.countDocuments({ userId: b.userId })).toBe(0)
+    expect((await b.agent.post('/api/onboarding').send({ templateId: 'blank' })).status).toBe(201)
+    expect(await Thread.countDocuments({ userId: b.userId })).toBe(0)
+  })
+
+  it('onboarding: optional threads are off by default and custom blocks are validated', async () => {
+    const c = await signedUpAgent(ctx, 'onboard-c@example.com')
+    const w = { light: 0, medium: 0, heavy: 0 }
+    const bad = [{ id: 'x', label: 'X', start: 5, weights: w }]
+    expect((await c.agent.post('/api/onboarding').send({ templateId: 'student', blocks: bad })).status).toBe(400)
+    const mine = [{ id: 'am', label: 'AM', start: 5, weights: w }, { id: 'pm', label: 'PM', start: 15, weights: w }]
+    expect((await c.agent.post('/api/onboarding').send({ templateId: 'student', blocks: mine })).status).toBe(201)
+    const threads = await Thread.find({ userId: c.userId })
+    expect(threads.length).toBe(5) // all but the optional Lectures event
+    expect(threads.some(t => t.taskMode === 'event')).toBe(false)
+    expect((await c.agent.get('/api/settings')).body.planner.blocks.map((x: any) => x.id)).toEqual(['am', 'pm'])
+  })
+
   it('generation for one user never creates tasks for another', async () => {
     await clean()
     await thread({ frequency: 'daily' })

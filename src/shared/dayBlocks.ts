@@ -110,3 +110,23 @@ export function blockRange(blocks: DayBlock[], index: number): string {
   const next = blocks[index + 1]
   return next ? `${hourLabel(b.start)} – ${hourLabel(next.start)}` : `from ${hourLabel(b.start)}`
 }
+
+/** What a block is best for, in plain words: the intensity it favours (or 'any'). */
+export type Focus = Intensity | 'any'
+
+export function focusOf(weights: DayBlock['weights']): Focus {
+  const { light, medium, heavy } = weights
+  if (light === medium && medium === heavy) return 'any'
+  const min = Math.min(light, medium, heavy)
+  // ties between two intensities read as the heavier one
+  return heavy === min ? 'heavy' : medium === min ? 'medium' : 'light'
+}
+
+export function weightsForFocus(focus: Focus): DayBlock['weights'] {
+  switch (focus) {
+    case 'heavy': return { light: 2, medium: 1, heavy: 0 }
+    case 'medium': return { light: 1, medium: 0, heavy: 3 }
+    case 'light': return { light: 0, medium: 1, heavy: 4 }
+    default: return { light: 0, medium: 0, heavy: 0 }
+  }
+}

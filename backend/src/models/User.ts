@@ -17,6 +17,8 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: { type: Date, default: null },
     /** touched at most hourly; the schedulers only work for recently active users */
     lastSeenAt: { type: Date, default: null },
+    /** set once the first-run setup (or skip) is finished */
+    onboardedAt: { type: Date, default: null },
     signedUpWithCode: { type: String, default: null },
   },
   { timestamps: true }

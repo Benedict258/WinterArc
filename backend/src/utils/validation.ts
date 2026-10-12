@@ -190,3 +190,16 @@ export type GoalInput = z.infer<typeof goalSchema>;
 export type CalendarSyncInput = z.infer<typeof calendarSyncSchema>;
 export type SettingsInput = z.infer<typeof settingsSchema>;
 export type GridBalancingInput = z.infer<typeof gridBalancingSchema>;
+
+export const onboardingSchema = z.object({
+  templateId: z.string().min(1).max(40),
+  threads: z.array(z.string().min(1).max(40)).max(40).optional(),
+  blocks: z.array(z.any()).superRefine((blocks, ctx) => {
+    const problem = blocksProblem(blocks)
+    if (problem) ctx.addIssue({ code: 'custom', message: problem })
+  }).optional(),
+  preset: z.enum(['relaxed', 'balanced', 'strict']).optional(),
+  timezone: z.string().refine(tz => {
+    try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
+  }, 'Invalid timezone').optional(),
+});

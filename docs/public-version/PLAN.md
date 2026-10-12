@@ -1,6 +1,6 @@
 # WinterArc Public Version — Plan
 
-Status: M0, M1, M2 and variable day blocks (2-6) built. Next: M3 onboarding wizard and templates. Lives on branch `WinterArcBeta`; the personal app (`main`) is untouched and keeps running.
+Status: M0-M3 built (accounts, per-user data, auth screens, isolation tests, deployment config, per-user planner rules, variable day blocks, onboarding wizard with Student/Developer/Fitness/Creator/Blank packs). Next: M4 customization UI (settings page, theme, module toggles). Lives on branch `WinterArcBeta`; the personal app (`main`) is untouched and keeps running.
 
 ## 1. Decisions so far
 
