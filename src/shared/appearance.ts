@@ -2,7 +2,7 @@
 
 export type Mode = 'dark' | 'light' | 'system'
 export type Density = 'comfortable' | 'compact'
-export type ModuleId = 'wishlist' | 'goals' | 'drop' | 'events' | 'ai'
+export type ModuleId = 'wishlist' | 'goals' | 'drop' | 'events' | 'ai' | 'partners'
 
 export type Accent = { id: string; label: string; /** 'H S% L%' for the --primary variable */ hsl: string; /** text on top of it */ foreground: string }
 
@@ -25,10 +25,11 @@ export const MODULES: { id: ModuleId; label: string; blurb: string }[] = [
   { id: 'goals', label: 'Goals & analytics', blurb: 'Goals, streaks and progress charts' },
   { id: 'drop', label: 'Drop', blurb: 'Files, links and notes you want to move between devices' },
   { id: 'events', label: 'Events & sessions', blurb: 'Fixed-time sessions on threads and one-off events' },
+  { id: 'partners', label: 'Partners', blurb: 'Share your progress with accountability partners you choose' },
   { id: 'ai', label: 'AI assistant', blurb: 'Chat about your plan; it suggests changes and you approve each one' },
 ]
 export type Modules = Record<ModuleId, boolean>
-export const DEFAULT_MODULES: Modules = { wishlist: true, goals: true, drop: true, events: true, ai: true }
+export const DEFAULT_MODULES: Modules = { wishlist: true, goals: true, drop: true, events: true, ai: true, partners: true }
 
 export const accentById = (id: string | undefined) => ACCENTS.find(a => a.id === id) ?? ACCENTS[0]
 
@@ -47,5 +48,6 @@ export function normalizeModules(raw: Partial<Modules> | null | undefined): Modu
     drop: raw?.drop !== false,
     events: raw?.events !== false,
     ai: raw?.ai !== false,
+    partners: raw?.partners !== false,
   }
 }

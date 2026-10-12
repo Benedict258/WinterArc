@@ -185,7 +185,7 @@ const PROPOSE_TOOLS = [
     planner: obj({ rollover: { type: 'boolean' }, makeup: { type: 'boolean' }, backlogPerDay: { type: 'integer' }, dueWindowDays: { type: 'integer' },
       blocks: { type: 'array', description: '2-6 blocks with ascending start hours', items: obj({ id: { type: 'string' }, label: { type: 'string' }, start: { type: 'integer' }, weights: obj({ light: { type: 'integer' }, medium: { type: 'integer' }, heavy: { type: 'integer' } }, ['light', 'medium', 'heavy']) }, ['id', 'label', 'start', 'weights']) } }),
     appearance: obj({ mode: { type: 'string', enum: ['dark', 'light', 'system'] }, accent: { type: 'string' }, density: { type: 'string', enum: ['comfortable', 'compact'] } }),
-    modules: obj({ wishlist: { type: 'boolean' }, goals: { type: 'boolean' }, drop: { type: 'boolean' }, events: { type: 'boolean' }, ai: { type: 'boolean' } }),
+    modules: obj({ wishlist: { type: 'boolean' }, goals: { type: 'boolean' }, drop: { type: 'boolean' }, events: { type: 'boolean' }, ai: { type: 'boolean' }, partners: { type: 'boolean' } }),
   }) },
   { name: 'propose_rebalance_week', description: 'Suggest re-planning the rest of this week.', input_schema: obj({}) },
 ]

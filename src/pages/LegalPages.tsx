@@ -38,6 +38,8 @@ export function PrivacyPage() {
         <li><b>Devices:</b> if you turn on reminders we store your browser’s push address so we can send them.</li>
         <li><b>Technical:</b> a sign-in cookie, and your IP address briefly in server memory to limit abuse. We don’t use advertising or analytics trackers.</li>
       </ul>
+      <h2>Partners</h2>
+      <p>If you invite an accountability partner (or accept one), they can see only what you tick for them: your streak, weekly counts, thread names or today’s task titles. Nothing is shared until they accept, you can change it at any time, and removing the partnership ends it. To invite someone we use their email address once, to send the invitation.</p>
       <h2>Why we use it</h2>
       <p>Only to run the service for you: sign you in, plan your days, sync between your devices, and send the reminders and emails you ask for (confirmation, password reset, and the daily summary if you switch it on). We don’t sell your data or use it for advertising, and we don’t read your tasks except to fix a problem you ask us about.</p>
       <h2>Who helps us run it</h2>

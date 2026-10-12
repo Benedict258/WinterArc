@@ -124,7 +124,7 @@ export const appearanceSchema = z.object({
   density: z.enum(['comfortable', 'compact']),
 }).partial();
 export const modulesSchema = z.object({
-  wishlist: z.boolean(), goals: z.boolean(), drop: z.boolean(), events: z.boolean(), ai: z.boolean(),
+  wishlist: z.boolean(), goals: z.boolean(), drop: z.boolean(), events: z.boolean(), ai: z.boolean(), partners: z.boolean(),
 }).partial();
 
 export const settingsSchema = z.object({

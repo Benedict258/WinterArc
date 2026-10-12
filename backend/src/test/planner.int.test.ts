@@ -212,7 +212,7 @@ describe.skipIf(!available)('planner rules against the database', () => {
     const { agent } = await signedUpAgent(ctx, 'look@example.com')
     const first = (await agent.get('/api/settings')).body
     expect(first.appearance).toMatchObject({ mode: 'dark', accent: 'lime', density: 'comfortable' })
-    expect(first.modules).toMatchObject({ wishlist: true, goals: true, drop: true, events: true, ai: true })
+    expect(first.modules).toMatchObject({ wishlist: true, goals: true, drop: true, events: true, ai: true, partners: true })
     expect((await agent.put('/api/settings').send({ appearance: { accent: 'violet' } })).status).toBe(200)
     expect((await agent.put('/api/settings').send({ appearance: { density: 'compact' }, modules: { drop: false } })).status).toBe(200)
     const now = (await agent.get('/api/settings')).body

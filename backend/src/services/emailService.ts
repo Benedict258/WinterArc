@@ -104,3 +104,17 @@ export function digestMessage(to: string, userId: string, d: { subject: string; 
 <p style="color:#667;font-size:12px">You get this because you turned on the daily email. <a href="${escapeHtml(unsubscribe)}">Stop these emails</a></p></div>`
   return { to, subject: d.subject, text, html, headers: { 'List-Unsubscribe': `<${unsubscribe}>` } }
 }
+
+export function partnerInviteMessage(to: string, from: { name: string; email: string }, hasAccount: boolean): Email {
+  const who = from.name || from.email
+  const url = appUrl()
+  const text = hasAccount
+    ? `${who} (${from.email}) asked you to be their accountability partner on WinterArc.\n\nOpen the Partners page to accept or decline: ${url}/partners\n\nYou choose what you share with them; nothing is shared until you accept.`
+    : `${who} (${from.email}) invited you to be their accountability partner on WinterArc, a daily planner.\n\nWinterArc is in private beta, so you'll need an invite code to join: ask ${who}. Once you have an account with this email address, the request will be waiting on the Partners page: ${url}/partners`
+  return {
+    to,
+    subject: `${who} invited you to WinterArc`,
+    text,
+    html: layout(`${who} wants an accountability partner`, hasAccount ? 'Open WinterArc to accept or decline. Nothing is shared until you accept, and you choose what you share.' : 'WinterArc is in private beta, so you’ll need an invite code to join: ask them. Once you have an account with this email address, the request will be waiting for you.', `${url}/partners`, 'Open WinterArc'),
+  }
+}
