@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
-import { initDB, cacheGoals, getCachedGoals, clearCache } from '@/lib/storage';
+import { initDB, cacheGoals, upsertCachedGoals, getCachedGoals, clearCache } from '@/lib/storage';
+import { onlineOrQueue, newId } from '@/lib/offline';
 import { initSyncDB, addToQueue, isOnline, startSyncListener, stopSyncListener, processQueue } from '@/lib/syncQueue';
 
 // Types
@@ -80,14 +81,15 @@ export const useCreateGoal = () => {
 
   return useMutation({
     mutationFn: async (newGoal: Omit<Goal, '_id' | 'createdAt' | 'updatedAt'>) => {
-      if (isOnline()) {
+      const body = { ...newGoal, _id: newId() };
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/goals`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(newGoal),
+          body: JSON.stringify(body),
         });
         
         if (!response.ok) {
@@ -96,21 +98,20 @@ export const useCreateGoal = () => {
         
         const createdGoal = await response.json();
         // Update cache
-        await cacheGoals([createdGoal]); // This will replace the cache? We should add to cache.
+        await upsertCachedGoals([createdGoal]);
         // We'll invalidate the query to refetch.
         return createdGoal;
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'create',
           endpoint: '/api/goals',
-          data: newGoal,
+          data: body,
         };
         await addToQueue(operation);
         // Optimistically add to cache
         const tempGoal = {
-          ...newGoal,
-          _id: `temp-${Date.now()}`, // Temporary ID
+          ...body,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -118,7 +119,7 @@ export const useCreateGoal = () => {
         await cacheGoals([...currentGoals, tempGoal]);
         // Return the temp goal so the UI can use it
         return tempGoal;
-      }
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
@@ -149,7 +150,7 @@ export const useUpdateGoal = () => {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Goal> }) => {
-      if (isOnline()) {
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/goals/${id}`, {
           method: 'PUT',
@@ -165,10 +166,10 @@ export const useUpdateGoal = () => {
         
         const updatedGoal = await response.json();
         // Update cache
-        await cacheGoals([updatedGoal]); // This will replace the cache? We should update the specific goal.
+        await upsertCachedGoals([updatedGoal]);
         // We'll invalidate the query to refetch.
         return updatedGoal;
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'update',
@@ -185,7 +186,7 @@ export const useUpdateGoal = () => {
         await cacheGoals(updatedGoals);
         // Return the updated goal for UI
         return { ...currentGoals.find(g => g._id === id), ...updates, updatedAt: new Date().toISOString() };
-      }
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
@@ -216,7 +217,7 @@ export const useDeleteGoal = () => {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      if (isOnline()) {
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/goals/${id}`, {
           method: 'DELETE',
@@ -232,7 +233,7 @@ export const useDeleteGoal = () => {
         await cacheGoals(filteredGoals);
         
         return { success: true };
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'delete',
@@ -246,7 +247,7 @@ export const useDeleteGoal = () => {
         await cacheGoals(filteredGoals);
         
         return { success: true };
-      }
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });

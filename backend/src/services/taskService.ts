@@ -25,6 +25,11 @@ export async function getTasks(filters: any = {}) {
 }
 
 export async function createTask(data: any) {
+  // Replayed offline create: the first attempt may already have landed
+  if (data._id) {
+    const existing = await Task.findById(data._id)
+    if (existing) return existing
+  }
   const task = new Task(data)
   return await task.save()
 }

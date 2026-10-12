@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { threadSchema } from '@/utils/validation';
 import { initDB, cacheThreads, upsertCachedThreads, removeCachedThread, getCachedThreads } from '@/lib/storage';
+import { onlineOrQueue, newId } from '@/lib/offline';
 import { initSyncDB, addToQueue, isOnline, startSyncListener, stopSyncListener, processQueue } from '@/lib/syncQueue';
 
 // Types
@@ -100,14 +101,15 @@ export const useCreateThread = () => {
 
   return useMutation({
     mutationFn: async (newThread: Omit<Thread, '_id' | 'createdAt' | 'updatedAt'>) => {
-      if (isOnline()) {
+      const body = { ...newThread, _id: newId() };
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/threads`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(newThread),
+          body: JSON.stringify(body),
         });
         
         if (!response.ok) {
@@ -119,18 +121,17 @@ export const useCreateThread = () => {
         await upsertCachedThreads([createdThread]);
         // We'll invalidate the query to refetch.
         return createdThread;
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'create',
           endpoint: '/api/threads',
-          data: newThread,
+          data: body,
         };
         await addToQueue(operation);
         // Optimistically add to cache
         const tempThread = {
-          ...newThread,
-          _id: `temp-${Date.now()}`, // Temporary ID
+          ...body,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -138,7 +139,7 @@ export const useCreateThread = () => {
         await upsertCachedThreads([tempThread]);
         // Return the temp thread so the UI can use it
         return tempThread;
-      }
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
@@ -172,7 +173,7 @@ export const useUpdateThread = () => {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Thread> }) => {
-      if (isOnline()) {
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/threads/${id}`, {
           method: 'PUT',
@@ -191,7 +192,7 @@ export const useUpdateThread = () => {
         await upsertCachedThreads([updatedThread]);
         // We'll invalidate the query to refetch.
         return updatedThread;
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'update',
@@ -208,7 +209,7 @@ export const useUpdateThread = () => {
         await upsertCachedThreads(updatedThreads);
         // Return the updated thread for UI
         return { ...currentThreads.find(t => t._id === id), ...updates, updatedAt: new Date().toISOString() };
-      }
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });
@@ -242,7 +243,7 @@ export const useDeleteThread = () => {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      if (isOnline()) {
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/threads/${id}`, {
           method: 'DELETE',
@@ -256,7 +257,7 @@ export const useDeleteThread = () => {
         await removeCachedThread(id);
         
         return { success: true };
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'delete',
@@ -270,7 +271,7 @@ export const useDeleteThread = () => {
         await cacheThreads(filteredThreads);
         
         return { success: true };
-      }
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threads'] });

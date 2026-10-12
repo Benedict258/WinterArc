@@ -110,6 +110,7 @@ export const removeCachedTask = (id: string) => safe('Failed to remove cached ta
 export const getCachedTasks = () => safe('Failed to get cached tasks', [] as any[], () => readAll('tasks'))
 
 export const cacheGoals = (goals: any[]) => safe('Failed to cache goals', undefined, () => replaceAll('goals', goals))
+export const upsertCachedGoals = (goals: any[]) => safe('Failed to cache goals', undefined, () => upsert('goals', goals))
 export const getCachedGoals = () => safe('Failed to get cached goals', [] as any[], () => readAll('goals'))
 
 export const clearCache = () =>

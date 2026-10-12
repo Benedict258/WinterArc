@@ -13,11 +13,18 @@ const txDone = (tx: IDBTransaction) =>
     tx.onabort = () => reject(tx.error)
   })
 
+/** Lets the UI show the pending count without polling IndexedDB. */
+export const QUEUE_CHANGED = 'syncqueue-changed'
+/** Fired after queued changes reached the server, so cached views can refetch. */
+export const QUEUE_FLUSHED = 'syncqueue-flushed'
+const emit = (name: string) => { if (typeof window !== 'undefined') window.dispatchEvent(new Event(name)) }
+
 export const addToQueue = async (operation: any) => {
   const db = await openDB()
   const tx = db.transaction(QUEUE_STORE, 'readwrite')
   tx.objectStore(QUEUE_STORE).add({ ...operation, timestamp: Date.now() })
   await txDone(tx)
+  emit(QUEUE_CHANGED)
 }
 
 export const getQueue = async (): Promise<any[]> => {
@@ -40,6 +47,7 @@ export const removeFromQueue = async (id: number) => {
   const tx = db.transaction(QUEUE_STORE, 'readwrite')
   tx.objectStore(QUEUE_STORE).delete(id)
   await txDone(tx)
+  emit(QUEUE_CHANGED)
 }
 
 export const clearQueue = async () => {
@@ -47,6 +55,7 @@ export const clearQueue = async () => {
   const tx = db.transaction(QUEUE_STORE, 'readwrite')
   tx.objectStore(QUEUE_STORE).clear()
   await txDone(tx)
+  emit(QUEUE_CHANGED)
 }
 
 export const isOnline = (): boolean => {
@@ -104,6 +113,7 @@ export const processQueue = (): Promise<void> => {
   processing = (async () => {
     if (!isOnline()) return
     const queue = await getQueue()
+    let sent = 0
     for (const operation of queue) {
       const handler = operationHandlers[operation.type]
       if (!handler) {
@@ -114,6 +124,7 @@ export const processQueue = (): Promise<void> => {
       try {
         await handler(operation)
         await removeFromQueue(operation.id)
+        sent++
       } catch (error) {
         // A 4xx will never succeed on retry (e.g. it was edited offline before
         // its create synced); drop it. Network errors and 5xx stay queued.
@@ -127,6 +138,7 @@ export const processQueue = (): Promise<void> => {
         break
       }
     }
+    if (sent > 0) emit(QUEUE_FLUSHED)
   })().finally(() => { processing = null })
   return processing
 }

@@ -648,8 +648,10 @@ async function startServer() {
 
   app.post('/api/goals', validateRequest(goalSchema), async (req, res) => {
     try {
-      const goal = new Goal(req.body)
-      await goal.save()
+      // Replayed offline create: the first attempt may already have landed
+      const existing = req.body._id ? await Goal.findById(req.body._id) : null
+      const goal = existing ?? new Goal(req.body)
+      if (!existing) await goal.save()
       res.status(201).json(goal)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })

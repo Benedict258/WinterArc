@@ -14,6 +14,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // Any 401 from the API (expired session, server restart without a store, …)
 // drops the user back to the passcode gate instead of silently showing stale
 // cached data.
+// Remembers that this device was unlocked, so the app still opens with no
+// internet (the passcode can't be checked offline). The server still enforces
+// the session on every API call; this only decides whether to show the UI.
+const AUTH_FLAG = 'winterarc.unlocked'
+const readFlag = () => { try { return localStorage.getItem(AUTH_FLAG) === '1' } catch { return false } }
+const writeFlag = (on: boolean) => { try { on ? localStorage.setItem(AUTH_FLAG, '1') : localStorage.removeItem(AUTH_FLAG) } catch { /* storage unavailable */ } }
+
 let onUnauthorized: (() => void) | null = null
 let fetchPatched = false
 // Bumped on every successful login. A request sent before the latest login
@@ -31,7 +38,7 @@ function patchFetchFor401() {
     if (response.status === 401 && epochAtSend === authEpoch) {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       const path = new URL(url, window.location.origin).pathname
-      if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) onUnauthorized?.()
+      if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) { writeFlag(false); onUnauthorized?.() }
     }
     return response
   }
@@ -46,8 +53,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     onUnauthorized = () => setIsAuthenticated(false)
     fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
       .then(r => r.json())
-      .then(d => setIsAuthenticated(!!d.authenticated))
-      .catch(() => setIsAuthenticated(false))
+      .then(d => {
+        writeFlag(!!d.authenticated)
+        setIsAuthenticated(!!d.authenticated)
+      })
+      // Network failure (offline / server asleep): stay unlocked if we were before
+      .catch(() => setIsAuthenticated(readFlag()))
       .finally(() => setIsChecking(false))
     return () => {
       onUnauthorized = null
@@ -63,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
     if (res.ok) {
       authEpoch++
+      writeFlag(true)
       setIsAuthenticated(true)
       // Replay anything queued while locked/offline, now with a valid session
       processQueue().catch(console.error)
@@ -73,7 +85,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    writeFlag(false)
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
     setIsAuthenticated(false)
   }
 
