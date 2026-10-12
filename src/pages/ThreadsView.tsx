@@ -8,6 +8,7 @@ import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/u
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { dueInDays } from '@/lib/utils'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 const PREDEFINED_CATEGORIES = ['Role/Program', 'Active Build', 'Learning Track', 'Application/Outreach', 'Other']
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -180,9 +181,9 @@ export default function ThreadsView() {
                             size="sm"
                             variant="ghost"
                             className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation()
-                              if (window.confirm(`Archive "${thread.name}"?`)) deleteThread(thread._id)
+                              if (await confirmDialog({ title: `Archive "${thread.name}"?`, description: 'It stops generating tasks. Existing tasks are kept.', confirmLabel: 'Archive', destructive: true })) deleteThread(thread._id)
                             }}
                             title="Archive"
                           >

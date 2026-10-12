@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight, Plus, ChevronDown, Calendar as CalIcon, Maxi
 import QuickAddModal from '@/components/QuickAddModal'
 import TaskRow, { type TaskRowData } from '@/components/TaskRow'
 import { cn, toDayKey, apiDayKey } from '@/lib/utils'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
 const DAY_LABELS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -366,10 +367,10 @@ export default function WeekView() {
                                     key={task.id}
                                     task={task}
                                     onToggle={handleToggleTask}
-                                    onEdit={(t) => {
-                                      const newTitle = window.prompt('Edit task title', t.title)
-                                      if (newTitle && newTitle.trim() !== t.title) {
-                                        updateTask({ id: t.id, updates: { title: newTitle.trim() } })
+                                    onEdit={async (t) => {
+                                      const newTitle = await promptDialog({ title: 'Edit task', defaultValue: t.title })
+                                      if (newTitle && newTitle !== t.title) {
+                                        updateTask({ id: t.id, updates: { title: newTitle } })
                                       }
                                     }}
                                     onDelete={(t) => deleteTask(t.id)}

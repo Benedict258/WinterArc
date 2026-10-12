@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { safeHref } from '@/lib/utils'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -261,9 +262,9 @@ export default function ThreadDetailView() {
                   </p>
                 )}
                 {sorted.map(t => (
-                  <div key={t._id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/40">
-                    <span className="flex-1 truncate text-sm">{t.title}</span>
-                    <span className="text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
+                  <div key={t._id} className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2 rounded-lg bg-secondary/40">
+                    <span className="basis-full sm:basis-0 sm:flex-1 min-w-0 break-words text-sm">{t.title}</span>
+                    <span className="mr-auto sm:mr-0 text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
                       const next = t.priority==='low'?'medium':t.priority==='medium'?'high':t.priority
                       updateTask({ id: t._id, updates: { priority: next } })
@@ -272,11 +273,11 @@ export default function ThreadDetailView() {
                       const next = t.priority==='high'?'medium':t.priority==='medium'?'low':t.priority
                       updateTask({ id: t._id, updates: { priority: next } })
                     }} title="Move down">↓</Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                      const newTitle = window.prompt('Edit title', t.title)
-                      if (newTitle && newTitle.trim()) updateTask({ id: t._id, updates: { title: newTitle.trim() } })
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={async () => {
+                      const newTitle = await promptDialog({ title: 'Edit task', defaultValue: t.title })
+                      if (newTitle) updateTask({ id: t._id, updates: { title: newTitle } })
                     }}><Edit2 size={12} /></Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm('Delete task?')) deleteTask(t._id) }}><Trash2 size={12} /></Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={async () => { if (await confirmDialog({ title: 'Delete task?', description: t.title, confirmLabel: 'Delete', destructive: true })) deleteTask(t._id) }}><Trash2 size={12} /></Button>
                   </div>
                 ))}
               </CardContent>

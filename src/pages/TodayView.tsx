@@ -10,6 +10,7 @@ import { useCalendarEvents } from '@/hooks/useCalendar'
 import { useState, useRef } from 'react'
 import { toDayKey, apiDayKey, cn } from '@/lib/utils'
 import { useGridSettings, useRebalanceWeek } from '@/hooks/useGrid'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 export default function TodayView() {
   const today = new Date()
@@ -229,10 +230,10 @@ export default function TodayView() {
                             },
                           })
                         }}
-                        onEdit={(t) => {
-                          const newTitle = window.prompt('Edit task title', t.title)
-                          if (newTitle && newTitle.trim() !== t.title) {
-                            updateTask({ id: t.id, updates: { title: newTitle.trim() } })
+                        onEdit={async (t) => {
+                          const newTitle = await promptDialog({ title: 'Edit task', defaultValue: t.title })
+                          if (newTitle && newTitle !== t.title) {
+                            updateTask({ id: t.id, updates: { title: newTitle } })
                           }
                         }}
                         onDelete={(t) => deleteTask(t.id)}

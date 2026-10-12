@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useThreads } from '@/hooks/useThreads'
 import { useState } from 'react'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 export default function BacklogView() {
   const { data: tasks = [], isLoading: tasksLoading, error: tasksError } = useTasks({
@@ -131,8 +132,8 @@ export default function BacklogView() {
                         size="sm"
                         variant="ghost"
                         className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => {
-                          if (window.confirm('Delete this backlog task?')) deleteTask(task._id)
+                        onClick={async () => {
+                          if (await confirmDialog({ title: 'Delete backlog task?', description: task.title, confirmLabel: 'Delete', destructive: true })) deleteTask(task._id)
                         }}
                         title="Delete task"
                       >

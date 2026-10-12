@@ -7,6 +7,7 @@ import session from 'express-session'
 import { MongoStore } from 'connect-mongo'
 
 import { Thread } from './backend/src/models/Thread.ts'
+import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
 import { createIdempotent } from './backend/src/utils/idempotentCreate.ts'
 import { Task } from './backend/src/models/Task.ts'
 import { WishlistItem } from './backend/src/models/WishlistItem.ts'
@@ -135,20 +136,6 @@ const seedGoals = [
 async function getTimezone() {
   const settings = await Settings.findOne()
   return settings?.timezone || DEFAULT_TIMEZONE
-}
-
-/** Consecutive days (in the user's timezone) with at least one completed task. */
-function computeStreak(completedAts: (Date | null | undefined)[], timezone: string) {
-  const days = new Set(completedAts.filter(Boolean).map(d => toDayKey(new Date(d!), timezone)))
-  let streak = 0
-  const cursor = new Date()
-  // If today isn't done yet but yesterday was, the streak is still alive
-  if (!days.has(toDayKey(cursor, timezone))) cursor.setTime(cursor.getTime() - 86400000)
-  while (days.has(toDayKey(cursor, timezone))) {
-    streak++
-    cursor.setTime(cursor.getTime() - 86400000)
-  }
-  return streak
 }
 
 async function seedIfEmpty() {
@@ -406,8 +393,7 @@ async function startServer() {
 
       const timezone = await getTimezone()
       const now = new Date()
-      const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1, 0, 0, 0, 0)
-      const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0, 23, 59, 59, 999)
+      const { start: quarterStart, end: quarterEnd } = quarterRange(now, timezone)
 
       const tasks = await Task.find({ threadId: id })
       const quarterTasks = tasks.filter(t => {
@@ -415,7 +401,7 @@ async function startServer() {
         const d = new Date(t.date)
         return d >= quarterStart && d <= quarterEnd
       })
-      const quarterDone = quarterTasks.filter(t => t.status === 'done').length
+      const quarter = completionStats(quarterTasks)
       const allDone = tasks.filter(t => t.status === 'done').length
 
       const streak = computeStreak(tasks.filter(t => t.status === 'done').map(t => t.completedAt), timezone)
@@ -438,7 +424,7 @@ async function startServer() {
         }))
 
       res.json({
-        tasksThisQuarter: { total: quarterTasks.length, completed: quarterDone, rate: quarterTasks.length > 0 ? Math.round((quarterDone / quarterTasks.length) * 100) : 0 },
+        tasksThisQuarter: quarter,
         tasksAllTime: { total: tasks.length, completed: allDone },
         streakDays: streak,
         lastActivity,
@@ -791,6 +777,20 @@ async function startServer() {
     }
   })
 
+  // Start afresh: remove every drop item and its stored file
+  app.delete('/api/drop', async (req, res) => {
+    try {
+      const items = await DropItem.find({}, { type: 1, s3Key: 1 })
+      await Promise.all(items
+        .filter(i => i.type === 'file' && i.s3Key)
+        .map(i => deleteS3Object(i.s3Key!).catch(() => {})))
+      const result = await DropItem.deleteMany({})
+      res.json({ ok: true, deleted: result.deletedCount ?? 0 })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
   app.delete('/api/drop/:id', async (req, res) => {
     try {
       const item = await DropItem.findById(req.params.id)
@@ -823,44 +823,29 @@ async function startServer() {
   // ANALYTICS ENDPOINTS
   // ============================================
 
-  // Helper: get the "current period" date range. Default = current quarter (Q).
-  function getCurrentQuarterRange() {
-    const now = new Date()
-    const month = now.getMonth() // 0-11
-    const quarter = Math.floor(month / 3) // 0-3
-    const startMonth = quarter * 3
-    const start = new Date(now.getFullYear(), startMonth, 1, 0, 0, 0, 0)
-    const end = new Date(now.getFullYear(), startMonth + 3, 0, 23, 59, 59, 999)
-    const label = `Q${quarter + 1}-${now.getFullYear()}`
-    return { start, end, label }
-  }
-
   // Overall summary for the dashboard cards
   app.get('/api/analytics/summary', async (req, res) => {
     try {
-      const { start, end, label } = getCurrentQuarterRange()
       const timezone = await getTimezone()
+      const { start, end, label } = quarterRange(new Date(), timezone)
 
-      const tasksInPeriod = await Task.find({
-        date: { $gte: start, $lte: end },
-      })
-      const completedInPeriod = tasksInPeriod.filter(t => t.status === 'done')
-      const total = tasksInPeriod.length
-      const done = completedInPeriod.length
-      const completionRate = total > 0 ? Math.round((done / total) * 100) : 0
+      const tasksInPeriod = await Task.find({ date: { $gte: start, $lte: end } }, { status: 1 })
+      const { completed, total, rate } = completionStats(tasksInPeriod)
 
       const activeThreads = await Thread.countDocuments({ status: 'active' })
       const totalThreads = await Thread.countDocuments()
 
-      const streak = computeStreak(completedInPeriod.map(t => t.completedAt), timezone)
+      // Streak spans quarters, so it looks at every completed task
+      const doneTasks = await Task.find({ status: 'done', completedAt: { $ne: null } }, { completedAt: 1 })
+      const streak = computeStreak(doneTasks.map(t => t.completedAt), timezone)
 
       res.json({
         period: label,
         periodStart: start,
         periodEnd: end,
         streak,
-        completionRate,
-        completed: done,
+        completionRate: rate,
+        completed,
         total,
         activeThreads,
         totalThreads,
@@ -873,7 +858,7 @@ async function startServer() {
   // Per-thread performance for the current period
   app.get('/api/analytics/threads', async (req, res) => {
     try {
-      const { start, end } = getCurrentQuarterRange()
+      const { start, end } = quarterRange(new Date(), await getTimezone())
 
       const threads = await Thread.find({ status: { $ne: 'archived' } })
       const tasks = await Task.find({
