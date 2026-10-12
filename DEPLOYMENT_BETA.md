@@ -35,7 +35,8 @@ Use a database user that only has access to that database. Network Access: `0.0.
 2. Until you own a domain, leave `EMAIL_FROM` unset: Resend only lets the default sender (`onboarding@resend.dev`)
    deliver to **your own** email address. To email testers you must verify a domain in Resend and set
    `EMAIL_FROM="WinterArc <hello@yourdomain>"`.
-3. Without `RESEND_API_KEY` the links are only printed in the Render logs (fine for a first smoke test).
+3. The optional daily email summary uses the same sender, so it also needs a verified domain before it can reach testers.
+4. Without `RESEND_API_KEY` the links are only printed in the Render logs (fine for a first smoke test).
 
 ## 5. First admin and invite codes
 1. Sign up in the app with the email you put in `ADMIN_EMAIL`. You need an invite code for that first sign-up: create one

@@ -42,3 +42,48 @@ describe('event reminders', () => {
     expect(run('17:50', [{ ...ev, status: 'done' }])).toHaveLength(0)
   })
 })
+
+import { planDigest, minutesUntilNextCheck, MAX_SLEEP_MINUTES } from './notificationPlan'
+const withDigest = (enabled: boolean, time = '07:30') => ({ ...DEFAULT_NOTIFICATIONS, emailDigest: { enabled, time } })
+
+describe('email digest', () => {
+  it('is off by default', () => {
+    expect(planDigest({ now: at('07:30'), timeZone: TZ, settings: DEFAULT_NOTIFICATIONS, today: [task('1')], dueSoon: [] })).toBeNull()
+  })
+  it('waits for its time, then summarises the day once per day key', () => {
+    const input = (time: string) => ({ now: at(time), timeZone: TZ, settings: withDigest(true), today: [task('1'), task('2'), task('e', { isEvent: true, startTime: '18:00', title: 'Class' })], dueSoon: [task('d', { dueKey: '2026-10-12' })] })
+    expect(planDigest(input('07:00'))).toBeNull()
+    const d = planDigest(input('07:30'))!
+    expect(d.key).toBe('email:digest:2026-10-12')
+    expect(d.subject).toBe('Your day: 2 tasks, 1 event')
+    expect(d.events).toEqual(['18:00 Class'])
+    expect(d.dueToday).toBe(1)
+    expect(planDigest(input('12:00'))).toBeNull() // hours stale
+  })
+  it('says so when the day is clear', () => {
+    expect(planDigest({ now: at('07:31'), timeZone: TZ, settings: withDigest(true), today: [], dueSoon: [] })!.subject).toBe('Your day is clear')
+  })
+})
+
+describe('minutesUntilNextCheck', () => {
+  const next = (time: string, today: NotifTask[] = [], settings = DEFAULT_NOTIFICATIONS) => minutesUntilNextCheck({ now: at(time), timeZone: TZ, settings, today })
+  it('waits for the daily plan', () => {
+    expect(next('07:00')).toBe(30)
+  })
+  it('after the daily plan, sleeps up to the cap rather than a whole day', () => {
+    expect(next('08:00')).toBe(MAX_SLEEP_MINUTES)
+  })
+  it('wakes for an event reminder that is sooner', () => {
+    expect(next('08:00', [task('e', { isEvent: true, startTime: '09:00' })])).toBe(45) // 09:00 - 15 min
+  })
+  it('ignores finished events and past reminders', () => {
+    expect(next('08:00', [task('e', { isEvent: true, startTime: '09:00', status: 'done' })])).toBe(MAX_SLEEP_MINUTES)
+    expect(next('10:00', [task('e', { isEvent: true, startTime: '09:00' })])).toBe(MAX_SLEEP_MINUTES)
+  })
+  it('includes the email digest time', () => {
+    expect(next('07:40', [], { ...withDigest(true, '08:00'), dailyPlan: { enabled: false, time: '07:30' } })).toBe(20)
+  })
+  it('is at least one minute', () => {
+    expect(next('07:30')).toBeGreaterThanOrEqual(1)
+  })
+})

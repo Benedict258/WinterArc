@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings'
 import { DEFAULT_NOTIFICATIONS, type NotificationSettings } from '@/shared/notificationPlan'
+import { useAuth } from '@/context/AuthContext'
 import { isNative } from '@/lib/native'
 import { nativeNotificationsGranted, requestNativeNotifications, scheduleReminders } from '@/lib/nativeReminders'
 import { getPushState, enablePush, disablePush, sendTestPush, type PushState } from '@/lib/push'
@@ -12,6 +13,7 @@ import { getPushState, enablePush, disablePush, sendTestPush, type PushState } f
 export default function NotificationsCard() {
   const { toast } = useToast()
   const { data: settings } = useSettings()
+  const { user } = useAuth()
   const { mutate: updateSettings } = useUpdateSettings()
   const [state, setState] = useState<PushState>('off')
   const [busy, setBusy] = useState(false)
@@ -31,6 +33,7 @@ export default function NotificationsCard() {
     dailyPlan: { ...DEFAULT_NOTIFICATIONS.dailyPlan, ...settings?.notifications?.dailyPlan },
     dueTasks: { ...DEFAULT_NOTIFICATIONS.dueTasks, ...settings?.notifications?.dueTasks },
     eventReminders: { ...DEFAULT_NOTIFICATIONS.eventReminders, ...settings?.notifications?.eventReminders },
+    emailDigest: { ...DEFAULT_NOTIFICATIONS.emailDigest, ...settings?.notifications?.emailDigest },
   }
   const save = (next: NotificationSettings) => updateSettings({ notifications: next })
 
@@ -51,7 +54,7 @@ export default function NotificationsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Bell size={20} className="text-primary" /> Notifications</CardTitle>
-        <CardDescription>Daily plan, due tasks and event reminders on this device</CardDescription>
+        <CardDescription>Daily plan, due tasks and event reminders on this device, plus an optional daily email</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="p-4 rounded-lg bg-secondary flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -98,6 +101,24 @@ export default function NotificationsCard() {
               </select>
               <input type="checkbox" checked={prefs.eventReminders.enabled} className="accent-primary"
                 onChange={e => save({ ...prefs, eventReminders: { ...prefs.eventReminders, enabled: e.target.checked } })} />
+            </span>
+          </label>
+        </div>
+
+        <div className="space-y-2 border-t border-border pt-4 text-sm">
+          <label className="flex items-center justify-between gap-3">
+            <span>
+              Daily email summary
+              <span className="block text-xs text-muted-foreground">
+                {user?.emailVerified ? `Sent to ${user.email}. Every email has a stop link.` : 'Confirm your email address first (see the banner at the top).'}
+              </span>
+            </span>
+            <span className="flex items-center gap-2">
+              <input type="time" value={prefs.emailDigest.time} disabled={!prefs.emailDigest.enabled || !user?.emailVerified}
+                onChange={e => e.target.value && save({ ...prefs, emailDigest: { ...prefs.emailDigest, time: e.target.value } })}
+                className="px-2 py-1 border rounded-md bg-background" />
+              <input type="checkbox" aria-label="Daily email summary" checked={prefs.emailDigest.enabled} disabled={!user?.emailVerified} className="accent-primary"
+                onChange={e => save({ ...prefs, emailDigest: { ...prefs.emailDigest, enabled: e.target.checked } })} />
             </span>
           </label>
         </div>

@@ -5,12 +5,15 @@ export type NotificationSettings = {
   dailyPlan: { enabled: boolean; time: string } // 'HH:mm' in the user's timezone
   dueTasks: { enabled: boolean }
   eventReminders: { enabled: boolean; minutesBefore: number }
+  /** a once-a-day summary by email (off until the user asks for it) */
+  emailDigest: { enabled: boolean; time: string }
 }
 
 export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
   dailyPlan: { enabled: true, time: '07:30' },
   dueTasks: { enabled: true },
   eventReminders: { enabled: true, minutesBefore: 15 },
+  emailDigest: { enabled: false, time: '07:30' },
 }
 
 export type NotifTask = {
@@ -111,4 +114,63 @@ export function planNotifications(input: {
   }
 
   return out
+}
+
+export type DigestContent = { key: string; subject: string; lines: string[]; events: string[]; dueToday: number; overdue: number; taskCount: number }
+
+/** The daily email summary, once its time has come (same grace as the daily plan). */
+export function planDigest(input: {
+  now: Date
+  timeZone: string
+  settings: NotificationSettings
+  today: NotifTask[]
+  dueSoon: NotifTask[]
+}): DigestContent | null {
+  const { now, timeZone, settings, today, dueSoon } = input
+  if (!settings.emailDigest.enabled) return null
+  const { dayKey, minutes } = localClock(now, timeZone)
+  const at = toMinutes(settings.emailDigest.time)
+  if (minutes < at || minutes - at > GRACE_MINUTES) return null
+  const pending = today.filter(t => t.status === 'pending')
+  const tasks = pending.filter(t => !t.isEvent)
+  const events = pending.filter(t => t.isEvent).sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
+  const overdue = dueSoon.filter(t => (t.dueKey ?? dayKey) < dayKey).length
+  const dueToday = dueSoon.length - overdue
+  return {
+    key: `email:digest:${dayKey}`,
+    subject: tasks.length || events.length ? `Your day: ${tasks.length} task${tasks.length === 1 ? '' : 's'}${events.length ? `, ${events.length} event${events.length === 1 ? '' : 's'}` : ''}` : 'Your day is clear',
+    lines: tasks.map(t => t.title),
+    events: events.map(e => `${e.startTime ?? ''} ${e.title}`.trim()),
+    dueToday,
+    overdue,
+    taskCount: tasks.length,
+  }
+}
+
+/** Longest a user can go without being looked at (covers DST shifts and edits that didn't flag them). */
+export const MAX_SLEEP_MINUTES = 360
+
+/**
+ * Minutes until this user next needs a notification pass: the soonest of their daily plan,
+ * email digest and event reminders still ahead today, capped at MAX_SLEEP_MINUTES.
+ * Lets the scheduler skip everyone who has nothing coming up.
+ */
+export function minutesUntilNextCheck(input: { now: Date; timeZone: string; settings: NotificationSettings; today: NotifTask[] }): number {
+  const { now, timeZone, settings, today } = input
+  const { minutes } = localClock(now, timeZone)
+  const candidates: number[] = [MAX_SLEEP_MINUTES]
+  const daily = (hhmm: string) => {
+    const d = toMinutes(hhmm) - minutes
+    candidates.push(d > 0 ? d : d + 1440)
+  }
+  if (settings.dailyPlan.enabled) daily(settings.dailyPlan.time)
+  if (settings.emailDigest.enabled) daily(settings.emailDigest.time)
+  if (settings.eventReminders.enabled) {
+    for (const e of today) {
+      if (!e.isEvent || e.status !== 'pending' || !e.startTime) continue
+      const d = toMinutes(e.startTime) - settings.eventReminders.minutesBefore - minutes
+      if (d > 0) candidates.push(d)
+    }
+  }
+  return Math.max(1, Math.min(...candidates))
 }

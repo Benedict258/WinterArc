@@ -9,7 +9,8 @@ import { MongoStore } from 'connect-mongo'
 import { Thread } from './backend/src/models/Thread.ts'
 import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
 import { PushSubscription } from './backend/src/models/PushSubscription.ts'
-import { pushConfigured, vapidPublicKey, sendToUser, runNotificationTick, startNotificationScheduler } from './backend/src/services/notificationService.ts'
+import { pushConfigured, vapidPublicKey, sendToUser, runNotificationTick, startNotificationScheduler, markNotificationsDirty } from './backend/src/services/notificationService.ts'
+import { validUnsubscribe } from './backend/src/services/emailService.ts'
 import {
   calendarConfigured,
   getAuthUrl,
@@ -124,7 +125,7 @@ function storageErrorStatus(error: unknown) {
 }
 
 /** Paths under /api that work without being logged in. */
-const PUBLIC_PATHS = new Set(['/health', '/cron/tick', '/calendar/callback'])
+const PUBLIC_PATHS = new Set(['/health', '/cron/tick', '/calendar/callback', '/email/unsubscribe'])
 
 /**
  * Builds the Express app (API only). Needs an open Mongoose connection.
@@ -205,6 +206,19 @@ export function createApp() {
       res.status(500).json({ error: errorMessage(error) })
     }
   })
+
+  // One-click stop for the daily email (linked from every digest); the signature proves the link came from us
+  const unsubscribeDigest: express.RequestHandler = async (req, res) => {
+    const userId = String(req.query.u ?? '')
+    const signature = String(req.query.s ?? '')
+    if (!/^[0-9a-f]{24}$/.test(userId) || !validUnsubscribe(userId, signature)) {
+      return res.status(400).type('html').send('<p style="font-family:system-ui;padding:24px">This link isn\'t valid. You can switch the daily email off in Settings.</p>')
+    }
+    await Settings.updateOne({ userId }, { $set: { 'notifications.emailDigest.enabled': false } })
+    res.type('html').send('<p style="font-family:system-ui;padding:24px">Done. You won\'t get the daily email any more. You can turn it back on in Settings.</p>')
+  }
+  app.get('/api/email/unsubscribe', unsubscribeDigest)
+  app.post('/api/email/unsubscribe', unsubscribeDigest)
 
   // Everything below needs a logged-in, active user
   app.use('/api', (req, res, next) => {
@@ -452,7 +466,9 @@ export function createApp() {
 
   app.post('/api/grid/rebalance', async (req, res) => {
     try {
-      res.json(await rebalanceWeek(uid(req)))
+      const result = await rebalanceWeek(uid(req))
+      await markNotificationsDirty(uid(req))
+      res.json(result)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
@@ -590,6 +606,7 @@ export function createApp() {
         }
       }
       await settings.save()
+      await markNotificationsDirty(uid(req)) // timezone or reminder times may have changed
       res.json(settings)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -626,6 +643,7 @@ export function createApp() {
         { ...req.body, userId: uid(req), userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) },
         { upsert: true, new: true }
       ).setOptions({ crossUser: true })
+      await markNotificationsDirty(uid(req))
       res.status(201).json({ ok: true })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -909,7 +927,9 @@ export function createApp() {
 
   app.post('/api/calendar/sync', async (req, res) => {
     try {
-      res.json(await syncCalendar(uid(req)))
+      const result = await syncCalendar(uid(req))
+      await markNotificationsDirty(uid(req))
+      res.json(result)
     } catch (error) {
       res.status(502).json({ error: errorMessage(error) })
     }

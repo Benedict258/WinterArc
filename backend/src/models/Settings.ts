@@ -26,6 +26,10 @@ const settingsSchema = new mongoose.Schema(
       dueTasks: {
         enabled: { type: Boolean, default: true },
       },
+      emailDigest: {
+        enabled: { type: Boolean, default: false },
+        time: { type: String, default: '07:30' },
+      },
       eventReminders: {
         enabled: { type: Boolean, default: true },
         minutesBefore: { type: Number, default: 15 },
@@ -51,6 +55,8 @@ const settingsSchema = new mongoose.Schema(
       drop: { type: Boolean, default: true },
       events: { type: Boolean, default: true },
     },
+    // When the notification scheduler should next look at this user (see notificationService).
+    nextCheckAt: { type: Date, default: () => new Date(0), index: true },
     gridBalancing: {
       maxDailyIntensity: {
         type: Number,

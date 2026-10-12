@@ -36,6 +36,7 @@ async function loadSettings(): Promise<NotificationSettings> {
     dailyPlan: { ...DEFAULT_NOTIFICATIONS.dailyPlan, ...n?.dailyPlan },
     dueTasks: { ...DEFAULT_NOTIFICATIONS.dueTasks, ...n?.dueTasks },
     eventReminders: { ...DEFAULT_NOTIFICATIONS.eventReminders, ...n?.eventReminders },
+    emailDigest: { ...DEFAULT_NOTIFICATIONS.emailDigest, ...n?.emailDigest },
   }
 }
 
