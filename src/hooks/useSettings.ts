@@ -75,6 +75,7 @@ export const useUpdateSettings = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
+      window.dispatchEvent(new Event('winterarc-data-changed'));
       // Frequency target / timezone change the forecast
       queryClient.invalidateQueries({ queryKey: ['week'] });
       // The Settings page shows its own confirmation
