@@ -12,7 +12,7 @@ Status: draft for review. Lives on branch `public-app`; the personal app (`main`
 | Scale target (6 months) | 100 to 5,000 users. |
 | Customization at launch | Look & feel, own day structure, planner rules, modules on/off. |
 | Existing data | Kept separate. New DB; optional one-time import of the owner's data later. |
-| Social | Solo at launch → accountability partners → shared threads/teams. Schema prepared, features later. |
+| Social | All three are in scope, built in stages: solo workspace → accountability partners → shared threads/teams. The data model supports all three from the start. |
 | Onboarding | Guided setup + starter templates. |
 | Stack | Keep MongoDB + Express + React; add `userId` tenancy. |
 | Notifications | Browser/desktop push, on-device phone reminders, email. |
@@ -23,7 +23,7 @@ Status: draft for review. Lives on branch `public-app`; the personal app (`main`
 | Extras | Per-user Google Calendar, import from other apps, AI planning assistant. Data export + account deletion are required anyway (Play Store). |
 | AI | Break goals into steps, suggest a week plan, chat about the workspace, weekly review. Free monthly allowance per user; more usage on request; paid tiers and bring-your-own-key later. |
 | Admin | Yes: users, usage, suspend, delete. |
-| Timeline | As fast as possible → ship a thin core first, extras after (§7). |
+| Timeline | As fast as possible, **without dropping anything**: every feature below is committed scope. Work is ordered so people can use it early (beta), but the public launch includes all of it (§7). |
 
 ## 2. Separation from the current app
 
@@ -72,20 +72,33 @@ Not automatic. An optional "Import from WinterArc export" (the app already has `
 - **Modules:** Wishlist, Goals/analytics, Drop, Events, AI each toggled; nav hides disabled modules.
 - **Templates:** starter packs (Student, Developer, Fitness, Creator, Blank), each a set of threads + example tasks + a suggested day structure.
 
-## 7. Milestones (fastest path to strangers using it)
+## 7. Milestones — everything is in scope
 
-**Beta-critical**
-1. **M0 Setup:** branch, new Render/Vercel/Atlas/B2/Resend, new app id + signing key, CI deploys from `public-app`.
-2. **M1 Identity & tenancy:** User model, signup/login/logout, email verify + reset, Google sign-in, `userId` on everything, scoped data layer, isolation tests. Native bearer tokens per user.
+Order is chosen so each stage is usable and the riskiest parts (tenancy, auth) land first. Nothing is removed or postponed indefinitely; "beta" is simply the first release point.
+
+**Stage 1 — Foundation (beta-critical)**
+1. **M0 Setup:** branch, new Render/Vercel/Atlas/B2/Resend, new app id + signing key, CI deploys from `public-app`. *Also: submit the Google OAuth verification application as early as the domain and privacy policy exist, because it runs in the background for weeks.*
+2. **M1 Identity & tenancy:** User model, signup/login/logout, email verify + reset, Google sign-in, `userId` on everything, scoped data layer, isolation tests. Per-user native bearer tokens.
 3. **M2 Per-user settings & planner:** UserSettings, planner takes day structure/rules, per-user daily generation by timezone.
 4. **M3 Onboarding & templates:** wizard + starter packs.
 5. **M4 Customization UI:** theme, day structure editor, planner rules, module toggles.
-6. **M5 Per-user notifications + email:** push/phone reminders tied to users, scalable tick, verification/reset/digest emails.
-7. **M6 Compliance + admin-lite:** export, delete account, privacy/terms pages, rate limits, admin user list + suspend.
-8. **Private beta:** web + APK to invited users (invite codes on).
+6. **M5 Per-user notifications + email:** push and phone reminders tied to users, scalable tick, verification/reset/digest emails.
+7. **M6 Compliance + admin:** export, delete account, privacy/terms pages, rate limits, admin area (users, usage, suspend, delete, invite codes).
+8. **→ Private beta:** web + Android APK + desktop apps for invited users.
 
-**After beta**
-9. **M7 Drop quota** · 10. **M8 AI assistant** · 11. **M9 Google Calendar per user** (submit for verification during M1) · 12. **M10 Import (CSV/Todoist/Notion)** · 13. **Play Store release** · 14. **Partners** · 15. **Shared threads/teams**.
+**Stage 2 — Features (run while the beta is live)**
+9. **M7 Drop with quotas:** per-user storage limit, 30-day expiry, cleanup job.
+10. **M8 AI assistant:** break goals into steps, suggest a week plan, chat about the workspace, weekly review; metered per user with a free monthly allowance and request-more flow.
+11. **M9 Google Calendar per user:** works for named testers immediately, for everyone once Google approves.
+12. **M10 Import from other apps:** CSV, Todoist, Notion, and a WinterArc export file.
+
+**Stage 3 — Social and release**
+13. **M11 Accountability partners:** invite, accept, share streaks/progress read-only, privacy controls, email + push for invites.
+14. **M12 Shared threads / small teams:** membership and roles, invite flow, permission checks on every thread/task route, conflict handling and live updates.
+15. **M13 Paid tiers (when you decide):** plans, limits for AI/Drop/threads, payments, upgrade/downgrade rules. The limits system from M7/M8 is built so tiers plug in.
+16. **→ Public launch + Play Store release:** all features above, store listing, privacy policy and data-safety form complete.
+
+Scope control: the stage order can be re-arranged on request, but features are only removed if you decide to remove them.
 
 ## 8. Testing & safety
 
@@ -115,7 +128,7 @@ Setup A (cheapest): free tiers + external pinger, accept cold starts. Setup B: p
 - **Google OAuth verification** can take weeks: start early or ship Calendar later.
 - **Free-tier sleep** delays reminders: pinger for beta, paid instance for launch.
 - **Tenancy bugs** are the biggest security risk: scoped data layer + isolation tests before any beta user.
-- **Scope creep** from social/AI: gated behind milestones after beta.
+- **Scope is large.** With nothing dropped, the schedule is the lever: each milestone ends in something usable, and the order (not the contents) is what flexes.
 - **Abuse** (spam signups, storage, AI): email verification, rate limits, quotas, caps, admin suspend.
 
 ## 11. Still to decide
