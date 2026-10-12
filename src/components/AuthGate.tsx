@@ -181,6 +181,7 @@ function SignedOut() {
       )}
 
       <div className="text-center text-xs text-muted-foreground space-y-1.5">
+        <p><a href="/terms" className="hover:underline">Terms</a> · <a href="/privacy" className="hover:underline">Privacy</a></p>
         {mode === 'signin' && (
           <>
             <button type="button" className="hover:text-foreground underline-offset-2 hover:underline" onClick={() => switchMode('forgot')}>Forgot your password?</button>

@@ -2,6 +2,8 @@
 
 Everything here is ready to paste or follow. Things only you can do (they need your Google account, money or identity) are marked **You**.
 
+> **Status:** the Play Console account and the closed test are on hold for now. Nothing here is needed until you decide to publish. The Privacy Policy, Terms and account-deletion pages it asks for are already built (`/privacy`, `/terms`, `/delete-account`).
+
 ## 0. Decide first: the package name
 The package name is **permanent** once an app is on Google Play. The beta builds use `dev.benedictisaac.winterarc.beta`.
 - Happy with that? Do nothing.

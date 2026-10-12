@@ -5,6 +5,7 @@ import { InviteCode } from '../models/InviteCode'
 import { ApiToken } from '../models/ApiToken'
 import { Settings } from '../models/Settings'
 import { hashPassword, verifyPassword, decoyHash, passwordProblem } from './passwordService'
+import { TERMS_VERSION } from '../../../src/shared/legal'
 import { sendEmail, verifyEmailMessage, resetPasswordMessage } from './emailService'
 import { randomToken, hashToken } from '../utils/tokens'
 
@@ -81,7 +82,7 @@ async function createDefaults(userId: unknown, timezone?: string) {
   await Settings.create({ userId, ...(timezone ? { timezone } : {}) })
 }
 
-export const TERMS_VERSION = '2026-10'
+export { TERMS_VERSION }
 
 export async function signup(input: { email: string; password: string; name?: string; inviteCode?: string; timezone?: string; acceptTerms?: boolean }) {
   const problem = passwordProblem(input.password, input.email)

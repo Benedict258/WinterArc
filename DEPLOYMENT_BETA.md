@@ -89,7 +89,9 @@ It works with any provider that has an OpenAI-style API and tool calling. Groq i
 ## 8. Plans and limits
 Limits live in `src/shared/plans.ts` (Free and Pro). You can tune the Free plan without code: `DROP_QUOTA_MB` (200), `DROP_MAX_FILE_MB` (25), `DROP_MAX_ITEMS` (300), `AI_MONTHLY_TOKENS`, `AI_DAILY_TOKENS`, `MAX_THREADS_FREE` (30). Drop files are measured in storage when they are registered, and a cleanup removes stored files nothing points at (never-registered uploads, expired items) about every six hours, when the cron pinger runs.
 
-## 9. Paid plans with Paystack (optional)
+## 9. Paid plans with Paystack (optional, on hold)
+_Built and tested, but not switched on. Leave `PAYSTACK_SECRET_KEY` unset until you decide to turn payments on; everyone then stays on the Free plan (admins can still give Pro by hand)._
+
 Pro is paid for a period (1 month or 1 year) and does not renew by itself; people get an email three days before it ends and can pay again.
 1. dashboard.paystack.com → **Settings → API Keys & Webhooks** → copy the **secret key** into Render as `PAYSTACK_SECRET_KEY`.
 2. Set the price (smallest currency unit): `BILLING_CURRENCY=NGN`, `PRO_PRICE_MONTHLY_MINOR=500000` (₦5,000). `PRO_PRICE_YEARLY_MINOR` is optional and defaults to ten months.
@@ -97,3 +99,6 @@ Pro is paid for a period (1 month or 1 year) and does not renew by itself; peopl
 4. Use Paystack's test keys first (`sk_test_…`) with a test card, then switch to the live key.
 5. Check your Paystack account supports the currency you choose.
 You can also give anyone Pro by hand with **Give Pro** on the Admin page (30 days).
+
+## 10. Privacy Policy and Terms
+They are at `/privacy`, `/terms` and `/delete-account` and are written for what the app does today. In Render set `SUPPORT_EMAIL` (the contact shown), `LEGAL_NAME` (who runs the service, for example your name or company) and `LEGAL_JURISDICTION` (for example `Nigeria`), so the pages name them. When you change the text in `src/pages/LegalPages.tsx` in a way people should agree to again, bump `TERMS_VERSION` in `src/shared/legal.ts`. These are plain-language drafts, not legal advice: have a lawyer review them before you open to the public.

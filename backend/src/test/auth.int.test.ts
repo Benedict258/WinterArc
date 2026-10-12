@@ -5,6 +5,7 @@ import { dbReachable, startTestApp, tokenFrom, newInvite } from './harness'
 import { User } from '../models/User'
 import { InviteCode } from '../models/InviteCode'
 import { setGoogleVerifier } from '../services/authService'
+import { TERMS_VERSION } from '../../../src/shared/legal'
 
 const available = await dbReachable()
 const PASSWORD = 'correct horse battery'
@@ -26,7 +27,12 @@ describe.skipIf(!available)('auth', () => {
       expect(ok.status).toBe(200)
       const u = await User.findOne({ email: 'terms@example.com' })
       expect(u!.termsAcceptedAt).toBeTruthy()
-      expect(u!.termsVersion).toBeTruthy()
+      expect(u!.termsVersion).toBe(TERMS_VERSION)
+      process.env.LEGAL_NAME = 'Acme Ltd'
+      process.env.LEGAL_JURISDICTION = 'Nigeria'
+      const config = (await request(ctx.app).get('/api/auth/config')).body
+      expect(config).toMatchObject({ legalName: 'Acme Ltd', jurisdiction: 'Nigeria', termsVersion: TERMS_VERSION })
+      delete process.env.LEGAL_NAME; delete process.env.LEGAL_JURISDICTION
     })
 
     it('needs an invite code during the beta', async () => {
