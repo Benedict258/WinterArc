@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema(
     lastSeenAt: { type: Date, default: null },
     /** set once the first-run setup (or skip) is finished */
     onboardedAt: { type: Date, default: null },
+    termsAcceptedAt: { type: Date, default: null },
+    termsVersion: { type: String, default: null },
     signedUpWithCode: { type: String, default: null },
   },
   { timestamps: true }

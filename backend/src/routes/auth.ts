@@ -57,7 +57,7 @@ async function start(req: Request, res: Response, user: any, client?: string) {
 export const authRouter = Router()
 
 authRouter.get('/config', (_req, res) => {
-  res.json({ inviteRequired: inviteRequired(), googleClientId: process.env.GOOGLE_CLIENT_ID || null })
+  res.json({ inviteRequired: inviteRequired(), googleClientId: process.env.GOOGLE_CLIENT_ID || null, supportEmail: process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || null })
 })
 
 authRouter.post('/signup', rateLimit('signup', 10, 60 * 60 * 1000), validateRequest(signupSchema), async (req, res) => {
@@ -80,7 +80,7 @@ authRouter.post('/login', rateLimit('login', 30, 15 * 60 * 1000), validateReques
 
 authRouter.post('/google', rateLimit('google', 30, 15 * 60 * 1000), validateRequest(googleLoginSchema), async (req, res) => {
   try {
-    const user = await googleLogin(req.body.credential, req.body.inviteCode, req.body.timezone)
+    const user = await googleLogin(req.body.credential, req.body.inviteCode, req.body.timezone, req.body.acceptTerms)
     await start(req, res, user, req.body.client)
   } catch (error) {
     fail(res, error)

@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import { toDayKey } from '@/lib/utils'
 import { detectTimezone, timezoneList } from '@/lib/timezones'
+import PrivacyCard from '@/components/PrivacyCard'
 import { AppearanceCard, DayStructureCard, ModulesCard, PlannerRulesCard } from '@/components/CustomizeCards'
 
 export default function SettingsView() {
@@ -82,7 +83,7 @@ export default function SettingsView() {
     try {
       // Server-side export includes archived threads; fail loudly rather than
       // saving an error body as a "backup"
-      const res = await fetch('/api/export')
+      const res = await fetch('/api/account/export')
       if (!res.ok) throw new Error(`Export failed: ${res.status}`)
       const exportData = await res.json()
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
@@ -410,6 +411,8 @@ export default function SettingsView() {
                 </Button>
               </CardContent>
             </Card>
+
+            <PrivacyCard />
           </>
         )}
       </div>

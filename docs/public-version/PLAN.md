@@ -1,6 +1,6 @@
 # WinterArc Public Version — Plan
 
-Status: M0-M5 built (accounts, per-user data, auth, isolation tests, deployment config, per-user planner rules, variable day blocks, onboarding with five starter packs, settings editor with theme, accent, density and feature toggles, scalable per-user notification scheduler, optional daily email summary with one-click unsubscribe). Next: M6 compliance and admin (data export, account deletion, privacy and terms pages, admin area). Lives on branch `WinterArcBeta`; the personal app (`main`) is untouched and keeps running.
+Status: M0-M6 built, so the private beta is feature-complete for invited testers: accounts, per-user data, auth, isolation tests, per-user planner rules and day blocks, onboarding with five starter packs, settings editor and theming, scalable notifications with an optional daily email, data export, account deletion, terms and privacy pages, and an admin area. Next: Stage 2 (Drop quotas, AI assistant, per-user Google Calendar, imports). Lives on branch `WinterArcBeta`; the personal app (`main`) is untouched and keeps running.
 
 ## 1. Decisions so far
 

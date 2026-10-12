@@ -172,6 +172,7 @@ export const signupSchema = z.object({
   password: passwordField,
   name: z.string().trim().max(80).optional(),
   inviteCode: z.string().trim().max(64).optional(),
+  acceptTerms: z.literal(true, { error: 'Please accept the terms and privacy policy to create an account.' }),
   timezone: z.string().max(64).refine(tz => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
   }, 'Invalid timezone').optional(),
@@ -188,6 +189,7 @@ export const loginSchema = z.object({
 export const googleLoginSchema = z.object({
   credential: z.string().min(10).max(4096),
   inviteCode: z.string().trim().max(64).optional(),
+  acceptTerms: z.boolean().optional(),
   timezone: z.string().max(64).optional(),
   client: z.enum(['web', 'native']).optional(),
 });

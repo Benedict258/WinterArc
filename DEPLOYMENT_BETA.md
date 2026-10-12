@@ -22,7 +22,7 @@ Use a database user that only has access to that database. Network Access: `0.0.
 ## 2. Render (API)
 1. Render → **New → Blueprint** → this repo, branch **WinterArcBeta**. It reads `render.yaml` and creates `winterarc-beta-api`.
 2. Fill in when asked (or later under Environment). Required to start: `MONGO_URI`, `FRONTEND_ORIGIN`, `APP_URL`
-   (both = your Vercel address, e.g. `https://winterarc-beta.vercel.app`), `ADMIN_EMAIL` (your email).
+   (both = your Vercel address, e.g. `https://winterarc-beta.vercel.app`), `ADMIN_EMAIL` (your email). Optional: `SUPPORT_EMAIL` is the contact shown on the Privacy and Terms pages (defaults to `ADMIN_EMAIL`).
 3. Check `https://<your-service>.onrender.com/api/health` → `{"status":"ok","mongoConnected":true}`.
 
 ## 3. Vercel (web app)

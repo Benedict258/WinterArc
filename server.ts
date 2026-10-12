@@ -39,8 +39,10 @@ import { applyOnboarding, AlreadyOnboardedError } from './backend/src/services/o
 import { TEMPLATES, PRESETS } from './src/shared/templates.ts'
 import { ensureTodayGenerated, generateForActiveUsers, rebalanceWeek, toDayKey, DEFAULT_TIMEZONE } from './backend/src/services/dailyGenerationService.ts'
 import { validateRequest } from './backend/src/middleware/validationMiddleware.ts'
-import { authenticate, requireAuth, requireVerified, uid } from './backend/src/middleware/auth.ts'
+import { authenticate, requireAuth, requireVerified, requireAdmin, uid } from './backend/src/middleware/auth.ts'
 import { authRouter } from './backend/src/routes/auth.ts'
+import { accountRouter, handleExport } from './backend/src/routes/account.ts'
+import { adminRouter } from './backend/src/routes/admin.ts'
 import {
   threadSchema,
   threadUpdateSchema,
@@ -669,22 +671,9 @@ export function createApp() {
     }
   })
 
-  app.get('/api/export', async (req, res) => {
-    try {
-      const userId = uid(req)
-      const threads = await Thread.find({ userId })
-      const tasks = await Task.find({ userId })
-      const wishlist = await WishlistItem.find({ userId })
-      const goals = await Goal.find({ userId })
-      const settings = await Settings.findOne({ userId })
-      const data = { exportedAt: new Date().toISOString(), threads, tasks, wishlist, goals, settings }
-      res.setHeader('Content-Type', 'application/json')
-      res.setHeader('Content-Disposition', 'attachment; filename="workspace-export.json"')
-      res.json(data)
-    } catch (error) {
-      res.status(500).json({ error: errorMessage(error) })
-    }
-  })
+  app.get('/api/export', handleExport) // older clients
+  app.use('/api/account', accountRouter)
+  app.use('/api/admin', requireAdmin, adminRouter)
 
   // ============================================
   // DROP ENDPOINTS

@@ -5,9 +5,9 @@ import { clearCache } from '@/lib/storage'
 import { isNative, setToken, clearToken } from '@/lib/native'
 
 export type AuthUser = { id: string; email: string; name: string; role: 'user' | 'admin'; emailVerified: boolean; onboarded?: boolean }
-export type AuthConfig = { inviteRequired: boolean; googleClientId: string | null }
+export type AuthConfig = { inviteRequired: boolean; googleClientId: string | null; supportEmail?: string | null }
 type Result = { ok: boolean; error?: string; code?: string }
-export type SignupInput = { email: string; password: string; name?: string; inviteCode?: string }
+export type SignupInput = { email: string; password: string; name?: string; inviteCode?: string; acceptTerms: boolean }
 
 interface AuthContextType {
   user: AuthUser | null
@@ -17,7 +17,7 @@ interface AuthContextType {
   config: AuthConfig
   login: (email: string, password: string) => Promise<Result>
   signup: (input: SignupInput) => Promise<Result>
-  googleLogin: (credential: string, inviteCode?: string) => Promise<Result>
+  googleLogin: (credential: string, inviteCode?: string, acceptTerms?: boolean) => Promise<Result>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
   resendVerification: () => Promise<Result>
@@ -137,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = (email: string, password: string) => authenticate('/api/auth/login', { email, password })
   const signup = (input: SignupInput) => authenticate('/api/auth/signup', { ...input })
-  const googleLogin = (credential: string, inviteCode?: string) => authenticate('/api/auth/google', { credential, inviteCode })
+  const googleLogin = (credential: string, inviteCode?: string, acceptTerms?: boolean) => authenticate('/api/auth/google', { credential, inviteCode, acceptTerms })
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})

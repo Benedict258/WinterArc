@@ -81,7 +81,9 @@ async function createDefaults(userId: unknown, timezone?: string) {
   await Settings.create({ userId, ...(timezone ? { timezone } : {}) })
 }
 
-export async function signup(input: { email: string; password: string; name?: string; inviteCode?: string; timezone?: string }) {
+export const TERMS_VERSION = '2026-10'
+
+export async function signup(input: { email: string; password: string; name?: string; inviteCode?: string; timezone?: string; acceptTerms?: boolean }) {
   const problem = passwordProblem(input.password, input.email)
   if (problem) throw new AuthError(400, problem, 'weak_password')
   if (await User.exists({ email: input.email })) throw new AuthError(409, 'An account with that email already exists. Try signing in.', 'email_taken')
@@ -93,6 +95,8 @@ export async function signup(input: { email: string; password: string; name?: st
       name: input.name ?? '',
       passwordHash: await hashPassword(input.password),
       signedUpWithCode: code,
+      termsAcceptedAt: new Date(),
+      termsVersion: TERMS_VERSION,
       role: isAdminEmail(input.email) ? 'admin' : 'user',
     })
     await createDefaults(user._id, input.timezone)
@@ -143,7 +147,7 @@ export let verifyGoogleToken: (credential: string) => Promise<{ sub: string; ema
 }
 export const setGoogleVerifier = (fn: typeof verifyGoogleToken) => { verifyGoogleToken = fn }
 
-export async function googleLogin(credential: string, inviteCode?: string, timezone?: string) {
+export async function googleLogin(credential: string, inviteCode?: string, timezone?: string, acceptTerms?: boolean) {
   let profile
   try {
     profile = await verifyGoogleToken(credential)
@@ -160,9 +164,11 @@ export async function googleLogin(credential: string, inviteCode?: string, timez
     await User.updateOne({ _id: user._id }, { $set: { googleId: profile.sub, emailVerifiedAt: user.emailVerifiedAt ?? new Date(), lastLoginAt: new Date(), ...(isAdminEmail(user.email) ? { role: 'admin' } : {}) } })
     return (await User.findOne({ _id: user._id }))!
   }
+  if (!acceptTerms) throw new AuthError(400, 'Create an account first and accept the terms, then use Google.', 'terms_required')
   const code = await consumeInvite(inviteCode)
   try {
     user = await User.create({
+      termsAcceptedAt: new Date(), termsVersion: TERMS_VERSION,
       email: profile.email, name: profile.name ?? '', googleId: profile.sub, emailVerifiedAt: new Date(),
       signedUpWithCode: code, role: isAdminEmail(profile.email) ? 'admin' : 'user', lastLoginAt: new Date(),
     })

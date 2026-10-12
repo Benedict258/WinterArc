@@ -88,6 +88,7 @@ function SignedOut() {
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [invite, setInvite] = useState('')
+  const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -97,10 +98,10 @@ function SignedOut() {
 
   const onGoogle = React.useCallback(async (credential: string) => {
     setBusy(true)
-    const result = await googleLogin(credential, invite || undefined)
+    const result = await googleLogin(credential, invite || undefined, accepted)
     setBusy(false)
     if (!result.ok) setError(result.error ?? 'Google sign-in failed.')
-  }, [googleLogin, invite])
+  }, [googleLogin, invite, accepted])
   useGoogleButton(config.googleClientId, onGoogle, googleRef, mode !== 'forgot')
 
   const submit = async (e: React.FormEvent) => {
@@ -118,7 +119,7 @@ function SignedOut() {
       }
       const result = mode === 'signin'
         ? await login(email, password)
-        : await signup({ email, password, name: name || undefined, inviteCode: invite || undefined })
+        : await signup({ email, password, name: name || undefined, inviteCode: invite || undefined, acceptTerms: accepted })
       if (!result.ok) setError(result.error ?? 'Something went wrong.')
     } catch {
       setError('Can’t reach the server. Check your connection and try again.')
@@ -157,9 +158,15 @@ function SignedOut() {
             <input value={invite} onChange={e => setInvite(e.target.value.toUpperCase())} autoCapitalize="characters" required className={`${inputClass} tracking-wider`} placeholder="WA-XXXX-XXXX" />
           </div>
         )}
+        {mode === 'signup' && (
+          <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} className="mt-0.5 accent-primary" />
+            <span>I agree to the <a href="/terms" target="_blank" rel="noreferrer" className="text-primary hover:underline">Terms</a> and the <a href="/privacy" target="_blank" rel="noreferrer" className="text-primary hover:underline">Privacy Policy</a>.</span>
+          </label>
+        )}
         {error && <p role="alert" className="text-xs text-destructive font-medium">{error}</p>}
         {notice && <p role="status" className="text-xs text-primary font-medium">{notice}</p>}
-        <Button type="submit" className="w-full py-2.5 gap-2" disabled={busy || !email || (mode !== 'forgot' && !password)}>
+        <Button type="submit" className="w-full py-2.5 gap-2" disabled={busy || !email || (mode !== 'forgot' && !password) || (mode === 'signup' && !accepted)}>
           <span>{mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}</span>
           <ArrowRight size={16} />
         </Button>

@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Upload,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,7 @@ interface NavItem {
   icon: LucideIcon
   /** hidden when the user switches this module off */
   module?: ModuleId
+  adminOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -43,6 +45,7 @@ const navItems: NavItem[] = [
   { label: 'Goals', path: '/goals', icon: Target, module: 'goals' },
   { label: 'Drop', path: '/drop', icon: Upload, module: 'drop' },
   { label: 'Settings', path: '/settings', icon: SettingsIcon },
+  { label: 'Admin', path: '/admin', icon: ShieldCheck, adminOnly: true },
 ]
 
 const SIDEBAR_EXPANDED_KEY = 'workspace-sidebar-expanded'
@@ -72,12 +75,12 @@ function VerifyBanner({ onResend }: { onResend: () => Promise<{ ok: boolean; err
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  const { logout, user, resendVerification } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const { data: settings } = useSettings()
   const { mutate: saveSettings } = useUpdateSettings()
   const modules = normalizeModules(settings?.modules)
-  const visibleNav = navItems.filter(item => !item.module || modules[item.module])
-  const { logout, user, resendVerification } = useAuth()
+  const visibleNav = navItems.filter(item => (!item.module || modules[item.module]) && (!item.adminOnly || user?.role === 'admin'))
   const [mobileOpen, setMobileOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [pinnedExpanded, setPinnedExpanded] = useState<boolean>(() => {

@@ -14,9 +14,21 @@ describe.skipIf(!available)('auth', () => {
   beforeAll(async () => { ctx = await startTestApp() })
   afterAll(async () => { await ctx.stop() })
 
-  const signup = (body: Record<string, unknown>) => request(ctx.app).post('/api/auth/signup').send(body)
+  const signup = (body: Record<string, unknown>) => request(ctx.app).post('/api/auth/signup').send({ acceptTerms: true, ...body })
 
   describe('sign-up and invites', () => {
+    it('requires accepting the terms', async () => {
+      const res = await request(ctx.app).post('/api/auth/signup').send({ email: 'terms@example.com', password: PASSWORD, inviteCode: await newInvite() })
+      expect(res.status).toBe(400)
+      expect(res.body.error).toMatch(/terms/i)
+      expect(await User.exists({ email: 'terms@example.com' })).toBeNull()
+      const ok = await signup({ email: 'terms@example.com', password: PASSWORD, inviteCode: await newInvite() })
+      expect(ok.status).toBe(200)
+      const u = await User.findOne({ email: 'terms@example.com' })
+      expect(u!.termsAcceptedAt).toBeTruthy()
+      expect(u!.termsVersion).toBeTruthy()
+    })
+
     it('needs an invite code during the beta', async () => {
       const res = await signup({ email: 'a@example.com', password: PASSWORD })
       expect(res.status).toBe(400)
@@ -32,7 +44,7 @@ describe.skipIf(!available)('auth', () => {
 
     it('creates the account, signs in, and sends a verification email', async () => {
       const agent = request.agent(ctx.app)
-      const res = await agent.post('/api/auth/signup').send({ email: 'New@Example.com', password: PASSWORD, inviteCode: await newInvite(), name: 'Nia' })
+      const res = await agent.post('/api/auth/signup').send({ acceptTerms: true, email: 'New@Example.com', password: PASSWORD, inviteCode: await newInvite(), name: 'Nia' })
       expect(res.status).toBe(200)
       expect(res.body.user).toMatchObject({ email: 'new@example.com', emailVerified: false, role: 'user' })
       expect((await agent.get('/api/auth/me')).body.authenticated).toBe(true)
@@ -159,8 +171,9 @@ describe.skipIf(!available)('auth', () => {
 
     it('creates an account with an invite, verified and signed in', async () => {
       setGoogleVerifier(fake('g@example.com'))
-      expect((await request(ctx.app).post('/api/auth/google').send({ credential: 'tokentokentoken' })).body.code).toBe('invite_required')
-      const res = await request(ctx.app).post('/api/auth/google').send({ credential: 'tokentokentoken', inviteCode: await newInvite() })
+      expect((await request(ctx.app).post('/api/auth/google').send({ credential: 'tokentokentoken', acceptTerms: true })).body.code).toBe('invite_required')
+      expect((await request(ctx.app).post('/api/auth/google').send({ credential: 'tokentokentoken', inviteCode: await newInvite() })).body.code).toBe('terms_required')
+      const res = await request(ctx.app).post('/api/auth/google').send({ credential: 'tokentokentoken', inviteCode: await newInvite(), acceptTerms: true })
       expect(res.status).toBe(200)
       expect(res.body.user).toMatchObject({ email: 'g@example.com', emailVerified: true })
     })
@@ -189,7 +202,7 @@ describe.skipIf(!available)('auth', () => {
 
     it('keeps push and test notifications for verified users', async () => {
       const agent = request.agent(ctx.app)
-      await agent.post('/api/auth/signup').send({ email: 'unverified@example.com', password: PASSWORD, inviteCode: await newInvite() })
+      await agent.post('/api/auth/signup').send({ acceptTerms: true, email: 'unverified@example.com', password: PASSWORD, inviteCode: await newInvite() })
       const res = await agent.post('/api/push/subscribe').send({ endpoint: 'https://push.example/1', keys: { p256dh: 'a', auth: 'b' } })
       expect(res.status).toBe(403)
       expect(res.body.code).toBe('email_unverified')

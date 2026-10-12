@@ -20,6 +20,8 @@ import AppearanceApplier from './components/AppearanceApplier'
 import ModuleRoute from './components/ModuleRoute'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import { PrivacyPage, TermsPage } from './pages/LegalPages'
+import AdminPage from './pages/AdminPage'
 
 const queryClient = new QueryClient()
 
@@ -33,6 +35,8 @@ function App() {
               {/* Reachable while signed out: links from emails */}
               <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
               <Route
                 path="/*"
                 element={
@@ -47,6 +51,7 @@ function App() {
                       <Route path="/goals" element={<ModuleRoute module="goals"><GoalsView /></ModuleRoute>} />
                       <Route path="/drop" element={<ModuleRoute module="drop"><DropView /></ModuleRoute>} />
                       <Route path="/settings" element={<SettingsView />} />
+                      <Route path="/admin" element={<AdminPage />} />
                     </Routes>
                     <AppearanceApplier />
                     <DialogHost />

@@ -51,7 +51,7 @@ export async function newInvite(uses = 100) {
 /** Signs up (with an invite) and returns a cookie-carrying agent plus the user's id. */
 export async function signedUpAgent(ctx: Awaited<ReturnType<typeof startTestApp>>, email: string, opts: { verify?: boolean } = {}) {
   const agent = request.agent(ctx.app)
-  const res = await agent.post('/api/auth/signup').send({ email, password: 'correct horse battery', inviteCode: await newInvite(), timezone: 'UTC' })
+  const res = await agent.post('/api/auth/signup').send({ email, password: 'correct horse battery', inviteCode: await newInvite(), acceptTerms: true, timezone: 'UTC' })
   if (res.status !== 200) throw new Error(`signup failed: ${res.status} ${JSON.stringify(res.body)}`)
   if (opts.verify !== false) {
     const mail = [...ctx.outbox].reverse().find(m => m.to === email && /verify-email/.test(m.text))!
