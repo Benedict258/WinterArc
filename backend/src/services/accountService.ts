@@ -10,6 +10,8 @@ import { DropItem } from '../models/DropItem'
 import { NotificationLog } from '../models/NotificationLog'
 import { ApiToken } from '../models/ApiToken'
 import { EmailToken } from '../models/EmailToken'
+import { AiUsage } from '../models/AiUsage'
+import { AiProposal } from '../models/AiProposal'
 import { deleteS3Object } from './s3'
 
 /** Everything we hold about a person, as one JSON document (their copy of their data). */
@@ -49,6 +51,8 @@ export async function deleteAccount(userId: string) {
     ApiToken.deleteMany({ userId }),
     EmailToken.deleteMany({ userId }),
     Settings.deleteMany({ userId }),
+    AiUsage.deleteMany({ userId }),
+    AiProposal.deleteMany({ userId }),
   ])
   await User.deleteOne({ _id: userId })
   return { records: results.reduce((n, r) => n + (r.deletedCount ?? 0), 0), files: files.length }

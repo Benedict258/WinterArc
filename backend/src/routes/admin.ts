@@ -9,6 +9,8 @@ import { DropItem } from '../models/DropItem'
 import { InviteCode } from '../models/InviteCode'
 import { ApiToken } from '../models/ApiToken'
 import { AuditLog } from '../models/AuditLog'
+import { AiUsage } from '../models/AiUsage'
+import { grantBonus } from '../services/aiService'
 import { deleteAccount } from '../services/accountService'
 import { inviteCodeString } from '../utils/tokens'
 
@@ -55,17 +57,21 @@ adminRouter.get('/users', async (req, res) => {
   ])
   const ids = users.map(u => u._id)
   const crossUser = { crossUser: true }
-  const [tasks, threads, drop] = await Promise.all([
+  const month = new Date().toISOString().slice(0, 7)
+  const [tasks, threads, drop, ai] = await Promise.all([
     Task.aggregate([{ $match: { userId: { $in: ids } } }, { $group: { _id: '$userId', n: { $sum: 1 } } }]).option(crossUser),
     Thread.aggregate([{ $match: { userId: { $in: ids } } }, { $group: { _id: '$userId', n: { $sum: 1 } } }]).option(crossUser),
     DropItem.aggregate([{ $match: { userId: { $in: ids }, type: 'file' } }, { $group: { _id: '$userId', bytes: { $sum: '$fileSize' } } }]).option(crossUser),
+    AiUsage.find({ userId: { $in: ids }, month }).setOptions(crossUser),
   ])
+  const aiBy = new Map(ai.map(a => [String(a.userId), a]))
   const by = (rows: any[], key: string) => new Map(rows.map(r => [String(r._id), r[key] as number]))
   const t = by(tasks, 'n'), th = by(threads, 'n'), d = by(drop, 'bytes')
   res.json({
     total, page, pages: Math.max(1, Math.ceil(total / limit)),
     users: users.map(u => ({
       id: String(u._id), email: u.email, name: u.name, role: u.role, status: u.status, emailVerified: !!u.emailVerifiedAt,
+      aiTokens: (aiBy.get(String(u._id))?.inputTokens ?? 0) + (aiBy.get(String(u._id))?.outputTokens ?? 0), aiMoreRequested: !!aiBy.get(String(u._id))?.moreRequestedAt,
       createdAt: u.createdAt, lastSeenAt: u.lastSeenAt, tasks: t.get(String(u._id)) ?? 0, threads: th.get(String(u._id)) ?? 0, dropBytes: d.get(String(u._id)) ?? 0,
     })),
   })
@@ -104,6 +110,14 @@ adminRouter.delete('/users/:id', async (req, res) => {
     console.error('Admin deletion failed:', error instanceof Error ? error.message : error)
     res.status(500).json({ error: 'Deletion failed; try again.' })
   }
+})
+
+const bonusSchema = z.object({ tokens: z.number().int().min(1000).max(5_000_000) })
+adminRouter.post('/users/:id/ai-bonus', validateRequest(bonusSchema), async (req, res) => {
+  if (!objectId.test(req.params.id) || !(await User.exists({ _id: req.params.id }))) return res.status(404).json({ error: 'User not found' })
+  await grantBonus(req.params.id, req.body.tokens)
+  await audit(uid(req), 'ai.bonus', req.params.id, `${req.body.tokens} tokens`)
+  res.json({ ok: true })
 })
 
 adminRouter.get('/invites', async (_req, res) => {

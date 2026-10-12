@@ -22,6 +22,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import AdminPage from './pages/AdminPage'
+import AssistantPage from './pages/AssistantPage'
 
 const queryClient = new QueryClient()
 
@@ -51,6 +52,7 @@ function App() {
                       <Route path="/goals" element={<ModuleRoute module="goals"><GoalsView /></ModuleRoute>} />
                       <Route path="/drop" element={<ModuleRoute module="drop"><DropView /></ModuleRoute>} />
                       <Route path="/settings" element={<SettingsView />} />
+                      <Route path="/assistant" element={<ModuleRoute module="ai"><AssistantPage /></ModuleRoute>} />
                       <Route path="/admin" element={<AdminPage />} />
                     </Routes>
                     <AppearanceApplier />

@@ -78,3 +78,9 @@ Files are stored under each user's own folder.
 - `npm test` — unit tests always run. Integration tests (accounts, cross-user isolation, planner rules) need a MongoDB-compatible
   server and are skipped without one: `TEST_MONGO_URI=mongodb://127.0.0.1:27017 npm test`.
 - GitHub Actions runs everything against a real MongoDB on every push to `WinterArcBeta`.
+
+## 7. AI assistant (optional)
+1. console.anthropic.com → **API keys** → create one → add it in Render as `ANTHROPIC_API_KEY`. Set a spend limit there too.
+2. Each person gets 300,000 tokens a month and 100,000 a day (`AI_MONTHLY_TOKENS`, `AI_DAILY_TOKENS`). Roughly 100 chats a month. They can ask for more; you grant it with **+AI** on the Admin page.
+3. The default model is `claude-opus-5-5`. To spend less, set `AI_MODEL` to `claude-sonnet-5-5` (about half the price) or `claude-haiku-5-5` (about a twentieth).
+4. People need a confirmed email to use it. The assistant only suggests; every change needs the person's approval.

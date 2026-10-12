@@ -78,6 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const forget = useCallback(async () => {
     writeUser(null)
     clearToken()
+    try { Object.keys(localStorage).filter(k => k.startsWith('winterarc.ai.')).forEach(k => localStorage.removeItem(k)) } catch { /* storage unavailable */ }
     await Promise.all([clearCache(), clearQueue().catch(() => {})])
     queryClient.clear()
     setUser(null)

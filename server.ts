@@ -10,6 +10,7 @@ import { Thread } from './backend/src/models/Thread.ts'
 import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
 import { PushSubscription } from './backend/src/models/PushSubscription.ts'
 import { pushConfigured, vapidPublicKey, sendToUser, runNotificationTick, startNotificationScheduler, markNotificationsDirty } from './backend/src/services/notificationService.ts'
+import { updateSettings } from './backend/src/services/settingsService.ts'
 import { validUnsubscribe } from './backend/src/services/emailService.ts'
 import {
   calendarConfigured,
@@ -43,6 +44,7 @@ import { authenticate, requireAuth, requireVerified, requireAdmin, uid } from '.
 import { authRouter } from './backend/src/routes/auth.ts'
 import { accountRouter, handleExport } from './backend/src/routes/account.ts'
 import { adminRouter } from './backend/src/routes/admin.ts'
+import { aiRouter } from './backend/src/routes/ai.ts'
 import {
   threadSchema,
   threadUpdateSchema,
@@ -596,19 +598,7 @@ export function createApp() {
 
   app.put('/api/settings', validateRequest(settingsUpdateSchema), async (req, res) => {
     try {
-      let settings = await Settings.findOne({ userId: uid(req) })
-      if (!settings) settings = new Settings({ userId: uid(req) })
-      const { planner, notifications, gridBalancing, appearance, modules, ...rest } = req.body
-      Object.assign(settings, rest)
-      // Nested groups merge field by field so a partial update keeps the rest
-      for (const [group, value] of Object.entries({ planner, notifications, gridBalancing, appearance, modules })) {
-        if (!value) continue
-        for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-          settings.set(`${group}.${key}`, v)
-        }
-      }
-      await settings.save()
-      await markNotificationsDirty(uid(req)) // timezone or reminder times may have changed
+      const settings = await updateSettings(uid(req), req.body)
       res.json(settings)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -674,6 +664,7 @@ export function createApp() {
   app.get('/api/export', handleExport) // older clients
   app.use('/api/account', accountRouter)
   app.use('/api/admin', requireAdmin, adminRouter)
+  app.use('/api/ai', requireVerified, aiRouter)
 
   // ============================================
   // DROP ENDPOINTS

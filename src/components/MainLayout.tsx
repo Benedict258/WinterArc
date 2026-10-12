@@ -18,6 +18,7 @@ import {
   PanelLeftOpen,
   Upload,
   ShieldCheck,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { label: 'Week', path: '/week', icon: CalendarDays },
   { label: 'Threads', path: '/threads', icon: GitBranch },
   { label: 'Backlog', path: '/backlog', icon: Inbox },
+  { label: 'Assistant', path: '/assistant', icon: Sparkles, module: 'ai' },
   { label: 'Wishlist', path: '/wishlist', icon: Heart, module: 'wishlist' },
   { label: 'Goals', path: '/goals', icon: Target, module: 'goals' },
   { label: 'Drop', path: '/drop', icon: Upload, module: 'drop' },

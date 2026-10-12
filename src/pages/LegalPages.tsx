@@ -46,6 +46,7 @@ export function PrivacyPage() {
         <li>Backblaze B2: storage for files you add to Drop.</li>
         <li>Resend: sending email.</li>
         <li>Google: sign-in, and calendar sync only if you connect it.</li>
+        <li>Anthropic: only if you use the AI assistant. Then your messages and a summary of your plan (thread names, task titles, goals and settings) are sent to Anthropic to produce the answer. Nothing is sent unless you use the assistant, and it can only suggest changes; you approve each one.</li>
       </ul>
       <p>Your data may therefore be processed outside your country. These providers act on our instructions.</p>
       <h2>How long we keep it</h2>

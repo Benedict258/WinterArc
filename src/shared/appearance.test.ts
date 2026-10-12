@@ -8,7 +8,7 @@ describe('appearance and modules', () => {
     expect(normalizeAppearance({ mode: 'system', accent: 'rose', density: 'compact' })).toEqual({ mode: 'system', accent: 'rose', density: 'compact' })
   })
   it('modules are on unless explicitly off', () => {
-    expect(normalizeModules(undefined)).toEqual({ wishlist: true, goals: true, drop: true, events: true })
+    expect(normalizeModules(undefined)).toEqual({ wishlist: true, goals: true, drop: true, events: true, ai: true })
     expect(normalizeModules({ drop: false })).toMatchObject({ drop: false, wishlist: true })
   })
   it('accent ids are unique and resolvable', () => {

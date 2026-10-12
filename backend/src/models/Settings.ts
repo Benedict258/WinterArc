@@ -54,6 +54,7 @@ const settingsSchema = new mongoose.Schema(
       goals: { type: Boolean, default: true },
       drop: { type: Boolean, default: true },
       events: { type: Boolean, default: true },
+      ai: { type: Boolean, default: true },
     },
     // When the notification scheduler should next look at this user (see notificationService).
     nextCheckAt: { type: Date, default: () => new Date(0), index: true },

@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext'
 type AdminUser = {
   id: string; email: string; name: string; role: string; status: 'active' | 'suspended'; emailVerified: boolean
   createdAt: string; lastSeenAt: string | null; tasks: number; threads: number; dropBytes: number
+  aiTokens: number; aiMoreRequested: boolean
 }
 type Invite = { id: string; code: string; note: string; maxUses: number; remaining: number; expiresAt: string | null; revokedAt: string | null }
 
@@ -62,6 +63,12 @@ function Users() {
     onError: (e: Error) => toast({ title: 'Action failed', description: e.message, variant: 'destructive' }),
   })
 
+  const grant = useMutation({
+    mutationFn: (id: string) => api(`/api/admin/users/${id}/ai-bonus`, { method: 'POST', body: JSON.stringify({ tokens: 200_000 }) }),
+    onSuccess: () => { refresh(); toast({ title: '200k AI tokens added for this month' }) },
+    onError: (e: Error) => toast({ title: 'Action failed', description: e.message, variant: 'destructive' }),
+  })
+
   const remove = async (u: AdminUser) => {
     if (await confirmDialog({ title: 'Delete this account?', description: `${u.email} and all of their data and files will be erased. This can’t be undone.`, confirmLabel: 'Delete account', destructive: true } as any)) {
       act.mutate({ id: u.id, action: 'delete' })
@@ -89,10 +96,11 @@ function Users() {
                   <p className="text-xs text-muted-foreground">
                     Joined {when(u.createdAt)} · seen {when(u.lastSeenAt)} · {u.emailVerified ? 'email confirmed' : 'email unconfirmed'}
                   </p>
-                  <p className="text-xs text-muted-foreground">{u.threads} threads · {u.tasks} tasks · Drop {mb(u.dropBytes)}</p>
+                  <p className="text-xs text-muted-foreground">{u.threads} threads · {u.tasks} tasks · Drop {mb(u.dropBytes)} · AI {Math.round(u.aiTokens / 1000)}k tokens{u.aiMoreRequested && <span className="text-primary"> · asked for more</span>}</p>
                 </div>
                 {u.role !== 'admin' && (
                   <div className="flex gap-2 shrink-0">
+                    <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => grant.mutate(u.id)}>+AI</Button>
                     <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => act.mutate({ id: u.id, action: u.status === 'active' ? 'suspend' : 'unsuspend' })}>
                       {u.status === 'active' ? 'Suspend' : 'Restore'}
                     </Button>
