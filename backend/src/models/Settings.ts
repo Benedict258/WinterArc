@@ -16,6 +16,19 @@ const settingsSchema = new mongoose.Schema(
       type: Number,
       default: 3,
     },
+    notifications: {
+      dailyPlan: {
+        enabled: { type: Boolean, default: true },
+        time: { type: String, default: '07:30' },
+      },
+      dueTasks: {
+        enabled: { type: Boolean, default: true },
+      },
+      eventReminders: {
+        enabled: { type: Boolean, default: true },
+        minutesBefore: { type: Number, default: 15 },
+      },
+    },
     gridBalancing: {
       maxDailyIntensity: {
         type: Number,

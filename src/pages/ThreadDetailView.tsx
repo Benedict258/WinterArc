@@ -1,3 +1,4 @@
+import EventFields, { emptyEvent, eventFromThread, eventValid, describeEvent } from '@/components/EventFields'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import MainLayout from '@/components/MainLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { safeHref } from '@/lib/utils'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -39,7 +41,7 @@ export default function ThreadDetailView() {
   const [notesDraft, setNotesDraft] = useState('')
   const [editingMeta, setEditingMeta] = useState(false)
   const [expandedSections, setExpandedSections] = useState({ queued:true, notes:true, resources:true })
-  const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium', taskMode: 'discrete' as 'discrete' | 'continuous' })
+  const [metaDraft, setMetaDraft] = useState({ name: '', category: '', frequency: '', fixedDay: 0, status: '', priority: 'medium', intensity: 'medium', taskMode: 'discrete' as 'discrete' | 'continuous' | 'event', ...emptyEvent })
   const [showAddResource, setShowAddResource] = useState(false)
   const [resourceDraft, setResourceDraft] = useState({ title: '', url: '', description: '', kind: 'link' as 'link' | 'resource' })
   const [showAddTask, setShowAddTask] = useState(false)
@@ -57,6 +59,7 @@ export default function ThreadDetailView() {
         priority: thread.priority,
         intensity: thread.intensity,
         taskMode: thread.taskMode || 'continuous',
+        ...eventFromThread(thread),
       })
     }
   }, [thread])
@@ -96,12 +99,15 @@ export default function ThreadDetailView() {
       updates: {
         name: metaDraft.name,
         category: metaDraft.category,
-        frequency: metaDraft.frequency,
-        fixedDay: metaDraft.frequency === 'fixed-day' ? metaDraft.fixedDay : null,
+        frequency: metaDraft.taskMode === 'event' ? 'weekly' : metaDraft.frequency,
+        fixedDay: metaDraft.taskMode !== 'event' && metaDraft.frequency === 'fixed-day' ? metaDraft.fixedDay : null,
         status: metaDraft.status,
         priority: metaDraft.priority as 'low' | 'medium' | 'high',
         intensity: metaDraft.intensity as 'light' | 'medium' | 'heavy',
         taskMode: metaDraft.taskMode,
+        ...(metaDraft.taskMode === 'event'
+          ? { eventStart: metaDraft.eventStart, eventEnd: metaDraft.eventEnd, eventDays: metaDraft.eventDays }
+          : { eventStart: null, eventEnd: null, eventDays: [] }),
       },
     }, {
       onSuccess: () => setEditingMeta(false),
@@ -136,14 +142,20 @@ export default function ThreadDetailView() {
               {thread.name}
             </h1>
             <div className="flex gap-1.5 flex-wrap mt-2">
-              <Badge className={`text-[10px] ${frequencyColors[thread.frequency]}`}>{thread.frequency}</Badge>
-              <Badge
-                variant="outline"
-                className="text-[10px]"
-                title={thread.taskMode === 'discrete' ? 'Only scheduled when it has a queued task' : 'Scheduled on its days even with no tasks (uses the thread name)'}
-              >
-                {thread.taskMode === 'discrete' ? 'only with tasks' : 'always on'}
-              </Badge>
+              {thread.taskMode === 'event' ? (
+                <Badge variant="outline" className="text-[10px]">event · {describeEvent(thread)}</Badge>
+              ) : (
+                <>
+                  <Badge className={`text-[10px] ${frequencyColors[thread.frequency]}`}>{thread.frequency}</Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px]"
+                    title={thread.taskMode === 'discrete' ? 'Only scheduled when it has a queued task' : 'Scheduled on its days even with no tasks (uses the thread name)'}
+                  >
+                    {thread.taskMode === 'discrete' ? 'only with tasks' : 'always on'}
+                  </Badge>
+                </>
+              )}
               <Badge variant={thread.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{thread.status}</Badge>
               <Badge variant="outline" className="text-[10px]">{thread.category}</Badge>
               <Badge variant="outline" className={`text-[10px] ${
@@ -261,9 +273,9 @@ export default function ThreadDetailView() {
                   </p>
                 )}
                 {sorted.map(t => (
-                  <div key={t._id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/40">
-                    <span className="flex-1 truncate text-sm">{t.title}</span>
-                    <span className="text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
+                  <div key={t._id} className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2 rounded-lg bg-secondary/40">
+                    <span className="basis-full sm:basis-0 sm:flex-1 min-w-0 break-words text-sm">{t.title}</span>
+                    <span className="mr-auto sm:mr-0 text-[10px] text-muted-foreground">{t.priority}/{t.intensity}</span>
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
                       const next = t.priority==='low'?'medium':t.priority==='medium'?'high':t.priority
                       updateTask({ id: t._id, updates: { priority: next } })
@@ -272,11 +284,11 @@ export default function ThreadDetailView() {
                       const next = t.priority==='high'?'medium':t.priority==='medium'?'low':t.priority
                       updateTask({ id: t._id, updates: { priority: next } })
                     }} title="Move down">↓</Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                      const newTitle = window.prompt('Edit title', t.title)
-                      if (newTitle && newTitle.trim()) updateTask({ id: t._id, updates: { title: newTitle.trim() } })
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={async () => {
+                      const newTitle = await promptDialog({ title: 'Edit task', defaultValue: t.title })
+                      if (newTitle) updateTask({ id: t._id, updates: { title: newTitle } })
                     }}><Edit2 size={12} /></Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => { if (window.confirm('Delete task?')) deleteTask(t._id) }}><Trash2 size={12} /></Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={async () => { if (await confirmDialog({ title: 'Delete task?', description: t.title, confirmLabel: 'Delete', destructive: true })) deleteTask(t._id) }}><Trash2 size={12} /></Button>
                   </div>
                 ))}
               </CardContent>
@@ -408,6 +420,7 @@ export default function ThreadDetailView() {
                     ))}
                   </select>
                 </div>
+                {metaDraft.taskMode !== 'event' && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Frequency</label>
                   <select
@@ -421,7 +434,8 @@ export default function ThreadDetailView() {
                     <option value="fixed-day">Fixed day</option>
                   </select>
                 </div>
-                {metaDraft.frequency === 'fixed-day' && (
+                )}
+                {metaDraft.taskMode !== 'event' && metaDraft.frequency === 'fixed-day' && (
                   <div>
                     <label className="block text-sm font-medium mb-1">Fixed Day</label>
                     <select
@@ -482,12 +496,19 @@ export default function ThreadDetailView() {
                       <input type="radio" name="taskMode" value="continuous" checked={metaDraft.taskMode === 'continuous'} onChange={() => setMetaDraft(d => ({ ...d, taskMode: 'continuous' }))} />
                       Continuous
                     </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="radio" name="taskMode" value="event" checked={metaDraft.taskMode === 'event'} onChange={() => setMetaDraft(d => ({ ...d, taskMode: 'event' }))} />
+                      Event / Session
+                    </label>
                   </div>
                 </div>
+                {metaDraft.taskMode === 'event' && (
+                  <EventFields value={metaDraft} onChange={v => setMetaDraft(d => ({ ...d, ...v }))} />
+                )}
               </div>
               <div className="flex justify-end gap-2 mt-5">
                 <Button type="button" variant="outline" size="sm" onClick={() => setEditingMeta(false)}>Cancel</Button>
-                <Button size="sm" onClick={handleSaveMeta} disabled={isUpdating} className="gap-1">
+                <Button size="sm" onClick={handleSaveMeta} disabled={isUpdating || (metaDraft.taskMode === 'event' && !eventValid(metaDraft))} className="gap-1">
                   <Save size={14} /> Save
                 </Button>
               </div>

@@ -1,15 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">WinterArc</string>
-    <string name="launch_url">https://winterarc.benedictisaac.dev/</string>
-    <string name="file_provider_authority">dev.benedictisaac.winterarc.fileprovider</string>
-    <string name="asset_statements" translatable="false">
-        [{
-            \"relation\": [\"delegate_permission/common.handle_all_urls\"],
-            \"target\": {
-                \"namespace\": \"web\",
-                \"site\": \"https://winterarc.benedictisaac.dev\"
-            }
-        }]
-    </string>
+    <string name="title_activity_main">WinterArc</string>
+    <string name="package_name">dev.benedictisaac.winterarc</string>
+    <string name="custom_url_scheme">dev.benedictisaac.winterarc</string>
 </resources>

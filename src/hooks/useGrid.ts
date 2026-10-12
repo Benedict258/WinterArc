@@ -14,7 +14,7 @@ export type GridTask = {
 };
 
 export type ForecastTask = {
-  kind: 'due' | 'queued' | 'placeholder';
+  kind: 'due' | 'queued' | 'placeholder' | 'event';
   threadId: string | null;
   taskId: string | null;
   title: string;
@@ -22,6 +22,8 @@ export type ForecastTask = {
   priority: 'low' | 'medium' | 'high';
   intensity: 'light' | 'medium' | 'heavy';
   dueKey: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
   /** YYYY-MM-DD */
   date: string;
 };

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { toDayKey } from '@/lib/utils'
+import { toDayKey, blockForTime } from '@/lib/utils'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCreateTask } from '@/hooks/useTasks'
@@ -19,6 +19,9 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const [threadId, setThreadId] = useState<string>('')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
   const [intensity, setIntensity] = useState<'light' | 'medium' | 'heavy'>('medium')
+  const [isEvent, setIsEvent] = useState(false)
+  const [startTime, setStartTime] = useState('18:00')
+  const [endTime, setEndTime] = useState('19:00')
 
   const { data: threads = [] } = useThreads()
   const { mutate: createTask, isPending } = useCreateTask()
@@ -28,24 +31,27 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
+    if (isEvent && endTime <= startTime) return
 
     createTask(
       {
         title: title.trim(),
         date: date || todayString,
         dueDate: dueDate || null,
-        timeBlock: timeBlock,
+        timeBlock: isEvent ? blockForTime(startTime) : timeBlock,
         threadId: threadId || null,
         status: 'pending',
         source: 'manual',
         priority,
-        intensity,
+        intensity: isEvent ? 'light' : intensity,
+        ...(isEvent ? { isEvent: true, startTime, endTime } : {}),
       } as any,
       {
         onSuccess: () => {
           setTitle('')
           setPriority('medium')
           setIntensity('medium')
+          setIsEvent(false)
           onClose()
         },
       }
@@ -106,7 +112,23 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
               />
             </div>
           </div>
-          <div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} className="accent-primary" />
+            This is an event / session (fixed time)
+          </label>
+          {isEvent && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Starts</label>
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-1.5 border rounded-md text-sm bg-background" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Ends</label>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-3 py-1.5 border rounded-md text-sm bg-background" />
+              </div>
+            </div>
+          )}
+          <div className={isEvent ? 'hidden' : ''}>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Time Block</label>
             <select
               value={timeBlock}
@@ -169,7 +191,7 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" size="sm" disabled={!title.trim() || isPending}>
+            <Button type="submit" size="sm" disabled={!title.trim() || isPending || (isEvent && endTime <= startTime)}>
               {isPending ? 'Adding...' : 'Create Task'}
             </Button>
           </div>

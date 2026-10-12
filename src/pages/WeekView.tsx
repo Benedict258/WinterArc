@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight, Plus, ChevronDown, Calendar as CalIcon, Maxi
 import QuickAddModal from '@/components/QuickAddModal'
 import TaskRow, { type TaskRowData } from '@/components/TaskRow'
 import { cn, toDayKey, apiDayKey } from '@/lib/utils'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
 const DAY_LABELS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -77,9 +78,15 @@ export default function WeekView() {
         priority: task.priority,
         intensity: task.intensity,
         dueDate: task.dueDate || null,
+        isEvent: task.isEvent,
+        startTime: task.startTime,
+        endTime: task.endTime,
       })
     }
   })
+  for (const day of Object.values(tasksByDayAndBlock)) {
+    for (const list of Object.values(day)) list.sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99'))
+  }
 
   const forecastByDayAndBlock: Record<string, Record<string, ForecastTask[]>> = {}
   for (const ds of dayStrings) {
@@ -348,8 +355,9 @@ export default function WeekView() {
                                     <Sparkles size={14} className="shrink-0 opacity-60" />
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm break-words">{f.title}</p>
-                                      {((f.threadId && f.title !== threadMap.get(f.threadId)) || f.kind === 'due') && (
+                                      {((f.threadId && f.title !== threadMap.get(f.threadId)) || f.kind === 'due' || f.startTime) && (
                                         <div className="mt-0.5 flex items-center gap-2 min-w-0 text-[11px]">
+                                          {f.startTime && <span className="font-medium shrink-0">{f.startTime}{f.endTime ? `–${f.endTime}` : ''}</span>}
                                           {f.kind === 'due' && <span className="font-medium shrink-0">due</span>}
                                           {f.threadId && f.title !== threadMap.get(f.threadId) && (
                                             <span className="min-w-0 truncate" title={threadMap.get(f.threadId) || undefined}>
@@ -366,10 +374,10 @@ export default function WeekView() {
                                     key={task.id}
                                     task={task}
                                     onToggle={handleToggleTask}
-                                    onEdit={(t) => {
-                                      const newTitle = window.prompt('Edit task title', t.title)
-                                      if (newTitle && newTitle.trim() !== t.title) {
-                                        updateTask({ id: t.id, updates: { title: newTitle.trim() } })
+                                    onEdit={async (t) => {
+                                      const newTitle = await promptDialog({ title: 'Edit task', defaultValue: t.title })
+                                      if (newTitle && newTitle !== t.title) {
+                                        updateTask({ id: t.id, updates: { title: newTitle } })
                                       }
                                     }}
                                     onDelete={(t) => deleteTask(t.id)}

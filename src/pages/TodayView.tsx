@@ -10,6 +10,7 @@ import { useCalendarEvents } from '@/hooks/useCalendar'
 import { useState, useRef } from 'react'
 import { toDayKey, apiDayKey, cn } from '@/lib/utils'
 import { useGridSettings, useRebalanceWeek } from '@/hooks/useGrid'
+import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 export default function TodayView() {
   const today = new Date()
@@ -31,7 +32,7 @@ export default function TodayView() {
   const { mutate: rebalanceWeek, isPending: isRebalancing } = useRebalanceWeek()
   const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
   const dayLoad = tasks
-    .filter((t: any) => t.status !== 'skipped')
+    .filter((t: any) => t.status !== 'skipped' && !t.isEvent)
     .reduce((sum: number, t: any) => sum + (INTENSITY_WEIGHT[t.intensity] ?? 2), 0)
   const { data: calendarEvents = [] } = useCalendarEvents(today)
 
@@ -83,6 +84,7 @@ export default function TodayView() {
     ...block,
     tasks: tasks
       .filter((task: any) => (task.timeBlock || 'unscheduled') === block.id)
+      .sort((a: any, b: any) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99'))
       .map((task: any) => ({
         id: task._id,
         title: task.title,
@@ -92,6 +94,9 @@ export default function TodayView() {
         priority: task.priority,
         intensity: task.intensity,
         dueDate: task.dueDate || null,
+        isEvent: task.isEvent,
+        startTime: task.startTime,
+        endTime: task.endTime,
       })),
   }))
 
@@ -229,10 +234,10 @@ export default function TodayView() {
                             },
                           })
                         }}
-                        onEdit={(t) => {
-                          const newTitle = window.prompt('Edit task title', t.title)
-                          if (newTitle && newTitle.trim() !== t.title) {
-                            updateTask({ id: t.id, updates: { title: newTitle.trim() } })
+                        onEdit={async (t) => {
+                          const newTitle = await promptDialog({ title: 'Edit task', defaultValue: t.title })
+                          if (newTitle && newTitle !== t.title) {
+                            updateTask({ id: t.id, updates: { title: newTitle } })
                           }
                         }}
                         onDelete={(t) => deleteTask(t.id)}

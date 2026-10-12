@@ -56,9 +56,13 @@ export type PlanThread = {
   name: string
   frequency: Frequency
   fixedDay?: number | null
-  taskMode: 'discrete' | 'continuous'
+  taskMode: 'discrete' | 'continuous' | 'event'
   priority: Priority
   intensity: Intensity
+  /** event threads: wall-clock 'HH:mm' in the user's timezone, and the weekdays (0 = Monday) it happens on */
+  eventStart?: string | null
+  eventEnd?: string | null
+  eventDays?: number[]
 }
 
 export type PlanTask = {
@@ -83,7 +87,7 @@ export type PlanState = {
 }
 
 export type PlanAction = {
-  kind: 'due' | 'queued' | 'placeholder'
+  kind: 'due' | 'queued' | 'placeholder' | 'event'
   threadId: string | null
   taskId: string | null
   title: string
@@ -91,6 +95,9 @@ export type PlanAction = {
   priority: Priority
   intensity: Intensity
   dueKey: string | null
+  /** events only: 'HH:mm' in the user's timezone */
+  startTime?: string | null
+  endTime?: string | null
 }
 
 export type PlanOptions = {
@@ -180,6 +187,15 @@ const BLOCK_PREFERENCE: Record<string, Record<TimeBlock, number>> = {
   light: { morning: 1, afternoon: 0, evening: 1 },
 }
 
+/** Time block an event falls in, by its start time ('HH:mm'). */
+export function blockForTime(time: string | null | undefined): TimeBlock {
+  const hour = Number((time ?? '').split(':')[0])
+  if (!Number.isFinite(hour)) return 'morning'
+  if (hour < 12) return 'morning'
+  if (hour < 17) return 'afternoon'
+  return 'evening'
+}
+
 /** Block for a task of this intensity, given the load already in each block. */
 export function pickBlock(loads: Record<TimeBlock, number>, intensity: string = 'medium'): TimeBlock {
   const pref = BLOCK_PREFERENCE[intensity] ?? BLOCK_PREFERENCE.medium
@@ -250,6 +266,24 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
     scheduledThreadIds.add(threadId)
   }
 
+  // 0. Events — fixed by the clock, so they ignore pacing, the cap and block balancing
+  for (const thread of threads) {
+    if (thread.taskMode !== 'event' || !thread.eventDays?.includes(dayIdx)) continue
+    actions.push({
+      kind: 'event',
+      threadId: thread.id,
+      taskId: null,
+      title: thread.name,
+      timeBlock: blockForTime(thread.eventStart),
+      priority: thread.priority,
+      intensity: thread.intensity,
+      dueKey: null,
+      startTime: thread.eventStart ?? null,
+      endTime: thread.eventEnd ?? null,
+    })
+    scheduledThreadIds.add(thread.id)
+  }
+
   // 1. Due pass
   const dueTasks = state.queue.filter(t => t.dueKey !== null && t.dueKey <= dueWindowEnd)
   const dueByThread = new Map<string, PlanTask[]>()
@@ -276,7 +310,7 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
   type Candidate = { thread: PlanThread; target: number; appearances: number }
   const candidates: Candidate[] = []
   for (const thread of threads) {
-    if (scheduledThreadIds.has(thread.id)) continue
+    if (scheduledThreadIds.has(thread.id) || thread.taskMode === 'event') continue
     const target = getTarget(thread.frequency, opts.multipleTarget)
     const appearances = state.appearances.get(thread.id) ?? 0
     if (appearances >= target) continue
@@ -368,9 +402,12 @@ function toPlanThread(t: any): PlanThread {
     name: t.name,
     frequency: t.frequency,
     fixedDay: typeof t.fixedDay === 'number' ? t.fixedDay : null,
-    taskMode: t.taskMode === 'discrete' ? 'discrete' : 'continuous',
+    taskMode: t.taskMode === 'discrete' ? 'discrete' : t.taskMode === 'event' ? 'event' : 'continuous',
     priority: t.priority || 'medium',
     intensity: t.intensity || 'medium',
+    eventStart: t.eventStart ?? null,
+    eventEnd: t.eventEnd ?? null,
+    eventDays: Array.isArray(t.eventDays) ? t.eventDays : [],
   }
 }
 
@@ -403,7 +440,7 @@ async function loadSchedulingSettings() {
 async function loadDayLoad(dayKey: string): Promise<{ blockLoads: Record<TimeBlock, number>; dayLoad: number }> {
   const start = dayKeyToDate(dayKey)
   const end = dayKeyToDate(addDaysKey(dayKey, 1))
-  const tasks = await Task.find({ date: { $gte: start, $lt: end }, status: { $ne: 'skipped' } }, { timeBlock: 1, intensity: 1 })
+  const tasks = await Task.find({ date: { $gte: start, $lt: end }, status: { $ne: 'skipped' }, isEvent: { $ne: true } }, { timeBlock: 1, intensity: 1 })
   const blockLoads: Record<TimeBlock, number> = { morning: 0, afternoon: 0, evening: 0 }
   let dayLoad = 0
   for (const t of tasks) {
@@ -442,6 +479,27 @@ export async function generateToday(dayKey: string) {
   const weekStart = dayKeyToDate(weekKey)
 
   for (const a of actions) {
+    if (a.kind === 'event') {
+      // Rebalance re-plans today; don't duplicate an event that survived (e.g. already done)
+      const exists = await Task.exists({ threadId: a.threadId, date, isEvent: true })
+      if (!exists) {
+        await Task.create({
+          title: a.title,
+          threadId: a.threadId,
+          date,
+          timeBlock: a.timeBlock,
+          startTime: a.startTime,
+          endTime: a.endTime,
+          isEvent: true,
+          source: 'auto-generated',
+          scheduledBy: 'generator',
+          status: 'pending',
+          priority: a.priority,
+          intensity: a.intensity,
+        })
+      }
+      continue
+    }
     if (a.taskId) {
       // Only commit if it's still unscheduled — guards against a concurrent edit.
       await Task.updateOne({ _id: a.taskId, date: null }, { $set: { date, timeBlock: a.timeBlock, scheduledBy: 'generator' } })

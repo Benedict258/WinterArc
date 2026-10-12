@@ -7,6 +7,22 @@ import session from 'express-session'
 import { MongoStore } from 'connect-mongo'
 
 import { Thread } from './backend/src/models/Thread.ts'
+import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
+import { ApiToken } from './backend/src/models/ApiToken.ts'
+import { PushSubscription } from './backend/src/models/PushSubscription.ts'
+import { pushConfigured, vapidPublicKey, sendToAll, runNotificationTick, startNotificationScheduler } from './backend/src/services/notificationService.ts'
+import {
+  calendarConfigured,
+  getAuthUrl,
+  verifyState,
+  handleCallback as calendarHandleCallback,
+  disconnect as calendarDisconnect,
+  syncCalendar,
+  eventsForDay,
+  deleteRemoteEvent,
+  syncIfStale,
+} from './backend/src/services/calendarService.ts'
+import { createIdempotent } from './backend/src/utils/idempotentCreate.ts'
 import { Task } from './backend/src/models/Task.ts'
 import { WishlistItem } from './backend/src/models/WishlistItem.ts'
 import { Goal } from './backend/src/models/Goal.ts'
@@ -37,6 +53,7 @@ import {
   dropItemSchema,
   dropUpdateSchema,
   loginSchema,
+  pushSubscriptionSchema,
 } from './backend/src/utils/validation.ts'
 
 declare module 'express-session' {
@@ -136,20 +153,6 @@ async function getTimezone() {
   return settings?.timezone || DEFAULT_TIMEZONE
 }
 
-/** Consecutive days (in the user's timezone) with at least one completed task. */
-function computeStreak(completedAts: (Date | null | undefined)[], timezone: string) {
-  const days = new Set(completedAts.filter(Boolean).map(d => toDayKey(new Date(d!), timezone)))
-  let streak = 0
-  const cursor = new Date()
-  // If today isn't done yet but yesterday was, the streak is still alive
-  if (!days.has(toDayKey(cursor, timezone))) cursor.setTime(cursor.getTime() - 86400000)
-  while (days.has(toDayKey(cursor, timezone))) {
-    streak++
-    cursor.setTime(cursor.getTime() - 86400000)
-  }
-  return streak
-}
-
 async function seedIfEmpty() {
   const threadCount = await Thread.countDocuments()
   if (threadCount === 0) {
@@ -222,10 +225,33 @@ function trustProxySetting() {
   return raw === 'true' ? true : raw
 }
 
-const ALLOWED_ORIGINS = (process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev')
-  .split(',')
-  .map(s => s.trim().replace(/\/$/, ''))
-  .filter(Boolean)
+// The native app's WebView origins (Capacitor). It authenticates with a bearer
+// token, not cookies, so allowing these origins doesn't expose cookie sessions.
+const NATIVE_ORIGINS = ['https://localhost', 'http://localhost', 'capacitor://localhost']
+
+const ALLOWED_ORIGINS = [
+  ...(process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev')
+    .split(',')
+    .map(s => s.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+  ...NATIVE_ORIGINS,
+]
+
+const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex')
+const NATIVE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000
+
+function bearerToken(req: express.Request) {
+  const header = req.headers.authorization
+  return header?.startsWith('Bearer ') ? header.slice(7).trim() : null
+}
+
+/** Logged in by session cookie (web) or bearer token (native app). */
+async function isAuthenticated(req: express.Request) {
+  if (req.session?.authenticated) return true
+  const token = bearerToken(req)
+  if (!token) return false
+  return !!(await ApiToken.exists({ tokenHash: hashToken(token), expiresAt: { $gt: new Date() } }))
+}
 
 function passcodeMatches(input: string) {
   const expected = crypto.createHash('sha256').update(process.env.APP_PASSCODE!).digest()
@@ -305,6 +331,12 @@ async function startServer() {
       return res.status(401).json({ error: 'Invalid passcode' })
     }
     loginFailures.delete(ip)
+    if (req.body.client === 'native') {
+      const token = crypto.randomBytes(32).toString('hex')
+      return ApiToken.create({ tokenHash: hashToken(token), label: 'native app', expiresAt: new Date(Date.now() + NATIVE_TOKEN_TTL_MS) })
+        .then(() => res.json({ ok: true, token }))
+        .catch(() => res.status(500).json({ error: 'Login failed' }))
+    }
     // New session id on login (prevents session fixation)
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ error: 'Login failed' })
@@ -313,16 +345,18 @@ async function startServer() {
     })
   })
 
-  app.post('/api/auth/logout', (req, res) => {
+  app.post('/api/auth/logout', async (req, res) => {
+    const token = bearerToken(req)
+    if (token) await ApiToken.deleteOne({ tokenHash: hashToken(token) }).catch(() => {})
     req.session.destroy(() => {
       res.clearCookie('winterarc.sid')
       res.json({ ok: true })
     })
   })
 
-  app.get('/api/auth/me', (req, res) => {
+  app.get('/api/auth/me', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
-    res.json({ authenticated: !!req.session?.authenticated })
+    res.json({ authenticated: await isAuthenticated(req).catch(() => false) })
   })
 
   // ============================================
@@ -337,10 +371,25 @@ async function startServer() {
     })
   })
 
+  // Keep-alive + scheduler tick for an external pinger (e.g. cron-job.org) on free hosting.
+  // Authenticated by a shared secret so it can run without a session.
+  app.get('/api/cron/tick', async (req, res) => {
+    const secret = process.env.CRON_SECRET
+    const given = typeof req.query.key === 'string' ? req.query.key : ''
+    const ok = !!secret && given.length === secret.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))
+    if (!ok) return res.status(401).json({ error: 'Unauthorized' })
+    try {
+      const synced = await syncIfStale().catch(err => { console.error('Calendar sync failed:', errorMessage(err)); return null })
+      res.json({ ...(await runNotificationTick()), calendar: synced ? { imported: synced.imported, pushed: synced.pushed } : null })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
   // Protect all API routes except auth/health
-  app.use('/api', (req, res, next) => {
-    if (req.path.startsWith('/auth') || req.path === '/health') return next()
-    if (req.session?.authenticated) return next()
+  app.use('/api', async (req, res, next) => {
+    if (req.path.startsWith('/auth') || req.path === '/health' || req.path === '/cron/tick' || req.path === '/calendar/callback') return next()
+    if (await isAuthenticated(req).catch(() => false)) return next()
     return res.status(401).json({ error: 'Unauthorized' })
   })
 
@@ -405,8 +454,7 @@ async function startServer() {
 
       const timezone = await getTimezone()
       const now = new Date()
-      const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1, 0, 0, 0, 0)
-      const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0, 23, 59, 59, 999)
+      const { start: quarterStart, end: quarterEnd } = quarterRange(now, timezone)
 
       const tasks = await Task.find({ threadId: id })
       const quarterTasks = tasks.filter(t => {
@@ -414,7 +462,7 @@ async function startServer() {
         const d = new Date(t.date)
         return d >= quarterStart && d <= quarterEnd
       })
-      const quarterDone = quarterTasks.filter(t => t.status === 'done').length
+      const quarter = completionStats(quarterTasks)
       const allDone = tasks.filter(t => t.status === 'done').length
 
       const streak = computeStreak(tasks.filter(t => t.status === 'done').map(t => t.completedAt), timezone)
@@ -437,7 +485,7 @@ async function startServer() {
         }))
 
       res.json({
-        tasksThisQuarter: { total: quarterTasks.length, completed: quarterDone, rate: quarterTasks.length > 0 ? Math.round((quarterDone / quarterTasks.length) * 100) : 0 },
+        tasksThisQuarter: quarter,
         tasksAllTime: { total: tasks.length, completed: allDone },
         streakDays: streak,
         lastActivity,
@@ -451,20 +499,19 @@ async function startServer() {
   app.post('/api/threads/:id/resources', validateRequest(threadResourceSchema), async (req, res) => {
     try {
       const { _id, title, url, description, kind } = req.body
+      const resource = { ...(_id ? { _id } : {}), title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' }
+      // One atomic update: a replayed add (same _id) matches nothing and is a no-op
+      const result = await Thread.updateOne(
+        { _id: req.params.id, ...(_id ? { 'resources._id': { $ne: _id } } : {}) },
+        { $push: { resources: resource } }
+      )
       const thread = await Thread.findById(req.params.id)
       if (!thread) {
         res.status(404).json({ error: 'Thread not found' })
         return
       }
-      // Replayed offline add: the first attempt may already have landed
-      const already = _id ? thread.resources.find(r => String(r._id) === _id) : null
-      if (already) {
-        res.status(200).json(already)
-        return
-      }
-      thread.resources.push({ ...(_id ? { _id } : {}), title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' } as any)
-      await thread.save()
-      res.status(201).json(thread.resources[thread.resources.length - 1])
+      const saved = _id ? thread.resources.find(r => String(r._id) === _id) : thread.resources[thread.resources.length - 1]
+      res.status(result.modifiedCount ? 201 : 200).json(saved)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
     }
@@ -539,6 +586,8 @@ async function startServer() {
   app.delete('/api/tasks/:id', async (req, res) => {
     try {
       const result = await taskService.deleteTask(req.params.id)
+      // An event we pushed to Google goes away there too (imported ones are left alone, or they'd just re-import)
+      if (result?.calendarEventId && result.source !== 'google-calendar') void deleteRemoteEvent(result.calendarEventId)
       res.json(result)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -565,6 +614,9 @@ async function startServer() {
           source: t.source,
           priority: t.priority,
           intensity: t.intensity,
+          isEvent: t.isEvent,
+          startTime: t.startTime,
+          endTime: t.endTime,
         })),
         forecast,
       })
@@ -613,10 +665,7 @@ async function startServer() {
 
   app.post('/api/wishlist', validateRequest(wishlistItemSchema), async (req, res) => {
     try {
-      // Replayed offline create: the first attempt may already have landed
-      const existing = req.body._id ? await WishlistItem.findById(req.body._id) : null
-      const item = existing ?? new WishlistItem(req.body)
-      if (!existing) await item.save()
+      const item = await createIdempotent(WishlistItem, req.body)
       res.status(201).json(item)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -656,10 +705,7 @@ async function startServer() {
 
   app.post('/api/goals', validateRequest(goalSchema), async (req, res) => {
     try {
-      // Replayed offline create: the first attempt may already have landed
-      const existing = req.body._id ? await Goal.findById(req.body._id) : null
-      const goal = existing ?? new Goal(req.body)
-      if (!existing) await goal.save()
+      const goal = await createIdempotent(Goal, req.body)
       res.status(201).json(goal)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -713,6 +759,45 @@ async function startServer() {
       res.json(settings)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
+    }
+  })
+
+  // ============================================
+  // PUSH NOTIFICATIONS
+  // ============================================
+  app.get('/api/push/config', (req, res) => {
+    res.json({ enabled: pushConfigured(), publicKey: vapidPublicKey() })
+  })
+
+  app.post('/api/push/subscribe', validateRequest(pushSubscriptionSchema), async (req, res) => {
+    try {
+      await PushSubscription.findOneAndUpdate(
+        { endpoint: req.body.endpoint },
+        { ...req.body, userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) },
+        { upsert: true, new: true }
+      )
+      res.status(201).json({ ok: true })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
+  app.post('/api/push/unsubscribe', async (req, res) => {
+    try {
+      if (typeof req.body?.endpoint === 'string') await PushSubscription.deleteOne({ endpoint: req.body.endpoint })
+      res.json({ ok: true })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
+  app.post('/api/push/test', async (req, res) => {
+    try {
+      if (!pushConfigured()) return res.status(503).json({ error: 'Push is not configured on the server (VAPID keys missing).' })
+      const result = await sendToAll({ title: 'WinterArc', body: 'Notifications are working on this device.', url: '/', tag: 'test' })
+      res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
     }
   })
 
@@ -797,6 +882,20 @@ async function startServer() {
     }
   })
 
+  // Start afresh: remove every drop item and its stored file
+  app.delete('/api/drop', async (req, res) => {
+    try {
+      const items = await DropItem.find({}, { type: 1, s3Key: 1 })
+      await Promise.all(items
+        .filter(i => i.type === 'file' && i.s3Key)
+        .map(i => deleteS3Object(i.s3Key!).catch(() => {})))
+      const result = await DropItem.deleteMany({})
+      res.json({ ok: true, deleted: result.deletedCount ?? 0 })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
   app.delete('/api/drop/:id', async (req, res) => {
     try {
       const item = await DropItem.findById(req.params.id)
@@ -829,44 +928,29 @@ async function startServer() {
   // ANALYTICS ENDPOINTS
   // ============================================
 
-  // Helper: get the "current period" date range. Default = current quarter (Q).
-  function getCurrentQuarterRange() {
-    const now = new Date()
-    const month = now.getMonth() // 0-11
-    const quarter = Math.floor(month / 3) // 0-3
-    const startMonth = quarter * 3
-    const start = new Date(now.getFullYear(), startMonth, 1, 0, 0, 0, 0)
-    const end = new Date(now.getFullYear(), startMonth + 3, 0, 23, 59, 59, 999)
-    const label = `Q${quarter + 1}-${now.getFullYear()}`
-    return { start, end, label }
-  }
-
   // Overall summary for the dashboard cards
   app.get('/api/analytics/summary', async (req, res) => {
     try {
-      const { start, end, label } = getCurrentQuarterRange()
       const timezone = await getTimezone()
+      const { start, end, label } = quarterRange(new Date(), timezone)
 
-      const tasksInPeriod = await Task.find({
-        date: { $gte: start, $lte: end },
-      })
-      const completedInPeriod = tasksInPeriod.filter(t => t.status === 'done')
-      const total = tasksInPeriod.length
-      const done = completedInPeriod.length
-      const completionRate = total > 0 ? Math.round((done / total) * 100) : 0
+      const tasksInPeriod = await Task.find({ date: { $gte: start, $lte: end } }, { status: 1 })
+      const { completed, total, rate } = completionStats(tasksInPeriod)
 
       const activeThreads = await Thread.countDocuments({ status: 'active' })
       const totalThreads = await Thread.countDocuments()
 
-      const streak = computeStreak(completedInPeriod.map(t => t.completedAt), timezone)
+      // Streak spans quarters, so it looks at every completed task
+      const doneTasks = await Task.find({ status: 'done', completedAt: { $ne: null } }, { completedAt: 1 })
+      const streak = computeStreak(doneTasks.map(t => t.completedAt), timezone)
 
       res.json({
         period: label,
         periodStart: start,
         periodEnd: end,
         streak,
-        completionRate,
-        completed: done,
+        completionRate: rate,
+        completed,
         total,
         activeThreads,
         totalThreads,
@@ -879,7 +963,7 @@ async function startServer() {
   // Per-thread performance for the current period
   app.get('/api/analytics/threads', async (req, res) => {
     try {
-      const { start, end } = getCurrentQuarterRange()
+      const { start, end } = quarterRange(new Date(), await getTimezone())
 
       const threads = await Thread.find({ status: { $ne: 'archived' } })
       const tasks = await Task.find({
@@ -920,20 +1004,72 @@ async function startServer() {
   })
 
   // ============================================
-  // CALENDAR STATUS (read-only stub; OAuth deferred)
+  // GOOGLE CALENDAR
   // ============================================
   app.get('/api/calendar/status', async (req, res) => {
     try {
       const calendarSync = await CalendarSync.findOne()
-      const isConnected = !!calendarSync && !!calendarSync.accessToken
-      res.json({ connected: isConnected, lastSyncedAt: calendarSync?.lastSyncedAt ?? null })
+      const isConnected = !!calendarSync && !!(calendarSync.accessToken || calendarSync.refreshToken)
+      res.json({ connected: isConnected, configured: calendarConfigured(), lastSyncedAt: calendarSync?.lastSyncedAt ?? null })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
   })
 
+  // Start OAuth: the app opens the returned URL in a browser
+  app.get('/api/calendar/auth', (req, res) => {
+    try {
+      res.json({ authUrl: getAuthUrl() })
+    } catch (error) {
+      res.status(503).json({ error: errorMessage(error) })
+    }
+  })
+
+  // Google redirects the browser here. Open to the internet by design: it is
+  // protected by the signed, short-lived `state` created in /api/calendar/auth.
+  app.get('/api/calendar/callback', async (req, res) => {
+    const origin = (process.env.FRONTEND_ORIGIN || '').split(',')[0].trim().replace(/\/$/, '')
+    const back = (status: string) => res.redirect(`${origin}/settings?calendar=${status}`)
+    try {
+      const { code, state } = req.query
+      if (typeof code !== 'string' || typeof state !== 'string' || !verifyState(state)) return back('error')
+      await calendarHandleCallback(code)
+      await syncCalendar().catch(err => console.error('Initial calendar sync failed:', errorMessage(err)))
+      back('connected')
+    } catch (error) {
+      console.error('Calendar callback failed:', errorMessage(error))
+      back('error')
+    }
+  })
+
+  app.delete('/api/calendar/disconnect', async (req, res) => {
+    try {
+      await calendarDisconnect()
+      res.json({ ok: true })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
+  app.post('/api/calendar/sync', async (req, res) => {
+    try {
+      res.json(await syncCalendar())
+    } catch (error) {
+      res.status(502).json({ error: errorMessage(error) })
+    }
+  })
+
   app.get('/api/calendar/events', async (req, res) => {
-    res.json({ events: [] })
+    try {
+      const date = typeof req.query.date === 'string' ? req.query.date.slice(0, 10) : ''
+      if (!DAY_KEY_RE.test(date)) return res.status(400).json({ error: 'Invalid date' })
+      if (!(await CalendarSync.exists({ accessToken: { $ne: null } }))) return res.json({ events: [] })
+      const events = await eventsForDay(date, await getTimezone())
+      res.json({ events: events.map(e => ({ id: e.id, title: e.summary ?? '(no title)', start: e.start!.dateTime, end: e.end?.dateTime ?? e.start!.dateTime })) })
+    } catch (error) {
+      console.error('Calendar events failed:', errorMessage(error))
+      res.json({ events: [] })
+    }
   })
 
   // Unknown API routes get JSON, not the SPA shell
@@ -983,6 +1119,8 @@ async function startServer() {
     .catch(err => console.error('Daily generation failed:', errorMessage(err)))
   runDaily()
   setInterval(runDaily, 10 * 60 * 1000)
+
+  startNotificationScheduler()
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Workspace full-stack app running on http://0.0.0.0:${PORT}`)

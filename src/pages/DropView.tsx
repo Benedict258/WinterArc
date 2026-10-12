@@ -1,10 +1,11 @@
 import MainLayout from '@/components/MainLayout'
 import { Button } from '@/components/ui/button'
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { Upload, Link as LinkIcon, FileText, Download, Copy, Paperclip, MoreVertical } from 'lucide-react'
+import { Trash2, Upload, Link as LinkIcon, FileText, Download, Copy, Paperclip, MoreVertical } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { format } from 'date-fns'
 import { safeHref } from '@/lib/utils'
+import { confirmDialog } from '@/components/DialogHost'
 
 type DropItem = {
   _id: string
@@ -190,6 +191,23 @@ export default function DropView() {
     }
   }
 
+  const clearAll = async () => {
+    const ok = await confirmDialog({
+      title: 'Clear Drop?',
+      description: `This permanently deletes all ${items.length} item${items.length === 1 ? '' : 's'}, including uploaded files, on every device.`,
+      confirmLabel: 'Clear everything',
+      destructive: true,
+    })
+    if (!ok) return
+    const res = await fetch('/api/drop', { method: 'DELETE' })
+    if (res.ok) {
+      setItems([])
+      setImgUrls({})
+    } else {
+      toast({ title: 'Could not clear Drop', variant: 'destructive' })
+    }
+  }
+
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     const today = new Date()
@@ -210,8 +228,17 @@ export default function DropView() {
     <MainLayout>
       <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100dvh-6.5rem)] md:h-[calc(100dvh-3rem)] max-w-3xl mx-auto flex flex-col">
         <div className="mb-3">
-          <h1 className="text-2xl font-bold">Drop</h1>
-          <p className="text-sm text-muted-foreground">Your self-chat across devices</p>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h1 className="text-2xl font-bold">Drop</h1>
+              <p className="text-sm text-muted-foreground">Your self-chat across devices</p>
+            </div>
+            {items.length > 0 && (
+              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-destructive" onClick={clearAll}>
+                <Trash2 size={14} /> Clear all
+              </Button>
+            )}
+          </div>
           {storageConfigured === false && (
             <p className="mt-2 text-xs rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-300">
               File storage isn't configured on the server, so file uploads are off. Text and links still work.

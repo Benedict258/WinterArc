@@ -1,3 +1,4 @@
+import { createIdempotent } from '../utils/idempotentCreate'
 import { Thread } from '../models/Thread'
 
 export async function getThreads() {
@@ -5,13 +6,7 @@ export async function getThreads() {
 }
 
 export async function createThread(data: any) {
-  // Replayed offline create: the first attempt may already have landed
-  if (data._id) {
-    const existing = await Thread.findById(data._id)
-    if (existing) return existing
-  }
-  const thread = new Thread(data)
-  return await thread.save()
+  return await createIdempotent(Thread, data)
 }
 
 export async function updateThread(id: string, data: any) {

@@ -12,6 +12,9 @@ export interface TaskRowData {
   priority?: 'low' | 'medium' | 'high' | string
   intensity?: 'light' | 'medium' | 'heavy' | string
   dueDate?: string | null
+  isEvent?: boolean
+  startTime?: string | null
+  endTime?: string | null
 }
 
 interface TaskRowProps {
@@ -41,7 +44,7 @@ export default function TaskRow({
     return { label: `${diffDays}d left`, color: 'text-muted-foreground', isOverdue: false }
   }, [task.dueDate])
   const isOverdue = dueCountdown?.isOverdue && !isDone
-  const hasMeta = !!dueCountdown || (!!task.threadId && task.threadName !== task.title) || (showSource && task.source === 'manual')
+  const hasMeta = !!task.startTime || !!dueCountdown || (!!task.threadId && task.threadName !== task.title) || (showSource && task.source === 'manual')
   return (
     <div
       className={cn(
@@ -75,6 +78,11 @@ export default function TaskRow({
             )}
             {task.intensity && (
               <span className="sm:hidden uppercase tracking-wider text-[9px] font-bold shrink-0">{task.intensity}</span>
+            )}
+            {task.startTime && (
+              <span className="font-medium shrink-0 px-1.5 py-px rounded bg-primary/15 text-primary">
+                {task.startTime}{task.endTime ? `–${task.endTime}` : ''}
+              </span>
             )}
             {dueCountdown && (
               <span className={cn(

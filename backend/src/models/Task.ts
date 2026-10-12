@@ -40,6 +40,10 @@ const taskSchema = new mongoose.Schema(
       enum: ['light', 'medium', 'heavy'],
       default: 'medium',
     },
+    // Events/sessions: fixed by the clock, 'HH:mm' in the user's timezone
+    isEvent: { type: Boolean, default: false },
+    startTime: { type: String, default: null },
+    endTime: { type: String, default: null },
     calendarEventId: String,
     source: {
       type: String,

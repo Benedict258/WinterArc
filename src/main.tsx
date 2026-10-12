@@ -3,6 +3,11 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import { useSyncListener } from '@/hooks/useTasks'
+import { installNativeNetworking } from '@/lib/native'
+import { startNativeReminders } from '@/lib/nativeReminders'
+
+installNativeNetworking()
+startNativeReminders()
 
 function AppWithSyncListener() {
   useSyncListener()
