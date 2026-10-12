@@ -11,6 +11,17 @@ import { quarterRange, computeStreak, completionStats } from './backend/src/serv
 import { ApiToken } from './backend/src/models/ApiToken.ts'
 import { PushSubscription } from './backend/src/models/PushSubscription.ts'
 import { pushConfigured, vapidPublicKey, sendToAll, runNotificationTick, startNotificationScheduler } from './backend/src/services/notificationService.ts'
+import {
+  calendarConfigured,
+  getAuthUrl,
+  verifyState,
+  handleCallback as calendarHandleCallback,
+  disconnect as calendarDisconnect,
+  syncCalendar,
+  eventsForDay,
+  deleteRemoteEvent,
+  syncIfStale,
+} from './backend/src/services/calendarService.ts'
 import { createIdempotent } from './backend/src/utils/idempotentCreate.ts'
 import { Task } from './backend/src/models/Task.ts'
 import { WishlistItem } from './backend/src/models/WishlistItem.ts'
@@ -368,7 +379,8 @@ async function startServer() {
     const ok = !!secret && given.length === secret.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))
     if (!ok) return res.status(401).json({ error: 'Unauthorized' })
     try {
-      res.json(await runNotificationTick())
+      const synced = await syncIfStale().catch(err => { console.error('Calendar sync failed:', errorMessage(err)); return null })
+      res.json({ ...(await runNotificationTick()), calendar: synced ? { imported: synced.imported, pushed: synced.pushed } : null })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
@@ -376,7 +388,7 @@ async function startServer() {
 
   // Protect all API routes except auth/health
   app.use('/api', async (req, res, next) => {
-    if (req.path.startsWith('/auth') || req.path === '/health' || req.path === '/cron/tick') return next()
+    if (req.path.startsWith('/auth') || req.path === '/health' || req.path === '/cron/tick' || req.path === '/calendar/callback') return next()
     if (await isAuthenticated(req).catch(() => false)) return next()
     return res.status(401).json({ error: 'Unauthorized' })
   })
@@ -574,6 +586,8 @@ async function startServer() {
   app.delete('/api/tasks/:id', async (req, res) => {
     try {
       const result = await taskService.deleteTask(req.params.id)
+      // An event we pushed to Google goes away there too (imported ones are left alone, or they'd just re-import)
+      if (result?.calendarEventId && result.source !== 'google-calendar') void deleteRemoteEvent(result.calendarEventId)
       res.json(result)
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -990,20 +1004,72 @@ async function startServer() {
   })
 
   // ============================================
-  // CALENDAR STATUS (read-only stub; OAuth deferred)
+  // GOOGLE CALENDAR
   // ============================================
   app.get('/api/calendar/status', async (req, res) => {
     try {
       const calendarSync = await CalendarSync.findOne()
-      const isConnected = !!calendarSync && !!calendarSync.accessToken
-      res.json({ connected: isConnected, lastSyncedAt: calendarSync?.lastSyncedAt ?? null })
+      const isConnected = !!calendarSync && !!(calendarSync.accessToken || calendarSync.refreshToken)
+      res.json({ connected: isConnected, configured: calendarConfigured(), lastSyncedAt: calendarSync?.lastSyncedAt ?? null })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
   })
 
+  // Start OAuth: the app opens the returned URL in a browser
+  app.get('/api/calendar/auth', (req, res) => {
+    try {
+      res.json({ authUrl: getAuthUrl() })
+    } catch (error) {
+      res.status(503).json({ error: errorMessage(error) })
+    }
+  })
+
+  // Google redirects the browser here. Open to the internet by design: it is
+  // protected by the signed, short-lived `state` created in /api/calendar/auth.
+  app.get('/api/calendar/callback', async (req, res) => {
+    const origin = (process.env.FRONTEND_ORIGIN || '').split(',')[0].trim().replace(/\/$/, '')
+    const back = (status: string) => res.redirect(`${origin}/settings?calendar=${status}`)
+    try {
+      const { code, state } = req.query
+      if (typeof code !== 'string' || typeof state !== 'string' || !verifyState(state)) return back('error')
+      await calendarHandleCallback(code)
+      await syncCalendar().catch(err => console.error('Initial calendar sync failed:', errorMessage(err)))
+      back('connected')
+    } catch (error) {
+      console.error('Calendar callback failed:', errorMessage(error))
+      back('error')
+    }
+  })
+
+  app.delete('/api/calendar/disconnect', async (req, res) => {
+    try {
+      await calendarDisconnect()
+      res.json({ ok: true })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
+  app.post('/api/calendar/sync', async (req, res) => {
+    try {
+      res.json(await syncCalendar())
+    } catch (error) {
+      res.status(502).json({ error: errorMessage(error) })
+    }
+  })
+
   app.get('/api/calendar/events', async (req, res) => {
-    res.json({ events: [] })
+    try {
+      const date = typeof req.query.date === 'string' ? req.query.date.slice(0, 10) : ''
+      if (!DAY_KEY_RE.test(date)) return res.status(400).json({ error: 'Invalid date' })
+      if (!(await CalendarSync.exists({ accessToken: { $ne: null } }))) return res.json({ events: [] })
+      const events = await eventsForDay(date, await getTimezone())
+      res.json({ events: events.map(e => ({ id: e.id, title: e.summary ?? '(no title)', start: e.start!.dateTime, end: e.end?.dateTime ?? e.start!.dateTime })) })
+    } catch (error) {
+      console.error('Calendar events failed:', errorMessage(error))
+      res.json({ events: [] })
+    }
   })
 
   // Unknown API routes get JSON, not the SPA shell

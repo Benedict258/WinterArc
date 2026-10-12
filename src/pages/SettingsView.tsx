@@ -22,6 +22,9 @@ export default function SettingsView() {
   
   const {
     calendarStatus,
+    calendarConfigured,
+    connectCalendar,
+    isConnecting,
     lastSyncedAt,
     disconnectCalendar,
     isDisconnecting,
@@ -206,13 +209,16 @@ export default function SettingsView() {
 
                   <div className="flex flex-wrap gap-3 mt-4">
                     {calendarStatus === 'disconnected' ? (
-                      // Google OAuth isn't implemented on the server yet
                       <div className="space-y-2">
-                        <Button disabled className="gap-2">
+                        <Button disabled={!calendarConfigured || isConnecting} onClick={() => connectCalendar()} className="gap-2">
                           <Cloud size={16} />
-                          Connect Google Calendar
+                          {isConnecting ? 'Opening Google…' : 'Connect Google Calendar'}
                         </Button>
-                        <p className="text-xs text-muted-foreground">Calendar sync isn't available yet.</p>
+                        {!calendarConfigured && (
+                          <p className="text-xs text-muted-foreground">
+                            The server needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first (see DEPLOYMENT.md).
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <>

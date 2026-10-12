@@ -55,6 +55,7 @@ export const useCalendar = () => {
 
   const status: CalendarStatus = statusData?.connected ? 'connected' : 'disconnected'
   const lastSyncedAt = statusData?.lastSyncedAt || null
+  const configured: boolean = statusData?.configured ?? false
   
   // Connect to Google Calendar (initiates OAuth flow or sets local connected)
   const { 
@@ -66,7 +67,7 @@ export const useCalendar = () => {
     mutationFn: async () => {
       const response = await fetch(`${API_URL}/api/calendar/auth`)
       if (!response.ok) {
-        throw new Error('Failed to get auth URL')
+        throw new Error((await response.json().catch(() => ({}))).error || 'Failed to get auth URL')
       }
       const data = await response.json()
       return data
@@ -89,10 +90,10 @@ export const useCalendar = () => {
         }
       }
     },
-    onError: () => {
+    onError: (error) => {
       toast({
         title: 'Connection Failed',
-        description: 'Failed to initiate Google Calendar connection.',
+        description: error instanceof Error ? error.message : 'Failed to initiate Google Calendar connection.',
         variant: 'destructive'
       })
     }
@@ -150,9 +151,11 @@ export const useCalendar = () => {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['calendar-status'] })
       queryClient.invalidateQueries({ queryKey: ['calendar-events'] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['week'] })
       toast({
         title: 'Sync Completed',
-        description: `Calendar sync completed${data?.lastSyncedAt ? ' just now' : ''}.`,
+        description: data ? `${data.imported} imported, ${data.pushed} sent to Google, ${data.removed} removed.` : 'Calendar sync completed.',
       })
     },
     onError: () => {
@@ -166,6 +169,7 @@ export const useCalendar = () => {
   
   return {
     calendarStatus: status,
+    calendarConfigured: configured,
     lastSyncedAt,
     isLoadingStatus: statusLoading,
     errorStatus: statusError,

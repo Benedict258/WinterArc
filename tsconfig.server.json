@@ -11,5 +11,5 @@
     "types": ["node"]
   },
   "include": ["server.ts", "backend/src"],
-  "exclude": ["**/*.test.ts", "backend/src/services/calendarService.ts"]
+  "exclude": ["**/*.test.ts"]
 }

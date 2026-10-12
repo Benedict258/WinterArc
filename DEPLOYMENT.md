@@ -191,3 +191,22 @@ Daily plan, due tasks and event reminders are sent by the API with Web Push.
    `https://winterarc-f74u.onrender.com/api/cron/tick?key=<CRON_SECRET>` **every 5 minutes**.
    It wakes the server and runs the reminder check each time (reminders are sent once).
 3. On each device: Settings → Notifications → **Enable**, then **Send test**.
+
+---
+
+## Google Calendar sync (optional)
+
+Two-way sync of events/sessions for the next 14 days.
+
+1. Google Cloud Console → create a project → **APIs & Services → Library** → enable **Google Calendar API**.
+2. **OAuth consent screen**: External, add yourself as a test user.
+3. **Credentials → Create credentials → OAuth client ID → Web application**.
+   Authorised redirect URI: `https://winterarc.benedictisaac.dev/api/calendar/callback`
+   (must match `<FRONTEND_ORIGIN>/api/calendar/callback`, or set `GOOGLE_REDIRECT_URI`).
+4. Put the client ID/secret in Render as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+5. App → Settings → **Connect Google Calendar**. Timed events appear as events in WinterArc;
+   events you create in WinterArc are added to Google. Syncing also runs on every pinger tick (every 15 min at most).
+
+Notes: all-day events are ignored. Deleting an event in WinterArc removes the Google copy if WinterArc created it;
+an event imported from Google that you delete only in WinterArc will come back on the next sync — delete it in Google.
+
