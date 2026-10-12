@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button'
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
 import { useThreads } from '@/hooks/useThreads'
 import { useState } from 'react'
+import { useDayBlocks } from '@/hooks/useDayBlocks'
 import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 export default function BacklogView() {
+  const { options: dayBlockOptions, resolve: resolveBlock } = useDayBlocks()
   const { data: tasks = [], isLoading: tasksLoading, error: tasksError } = useTasks({
     threadId: null,
   })
@@ -24,7 +26,7 @@ export default function BacklogView() {
   const [editTaskId, setEditTaskId] = useState<string | null>(null)
   const [editTaskTitle, setEditTaskTitle] = useState('')
   const [editTaskThreadId, setEditTaskThreadId] = useState<string>('')
-  const [editTaskTimeBlock, setEditTaskTimeBlock] = useState<'morning' | 'afternoon' | 'evening' | 'unscheduled'>('unscheduled')
+  const [editTaskTimeBlock, setEditTaskTimeBlock] = useState<string>('unscheduled')
   const [editTaskDueDate, setEditTaskDueDate] = useState('')
 
   const openNew = () => {
@@ -39,7 +41,7 @@ export default function BacklogView() {
     setEditTaskId(task._id)
     setEditTaskTitle(task.title)
     setEditTaskThreadId(task.threadId ?? '')
-    setEditTaskTimeBlock(task.timeBlock ?? 'unscheduled')
+    setEditTaskTimeBlock(resolveBlock(task.timeBlock))
     setEditTaskDueDate(task.dueDate ? task.dueDate.split('T')[0] : '')
   }
 
@@ -196,13 +198,11 @@ export default function BacklogView() {
                 <label className="block text-sm font-medium mb-1">Time Block</label>
                 <select
                   value={editTaskTimeBlock}
-                  onChange={(e) => setEditTaskTimeBlock(e.target.value as any)}
+                  onChange={(e) => setEditTaskTimeBlock(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md bg-background text-sm"
                 >
                   <option value="unscheduled">Unscheduled</option>
-                  <option value="morning">Morning</option>
-                  <option value="afternoon">Afternoon</option>
-                  <option value="evening">Evening</option>
+                  {dayBlockOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
                 </select>
               </div>
 

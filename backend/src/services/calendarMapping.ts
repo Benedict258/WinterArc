@@ -1,3 +1,4 @@
+import { DayBlock, DEFAULT_BLOCKS, blockForTime } from '../../../src/shared/dayBlocks'
 import { addDaysKey, dayKeyToDate } from './dailyGenerationService'
 
 // Pure helpers for mapping between Google Calendar events and event tasks.
@@ -26,20 +27,15 @@ export type EventTaskFields = {
   dayKey: string
   startTime: string
   endTime: string
-  timeBlock: 'morning' | 'afternoon' | 'evening'
+  timeBlock: string
   calendarEventId: string
-}
-
-const blockFor = (time: string): EventTaskFields['timeBlock'] => {
-  const hour = Number(time.split(':')[0])
-  return hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 }
 
 /**
  * Event task fields for a Google event, or null when it shouldn't be imported:
  * all-day events, cancelled events, and events this app pushed itself.
  */
-export function googleEventToTask(event: GoogleEventLike, timeZone: string): EventTaskFields | null {
+export function googleEventToTask(event: GoogleEventLike, timeZone: string, blocks: DayBlock[] = DEFAULT_BLOCKS): EventTaskFields | null {
   if (!event.id || event.status === 'cancelled') return null
   if (event.extendedProperties?.private?.source === 'workspace') return null
   const startIso = event.start?.dateTime
@@ -56,7 +52,7 @@ export function googleEventToTask(event: GoogleEventLike, timeZone: string): Eve
     dayKey: start.dayKey,
     startTime: start.time,
     endTime,
-    timeBlock: blockFor(start.time),
+    timeBlock: blockForTime(start.time, blocks),
     calendarEventId: event.id,
   }
 }

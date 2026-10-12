@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { toDayKey, blockForTime } from '@/lib/utils'
+import { toDayKey } from '@/lib/utils'
+import { blockForTime } from '@/shared/dayBlocks'
+import { useDayBlocks } from '@/hooks/useDayBlocks'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCreateTask } from '@/hooks/useTasks'
@@ -12,6 +14,7 @@ interface QuickAddModalProps {
 
 export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const todayString = toDayKey()
+  const { blocks, options } = useDayBlocks()
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(todayString)
   const [dueDate, setDueDate] = useState('')
@@ -38,7 +41,7 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
         title: title.trim(),
         date: date || todayString,
         dueDate: dueDate || null,
-        timeBlock: isEvent ? blockForTime(startTime) : timeBlock,
+        timeBlock: isEvent ? blockForTime(startTime, blocks) : timeBlock,
         threadId: threadId || null,
         status: 'pending',
         source: 'manual',
@@ -136,9 +139,7 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
               className="w-full px-3 py-1.5 border rounded-md text-sm bg-background"
             >
               <option value="unscheduled">Unscheduled</option>
-              <option value="morning">Morning</option>
-              <option value="afternoon">Afternoon</option>
-              <option value="evening">Evening</option>
+              {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           </div>
 

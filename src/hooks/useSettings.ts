@@ -6,6 +6,7 @@ import { onlineOrQueue } from '@/lib/offline';
 
 // Types
 import type { NotificationSettings } from '@/shared/notificationPlan'
+import type { DayBlock } from '@/shared/dayBlocks'
 export type Settings = {
   _id: string;
   timezone: string;
@@ -16,6 +17,13 @@ export type Settings = {
     preferLowIntensityOnBusyDays: boolean;
   };
   notifications?: NotificationSettings;
+  planner?: {
+    rollover?: boolean;
+    makeup?: boolean;
+    backlogPerDay?: number;
+    dueWindowDays?: number;
+    blocks?: DayBlock[];
+  };
   createdAt: string;
   updatedAt: string;
 };

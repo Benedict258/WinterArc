@@ -11,17 +11,13 @@ import { ChevronLeft, ChevronRight, Plus, ChevronDown, Calendar as CalIcon, Maxi
 import QuickAddModal from '@/components/QuickAddModal'
 import TaskRow, { type TaskRowData } from '@/components/TaskRow'
 import { cn, toDayKey, apiDayKey } from '@/lib/utils'
+import { useDayBlocks } from '@/hooks/useDayBlocks'
 import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
 const DAY_LABELS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const BLOCKS = [
-  { id: 'morning', label: 'Morning', time: '9:00 AM – 12:00 PM' },
-  { id: 'afternoon', label: 'Afternoon', time: '1:00 PM – 5:00 PM' },
-  { id: 'evening', label: 'Evening', time: '6:00 PM – 9:00 PM' },
-] as const
-
 export default function WeekView() {
+  const { options: BLOCKS, resolve: resolveBlock } = useDayBlocks()
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 })
   )
@@ -58,16 +54,13 @@ export default function WeekView() {
 
   const tasksByDayAndBlock: Record<string, Record<string, TaskRowData[]>> = {}
   for (const ds of dayStrings) {
-    tasksByDayAndBlock[ds] = { morning: [], afternoon: [], evening: [] }
+    tasksByDayAndBlock[ds] = Object.fromEntries(BLOCKS.map(b => [b.id, [] as TaskRowData[]]))
   }
 
   tasks.forEach((task: any) => {
     const taskDateStr = apiDayKey(task.date) || ''
-    const normBlock = (task.timeBlock || 'morning').toLowerCase()
-    if (
-      tasksByDayAndBlock[taskDateStr] &&
-      (normBlock === 'morning' || normBlock === 'afternoon' || normBlock === 'evening')
-    ) {
+    const normBlock = resolveBlock(task.timeBlock)
+    if (tasksByDayAndBlock[taskDateStr]?.[normBlock]) {
       tasksByDayAndBlock[taskDateStr][normBlock].push({
         id: task._id,
         title: task.title,
@@ -90,10 +83,10 @@ export default function WeekView() {
 
   const forecastByDayAndBlock: Record<string, Record<string, ForecastTask[]>> = {}
   for (const ds of dayStrings) {
-    forecastByDayAndBlock[ds] = { morning: [], afternoon: [], evening: [] }
+    forecastByDayAndBlock[ds] = Object.fromEntries(BLOCKS.map(b => [b.id, [] as ForecastTask[]]))
   }
   forecast.forEach(f => {
-    forecastByDayAndBlock[f.date]?.[f.timeBlock]?.push(f)
+    forecastByDayAndBlock[f.date]?.[resolveBlock(f.timeBlock)]?.push(f)
   })
 
   const calendarQueries = useQueries({
@@ -342,7 +335,7 @@ export default function WeekView() {
                         return (
                           <div key={block.id}>
                             <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
-                              {block.label} <span className="font-normal normal-case">· {block.time}</span>
+                              {block.label} <span className="font-normal normal-case">· {block.range}</span>
                             </p>
                             {blockTasks.length > 0 || blockForecast.length > 0 ? (
                               <div className="space-y-1.5">

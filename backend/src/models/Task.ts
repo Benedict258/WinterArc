@@ -22,8 +22,9 @@ const taskSchema = new mongoose.Schema(
       default: null,
     },
     timeBlock: {
+      // a block id from the user's day structure, or 'unscheduled'
       type: String,
-      enum: ['morning', 'afternoon', 'evening', 'unscheduled'],
+      maxlength: 24,
       default: 'unscheduled',
     },
     status: {

@@ -5,6 +5,7 @@ import { Settings } from '../models/Settings'
 import { Task } from '../models/Task'
 import { User } from '../models/User'
 import { DEFAULT_TIMEZONE, toDayKey, dayKeyToDate, addDaysKey, dateToDayKey } from './dailyGenerationService'
+import { getUserBlocks } from './dayBlocksService'
 import { googleEventToTask, taskToGoogleEvent, syncWindow } from './calendarMapping'
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events']
@@ -120,9 +121,10 @@ export async function syncCalendar(userId: string, now = new Date()): Promise<Sy
     maxResults: 250,
     timeZone,
   })
+  const blocks = await getUserBlocks(userId)
   const seen = new Set<string>()
   for (const event of listed.data.items ?? []) {
-    const fields = googleEventToTask(event, timeZone)
+    const fields = googleEventToTask(event, timeZone, blocks)
     if (!fields) continue
     seen.add(fields.calendarEventId)
     const existing = await Task.findOne({ userId, calendarEventId: fields.calendarEventId })

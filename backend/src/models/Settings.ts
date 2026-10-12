@@ -37,16 +37,8 @@ const settingsSchema = new mongoose.Schema(
       makeup: { type: Boolean, default: true },
       backlogPerDay: { type: Number, default: 2, min: 0, max: 5 },
       dueWindowDays: { type: Number, default: 3, min: 0, max: 14 },
-      blockStarts: {
-        afternoon: { type: Number, default: 12 },
-        evening: { type: Number, default: 17 },
-      },
-      blockLabels: {
-        morning: { type: String, default: 'Morning' },
-        afternoon: { type: String, default: 'Afternoon' },
-        evening: { type: String, default: 'Evening' },
-      },
-      blockPreference: { type: mongoose.Schema.Types.Mixed, default: undefined },
+      // ordered day structure (2-6 blocks); see src/shared/dayBlocks.ts. Unset = defaults.
+      blocks: { type: mongoose.Schema.Types.Mixed, default: undefined },
     },
     gridBalancing: {
       maxDailyIntensity: {

@@ -126,7 +126,27 @@ describe.skipIf(!available)('planner rules against the database', () => {
     await agent.put('/api/settings').send({ planner: { rollover: false } })
     expect((await agent.get('/api/settings')).body.planner).toMatchObject({ backlogPerDay: 0, rollover: false, makeup: true })
     expect((await agent.put('/api/settings').send({ planner: { backlogPerDay: 99 } })).status).toBe(400)
-    expect((await agent.put('/api/settings').send({ planner: { blockStarts: { afternoon: 18, evening: 10 } } })).status).toBe(400)
+    const w = { light: 0, medium: 0, heavy: 0 }
+    const bad = [{ id: 'a', label: 'A', start: 18, weights: w }, { id: 'b', label: 'B', start: 10, weights: w }]
+    expect((await agent.put('/api/settings').send({ planner: { blocks: bad } })).status).toBe(400)
+    const good = [{ id: 'early', label: 'Early', start: 5, weights: w }, { id: 'late', label: 'Late', start: 14, weights: w }]
+    expect((await agent.put('/api/settings').send({ planner: { blocks: good } })).status).toBe(200)
+    expect((await agent.get('/api/settings')).body.planner.blocks.map((b: any) => b.id)).toEqual(['early', 'late'])
+  })
+
+  it('tasks follow the user\'s blocks: stale block ids are re-homed and planner uses the new ones', async () => {
+    const { agent, userId: uid2 } = await signedUpAgent(ctx, 'blocks@example.com')
+    const w = { light: 0, medium: 0, heavy: 0 }
+    await agent.put('/api/settings').send({ planner: { blocks: [{ id: 'am', label: 'AM', start: 6, weights: w }, { id: 'pm', label: 'PM', start: 13, weights: w }] } })
+    const made = await agent.post('/api/tasks').send({ title: 'old client', date: '2026-10-05', timeBlock: 'evening' })
+    expect(made.status).toBe(201)
+    expect(made.body.timeBlock).toBe('pm') // evening (19:00) -> PM
+    expect((await agent.post('/api/tasks').send({ title: 'bad', timeBlock: 'Not A Block!' })).status).toBe(400)
+    await Thread.create({ userId: uid2, name: 'D', category: 'Other', frequency: 'daily', taskMode: 'continuous' })
+    await generateToday(uid2, MONDAY)
+    const placed = await Task.find({ userId: uid2, source: 'auto-generated' })
+    expect(placed.length).toBeGreaterThan(0)
+    for (const t of placed) expect(['am', 'pm']).toContain(t.timeBlock)
   })
 
   it('a user\'s planner rules apply only to that user', async () => {

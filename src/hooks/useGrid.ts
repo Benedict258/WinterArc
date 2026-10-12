@@ -18,7 +18,7 @@ export type ForecastTask = {
   threadId: string | null;
   taskId: string | null;
   title: string;
-  timeBlock: 'morning' | 'afternoon' | 'evening';
+  timeBlock: string;
   priority: 'low' | 'medium' | 'high';
   intensity: 'light' | 'medium' | 'heavy';
   dueKey: string | null;

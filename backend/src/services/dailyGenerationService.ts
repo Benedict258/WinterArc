@@ -1,6 +1,7 @@
 import { Thread } from '../models/Thread'
 import { Task } from '../models/Task'
 import { Settings } from '../models/Settings'
+import { DayBlock, normalizeBlocks, blockForTime, pickBlock, resolveBlock, emptyLoads } from '../../../src/shared/dayBlocks'
 import { User } from '../models/User'
 
 // ============================================
@@ -12,8 +13,6 @@ import { User } from '../models/User'
 // taskService.getTasks() filters on.
 
 export const DEFAULT_TIMEZONE = 'UTC'
-const TIME_BLOCKS = ['morning', 'afternoon', 'evening'] as const
-type TimeBlock = typeof TIME_BLOCKS[number]
 
 export function toDayKey(date: Date, timeZone = DEFAULT_TIMEZONE): string {
   // en-CA formats as YYYY-MM-DD
@@ -81,7 +80,7 @@ export type PlanState = {
   /** pending, unscheduled tasks (thread queues + backlog). Consumed tasks are removed. */
   queue: PlanTask[]
   /** existing load per block for the day being planned */
-  blockLoads: Record<TimeBlock, number>
+  blockLoads: Record<string, number>
   /** intensity already on the day being planned (light=1, medium=2, heavy=4) */
   dayLoad?: number
   /** fixed-day threads that missed yesterday's slot and get one makeup today */
@@ -93,7 +92,7 @@ export type PlanAction = {
   threadId: string | null
   taskId: string | null
   title: string
-  timeBlock: TimeBlock
+  timeBlock: string
   priority: Priority
   intensity: Intensity
   dueKey: string | null
@@ -112,15 +111,9 @@ export type PlanOptions = {
   preferLowIntensityOnBusyDays?: boolean
   /** most no-due-date backlog tasks pulled in as filler on a day (default 2) */
   backlogPerDay?: number
-  /** hour (0-23) at which the afternoon and the evening begin; the morning runs until the afternoon */
-  blockStarts?: BlockStarts
-  /** per intensity, how much each block is disfavoured (lower = preferred) */
-  blockPreference?: BlockPreference
+  /** the user's day structure (default: morning / afternoon / evening) */
+  blocks?: DayBlock[]
 }
-
-export type BlockStarts = { afternoon: number; evening: number }
-export type BlockPreference = Record<'light' | 'medium' | 'heavy', Record<TimeBlock, number>>
-export const DEFAULT_BLOCK_STARTS: BlockStarts = { afternoon: 12, evening: 17 }
 
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 }
 export const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
@@ -191,42 +184,6 @@ function bestTasksFirst(dayKey: string) {
     a.id.localeCompare(b.id)
 }
 
-// Medium work in the morning, light in the afternoon, heavy in the evening
-// — then balance load. Lower cost = more preferred.
-export const DEFAULT_BLOCK_PREFERENCE: BlockPreference = {
-  heavy: { morning: 4, afternoon: 2, evening: 0 },
-  medium: { morning: 0, afternoon: 1, evening: 1 },
-  light: { morning: 1, afternoon: 0, evening: 1 },
-}
-
-/** Time block an event falls in, by its start time ('HH:mm'). */
-export function blockForTime(time: string | null | undefined, starts: BlockStarts = DEFAULT_BLOCK_STARTS): TimeBlock {
-  const hour = Number((time ?? '').split(':')[0])
-  if (!Number.isFinite(hour)) return 'morning'
-  if (hour < starts.afternoon) return 'morning'
-  if (hour < starts.evening) return 'afternoon'
-  return 'evening'
-}
-
-/** Block for a task of this intensity, given the load already in each block. */
-export function pickBlock(
-  loads: Record<TimeBlock, number>,
-  intensity: string = 'medium',
-  preference: BlockPreference = DEFAULT_BLOCK_PREFERENCE
-): TimeBlock {
-  const pref = (preference as Record<string, Record<TimeBlock, number>>)[intensity] ?? preference.medium
-  let best: TimeBlock = 'morning'
-  let bestCost = Infinity
-  for (const block of TIME_BLOCKS) {
-    const cost = loads[block] + pref[block]
-    if (cost < bestCost) {
-      best = block
-      bestCost = cost
-    }
-  }
-  return best
-}
-
 /**
  * Decide what goes on `dayKey`. Mutates `state` (consumes queued tasks,
  * bumps appearances, block loads and day load) so it can be called day after
@@ -260,8 +217,8 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
 
   const place = (action: Omit<PlanAction, 'timeBlock'>) => {
     const weight = intensityWeight(action.intensity)
-    const block = pickBlock(state.blockLoads, action.intensity, opts.blockPreference)
-    state.blockLoads[block] += weight
+    const block = pickBlock(state.blockLoads, action.intensity, opts.blocks)
+    state.blockLoads[block] = (state.blockLoads[block] ?? 0) + weight
     state.dayLoad! += weight
     actions.push({ ...action, timeBlock: block })
   }
@@ -292,7 +249,7 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
       threadId: thread.id,
       taskId: null,
       title: thread.name,
-      timeBlock: blockForTime(thread.eventStart, opts.blockStarts),
+      timeBlock: blockForTime(thread.eventStart, opts.blocks),
       priority: thread.priority,
       intensity: thread.intensity,
       dueKey: null,
@@ -454,25 +411,6 @@ function toPlanTask(t: any): PlanTask {
   }
 }
 
-function normalizeStarts(raw: any): BlockStarts {
-  const a = Number(raw?.afternoon)
-  const e = Number(raw?.evening)
-  if (Number.isInteger(a) && Number.isInteger(e) && a >= 1 && a < e && e <= 23) return { afternoon: a, evening: e }
-  return DEFAULT_BLOCK_STARTS
-}
-
-function normalizePreference(raw: any): BlockPreference {
-  const out = {} as BlockPreference
-  for (const k of ['light', 'medium', 'heavy'] as const) {
-    out[k] = {} as Record<TimeBlock, number>
-    for (const b of TIME_BLOCKS) {
-      const v = Number(raw?.[k]?.[b])
-      out[k][b] = Number.isFinite(v) ? v : DEFAULT_BLOCK_PREFERENCE[k][b]
-    }
-  }
-  return out
-}
-
 async function loadSchedulingSettings(userId: string) {
   const settings = await Settings.findOne({ userId })
   return {
@@ -484,8 +422,7 @@ async function loadSchedulingSettings(userId: string) {
       multipleTarget: settings?.multipleThreadsPerWeekTarget || 3,
       backlogPerDay: settings?.planner?.backlogPerDay ?? 2,
       dueWindowDays: settings?.planner?.dueWindowDays ?? 3,
-      blockStarts: normalizeStarts(settings?.planner?.blockStarts),
-      blockPreference: normalizePreference(settings?.planner?.blockPreference),
+      blocks: normalizeBlocks(settings?.planner?.blocks),
       maxDailyIntensity: settings?.gridBalancing?.maxDailyIntensity ?? 6,
       preferLowIntensityOnBusyDays: settings?.gridBalancing?.preferLowIntensityOnBusyDays ?? true,
     } satisfies PlanOptions,
@@ -493,15 +430,16 @@ async function loadSchedulingSettings(userId: string) {
 }
 
 /** Tasks already on a day: per-block counts and summed intensity (skipped tasks don't count). */
-async function loadDayLoad(userId: string, dayKey: string): Promise<{ blockLoads: Record<TimeBlock, number>; dayLoad: number }> {
+async function loadDayLoad(userId: string, dayKey: string, blocks: DayBlock[]): Promise<{ blockLoads: Record<string, number>; dayLoad: number }> {
   const start = dayKeyToDate(dayKey)
   const end = dayKeyToDate(addDaysKey(dayKey, 1))
   const tasks = await Task.find({ userId, date: { $gte: start, $lt: end }, status: { $ne: 'skipped' }, isEvent: { $ne: true } }, { timeBlock: 1, intensity: 1 })
-  const blockLoads: Record<TimeBlock, number> = { morning: 0, afternoon: 0, evening: 0 }
+  const blockLoads = emptyLoads(blocks)
   let dayLoad = 0
   for (const t of tasks) {
     // Block load is summed intensity, so heavy work spreads across the day
-    if (t.timeBlock && t.timeBlock in blockLoads) blockLoads[t.timeBlock as TimeBlock] += intensityWeight(t.intensity ?? undefined)
+    const block = resolveBlock(t.timeBlock, blocks)
+    if (block in blockLoads) blockLoads[block] += intensityWeight(t.intensity ?? undefined)
     dayLoad += intensityWeight(t.intensity ?? undefined)
   }
   return { blockLoads, dayLoad }
@@ -594,7 +532,7 @@ export async function generateToday(userId: string, dayKey: string) {
     appearances: await loadAppearances(userId, threads.map(t => t.id), weekKey),
     queue: await loadQueue(userId),
     makeup,
-    ...(await loadDayLoad(userId, dayKey)),
+    ...(await loadDayLoad(userId, dayKey, planOptions.blocks)),
   }
 
   const actions = planDay(dayKey, threads, state, planOptions)
@@ -709,7 +647,7 @@ export async function forecastWeek(userId: string, requestedWeekKey: string, now
   const queue = await loadQueue(userId)
   let currentWeek = weekStartKey(todayKey)
   let appearances = await loadAppearances(userId, threads.map(t => t.id), currentWeek)
-  const state: PlanState = { appearances, queue, blockLoads: { morning: 0, afternoon: 0, evening: 0 } }
+  const state: PlanState = { appearances, queue, blockLoads: emptyLoads(planOptions.blocks) }
 
   const out: ForecastEntry[] = []
   for (let day = addDaysKey(todayKey, 1); day <= requestedEnd; day = addDaysKey(day, 1)) {
@@ -719,7 +657,7 @@ export async function forecastWeek(userId: string, requestedWeekKey: string, now
       appearances = new Map()
       state.appearances = appearances
     }
-    Object.assign(state, await loadDayLoad(userId, day))
+    Object.assign(state, await loadDayLoad(userId, day, planOptions.blocks))
     const actions = planDay(day, threads, state, planOptions)
     if (day >= requestedWeekKey) {
       for (const a of actions) out.push({ ...a, date: day })
@@ -817,11 +755,11 @@ async function doRebalance(userId: string, now: Date): Promise<RebalanceResult> 
   })
 
   const actions = await generateToday(userId, dayKey)
-  const { dayLoad } = await loadDayLoad(userId, dayKey)
+  const { dayLoad } = await loadDayLoad(userId, dayKey, planOptions.blocks)
 
   const forecastLoads: Record<string, number> = {}
   for (let d = addDaysKey(dayKey, 1); d < addDaysKey(weekKey, 7); d = addDaysKey(d, 1)) {
-    forecastLoads[d] = (await loadDayLoad(userId, d)).dayLoad
+    forecastLoads[d] = (await loadDayLoad(userId, d, planOptions.blocks)).dayLoad
   }
   for (const f of await forecastWeek(userId, weekKey, now)) {
     forecastLoads[f.date] = (forecastLoads[f.date] ?? 0) + intensityWeight(f.intensity)

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { blocksProblem } from '../../../src/shared/dayBlocks';
 
 // NOTE: no `.default()` on any field. zod v4 applies defaults even inside
 // `.partial()`, which would silently overwrite existing values on PUT.
@@ -8,6 +9,7 @@ const priorityEnum = z.enum(['low', 'medium', 'high']);
 const intensityEnum = z.enum(['light', 'medium', 'heavy']);
 // Client-generated Mongo ObjectId, so a record created offline keeps the same id once synced
 const clientId = z.string().regex(/^[0-9a-f]{24}$/i, 'Invalid id');
+const blockId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,23}$/, 'Invalid time block');
 const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:mm');
 const httpUrl = z.string().trim().url().refine(u => /^https?:\/\//i.test(u), 'URL must start with http:// or https://');
 
@@ -45,7 +47,7 @@ export const taskSchema = z.object({
   threadId: z.string().nullable().optional(),
   date: z.string().optional().nullable(),
   dueDate: z.string().optional().nullable(),
-  timeBlock: z.enum(['morning', 'afternoon', 'evening', 'unscheduled']).optional(),
+  timeBlock: blockId.optional(),
   status: z.enum(['pending', 'done', 'skipped']).optional(),
   completedAt: z.string().optional().nullable(),
   priority: priorityEnum.optional(),
@@ -103,24 +105,15 @@ export const pushSubscriptionSchema = z.object({
   keys: z.object({ p256dh: z.string().min(1).max(512), auth: z.string().min(1).max(512) }),
 });
 
-const blockWeights = z.object({
-  morning: z.number().int().min(0).max(10),
-  afternoon: z.number().int().min(0).max(10),
-  evening: z.number().int().min(0).max(10),
-});
 export const plannerSettingsSchema = z.object({
   rollover: z.boolean(),
   makeup: z.boolean(),
   backlogPerDay: z.number().int().min(0).max(5),
   dueWindowDays: z.number().int().min(0).max(14),
-  blockStarts: z.object({ afternoon: z.number().int().min(1).max(22), evening: z.number().int().min(2).max(23) })
-    .refine(b => b.afternoon < b.evening, 'Afternoon must start before the evening'),
-  blockLabels: z.object({
-    morning: z.string().trim().min(1).max(24),
-    afternoon: z.string().trim().min(1).max(24),
-    evening: z.string().trim().min(1).max(24),
+  blocks: z.array(z.any()).superRefine((blocks, ctx) => {
+    const problem = blocksProblem(blocks)
+    if (problem) ctx.addIssue({ code: 'custom', message: problem })
   }),
-  blockPreference: z.object({ light: blockWeights, medium: blockWeights, heavy: blockWeights }),
 }).partial();
 
 export const settingsSchema = z.object({

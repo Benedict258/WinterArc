@@ -446,21 +446,30 @@ describe('fixed-day makeup', () => {
 })
 
 describe('custom day structure', () => {
-  it('moves the afternoon and evening boundaries for events', () => {
+  const block = (id: string, start: number, weights = { light: 0, medium: 0, heavy: 0 }) => ({ id, label: id, start, weights })
+
+  it('uses the user\'s blocks for events, however many there are', () => {
     const e = thread('e', { taskMode: 'event', frequency: 'weekly', eventStart: '15:00', eventEnd: '16:00', eventDays: [0] })
     expect(planDay(MONDAY, [e], freshState())[0].timeBlock).toBe('afternoon')
-    expect(planDay(MONDAY, [e], freshState(), { blockStarts: { afternoon: 12, evening: 14 } })[0].timeBlock).toBe('evening')
+    const two = [block('day', 6), block('night', 14)]
+    expect(planDay(MONDAY, [e], freshState(), { blocks: two })[0].timeBlock).toBe('night')
+    const five = [block('early', 5), block('mid', 9), block('noon', 12), block('late', 16), block('night', 20)]
+    expect(planDay(MONDAY, [e], freshState(), { blocks: five })[0].timeBlock).toBe('noon')
   })
 
-  it('uses the user\'s own intensity preferences', () => {
+  it('uses the user\'s intensity weights', () => {
     const heavy = thread('h', { frequency: 'daily', intensity: 'heavy' })
     expect(planDay(MONDAY, [heavy], freshState())[0].timeBlock).toBe('evening') // default: heavy in the evening
-    const prefs = {
-      light: { morning: 0, afternoon: 0, evening: 0 },
-      medium: { morning: 0, afternoon: 0, evening: 0 },
-      heavy: { morning: 0, afternoon: 5, evening: 5 },
-    }
-    expect(planDay(MONDAY, [heavy], freshState(), { blockPreference: prefs })[0].timeBlock).toBe('morning')
+    const blocks = [block('a', 6, { light: 0, medium: 0, heavy: 0 }), block('b', 12, { light: 0, medium: 0, heavy: 5 })]
+    expect(planDay(MONDAY, [heavy], { ...freshState(), blockLoads: { a: 0, b: 0 } }, { blocks })[0].timeBlock).toBe('a')
+  })
+
+  it('spreads work across all of a six-block day', () => {
+    const blocks = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) => block(id, 5 + i * 3))
+    const threads = ['1', '2', '3', '4', '5', '6'].map(id => thread(id, { frequency: 'daily', intensity: 'light' }))
+    const state = { ...freshState(), blockLoads: Object.fromEntries(blocks.map(b => [b.id, 0])) }
+    const placed = planDay(MONDAY, threads, state, { blocks }).map(a => a.timeBlock)
+    expect(new Set(placed).size).toBe(6)
   })
 
   it('backlogPerDay 0 turns the filler off and dueWindowDays narrows the due pass', () => {

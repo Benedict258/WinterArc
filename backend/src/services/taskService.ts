@@ -1,3 +1,4 @@
+import { resolveTaskBlock } from './dayBlocksService'
 import { Task } from '../models/Task'
 import { Thread } from '../models/Thread'
 import { createIdempotent } from '../utils/idempotentCreate'
@@ -43,11 +44,13 @@ async function assertOwnThread(userId: string, threadId: unknown) {
 
 export async function createTask(userId: string, data: any) {
   await assertOwnThread(userId, data.threadId)
+  if (data.timeBlock !== undefined) data.timeBlock = await resolveTaskBlock(userId, data.timeBlock)
   return await createIdempotent(Task, userId, data)
 }
 
 export async function updateTask(userId: string, id: string, data: any) {
   await assertOwnThread(userId, data.threadId)
+  if (data.timeBlock !== undefined) data.timeBlock = await resolveTaskBlock(userId, data.timeBlock)
   if (data.status === 'done' && !data.completedAt) {
     data.completedAt = new Date()
   }

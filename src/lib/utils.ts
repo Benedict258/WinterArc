@@ -34,11 +34,3 @@ export function safeHref(url: string | null | undefined): string | undefined {
     return undefined
   }
 }
-
-/** Time block an event falls in, by its 'HH:mm' start (mirrors the server). */
-export function blockForTime(time: string): 'morning' | 'afternoon' | 'evening' {
-  const hour = Number(time.split(':')[0])
-  if (hour < 12) return 'morning'
-  if (hour < 17) return 'afternoon'
-  return 'evening'
-}

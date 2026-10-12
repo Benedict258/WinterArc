@@ -9,18 +9,21 @@ import { useThreads } from '@/hooks/useThreads'
 import { useCalendarEvents } from '@/hooks/useCalendar'
 import { useState, useRef } from 'react'
 import { toDayKey, apiDayKey, cn } from '@/lib/utils'
+import { blockForTime } from '@/shared/dayBlocks'
+import { useDayBlocks } from '@/hooks/useDayBlocks'
 import { useGridSettings, useRebalanceWeek } from '@/hooks/useGrid'
 import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 export default function TodayView() {
+  const { blocks, options: blockOptions, resolve: resolveBlock } = useDayBlocks()
   const today = new Date()
   const todayString = toDayKey(today)
   const quickInputRef = useRef<HTMLInputElement>(null)
   const [quickTitle, setQuickTitle] = useState('')
   const [quickDueDate, setQuickDueDate] = useState('')
-  const [selectedBlock, setSelectedBlock] = useState('morning')
+  const [selectedBlock, setSelectedBlock] = useState<string>('')
   const [selectedThread, setSelectedThread] = useState<string>('')
-  const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({ morning: true, afternoon: true, evening: true, unscheduled: true })
+  const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({})
 
   const { data: tasks = [], isLoading: tasksLoading } = useTasks({ date: todayString })
   // Tasks you scheduled yourself on earlier days and didn't finish (planner-placed ones are
@@ -50,7 +53,7 @@ export default function TodayView() {
       title: quickTitle.trim(),
       date: todayString,
       dueDate: quickDueDate || null,
-      timeBlock: selectedBlock,
+      timeBlock: selectedBlock || blocks[0].id,
       threadId: selectedThread || null,
       status: 'pending',
       source: 'manual',
@@ -62,9 +65,7 @@ export default function TodayView() {
   const handleConvertCalendarEvent = (event: any) => {
     const startDate = new Date(event.start)
     const hour = startDate.getHours()
-    let timeBlock = 'afternoon'
-    if (hour < 12) timeBlock = 'morning'
-    else if (hour >= 18) timeBlock = 'evening'
+    const timeBlock = blockForTime(`${String(hour).padStart(2, '0')}:00`, blocks)
 
     createTask({
       title: event.title,
@@ -81,14 +82,12 @@ export default function TodayView() {
   }
 
   const timeBlocks = [
-    { id: 'morning', label: 'Morning', time: '9:00 AM – 12:00 PM', icon: Calendar },
-    { id: 'afternoon', label: 'Afternoon', time: '1:00 PM – 5:00 PM', icon: Clock },
-    { id: 'evening', label: 'Evening', time: '6:00 PM – 9:00 PM', icon: Clock },
+    ...blockOptions.map((o, i) => ({ id: o.id, label: o.label, time: o.range, icon: i === 0 ? Calendar : Clock })),
     { id: 'unscheduled', label: 'Unscheduled', time: 'Flexible', icon: Clock },
   ].map(block => ({
     ...block,
     tasks: tasks
-      .filter((task: any) => (task.timeBlock || 'unscheduled') === block.id)
+      .filter((task: any) => resolveBlock(task.timeBlock) === block.id)
       .sort((a: any, b: any) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99'))
       .map((task: any) => ({
         id: task._id,
@@ -170,13 +169,11 @@ export default function TodayView() {
                 title="Due date (optional)"
               />
               <select
-                value={selectedBlock}
+                value={selectedBlock || blocks[0].id}
                 onChange={(e) => setSelectedBlock(e.target.value)}
                 className="px-3 py-2 border rounded-md text-sm bg-background"
               >
-                <option value="morning">Morning</option>
-                <option value="afternoon">Afternoon</option>
-                <option value="evening">Evening</option>
+                {blockOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
                 <option value="unscheduled">Unscheduled</option>
               </select>
               <select
@@ -228,11 +225,11 @@ export default function TodayView() {
         {/* Expand/Collapse All */}
         <div className="flex justify-end">
           <Button variant="ghost" size="sm" onClick={() => {
-            const allExpanded = timeBlocks.every(b => expandedBlocks[b.id])
+            const allExpanded = timeBlocks.every(b => expandedBlocks[b.id] ?? true)
             const newState = !allExpanded
             setExpandedBlocks(Object.fromEntries(timeBlocks.map(b => [b.id, newState])))
           }}>
-            {timeBlocks.every(b => expandedBlocks[b.id]) ? 'Collapse All' : 'Expand All'}
+            {timeBlocks.every(b => expandedBlocks[b.id] ?? true) ? 'Collapse All' : 'Expand All'}
           </Button>
         </div>
 
