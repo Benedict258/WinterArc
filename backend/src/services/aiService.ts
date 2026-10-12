@@ -1,6 +1,7 @@
 import { AiUsage } from '../models/AiUsage'
 import { AiProposal } from '../models/AiProposal'
 import { Settings } from '../models/Settings'
+import { getPlan } from './planService'
 import { Thread } from '../models/Thread'
 import { Task } from '../models/Task'
 import { Goal } from '../models/Goal'
@@ -26,8 +27,6 @@ export const provider = (): Provider => PROVIDERS[process.env.AI_PROVIDER ?? 'gr
 const apiKey = () => process.env[provider().keyEnv] || process.env.AI_API_KEY || ''
 const baseUrl = () => (process.env.AI_BASE_URL || provider().baseUrl).replace(/\/$/, '')
 const model = () => process.env.AI_MODEL || provider().model
-const monthlyAllowance = () => Number(process.env.AI_MONTHLY_TOKENS) || 300_000
-const dailyCap = () => Number(process.env.AI_DAILY_TOKENS) || 100_000
 const requestCap = () => Number(process.env.AI_REQUEST_TOKENS) || 120_000
 const MAX_STEPS = 8
 const PROPOSAL_TTL_MS = 7 * 24 * 3600 * 1000
@@ -65,12 +64,13 @@ export const aiConfigured = () => caller !== realCaller || (!!apiKey() && !!base
 const monthOf = (now: Date) => now.toISOString().slice(0, 7)
 
 export async function getUsage(userId: string, now = new Date()) {
+  const { limits, plan } = await getPlan(userId)
   const row = await AiUsage.findOne({ userId, month: monthOf(now) })
   const used = (row?.inputTokens ?? 0) + (row?.outputTokens ?? 0)
-  const allowance = monthlyAllowance() + (row?.bonusTokens ?? 0)
+  const allowance = limits.aiMonthlyTokens + (row?.bonusTokens ?? 0)
   const today = row?.dayKey === now.toISOString().slice(0, 10) ? row.dayTokens : 0
   return {
-    used, allowance, remaining: Math.max(0, allowance - used), today, dailyCap: dailyCap(),
+    plan, used, allowance, remaining: Math.max(0, allowance - used), today, dailyCap: limits.aiDailyTokens,
     moreRequested: !!row?.moreRequestedAt,
     resetsOn: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10),
   }

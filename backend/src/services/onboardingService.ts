@@ -4,6 +4,7 @@ import { Task } from '../models/Task'
 import { Settings } from '../models/Settings'
 import { getTemplate, PRESETS, type PresetId } from '../../../src/shared/templates'
 import { blocksProblem, UNSCHEDULED, type DayBlock } from '../../../src/shared/dayBlocks'
+import { assertThreadRoom } from './threadService'
 import { rebalanceWeek } from './dailyGenerationService'
 
 export type OnboardingInput = {
@@ -34,6 +35,7 @@ export async function applyOnboarding(userId: string, input: OnboardingInput) {
   const preset = PRESETS[input.preset ?? template.preset]
   if (!preset) throw new Error('Unknown preset')
 
+  await assertThreadRoom(userId, keep.size) // a plan limit is reported before the setup is used up
   const claim = await User.updateOne({ _id: userId, onboardedAt: null }, { $set: { onboardedAt: new Date() } })
   if (claim.matchedCount === 0) throw new AlreadyOnboardedError()
 

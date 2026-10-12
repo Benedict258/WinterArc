@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { format } from 'date-fns'
 import { safeHref } from '@/lib/utils'
 import { confirmDialog } from '@/components/DialogHost'
+import { formatBytes } from '@/shared/plans'
 
 type DropItem = {
   _id: string
@@ -31,12 +32,11 @@ export default function DropView() {
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
 
   const [storageConfigured, setStorageConfigured] = useState<boolean | null>(null)
+  const [usage, setUsage] = useState<{ usedBytes: number; quotaBytes: number; maxFileBytes: number; items: number; maxItems: number } | null>(null)
+  const loadStatus = () => fetch('/api/drop/status').then(r => (r.ok ? r.json() : null)).then(d => { if (d) { setStorageConfigured(!!d.storageConfigured); setUsage(d.usage ?? null) } }).catch(() => {})
 
   useEffect(() => {
-    fetch('/api/drop/status')
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => d && setStorageConfigured(!!d.storageConfigured))
-      .catch(() => {})
+    loadStatus()
   }, [])
 
   const fetchItems = async () => {
@@ -90,6 +90,10 @@ export default function DropView() {
   const uploadFile = async (file: File) => {
     // Some files report an empty type; the presigned URL is signed with this exact value
     const mimeType = file.type || 'application/octet-stream'
+    if (usage && file.size > usage.maxFileBytes) {
+      toast({ title: 'File too large', description: `${file.name} is over the ${formatBytes(usage.maxFileBytes)} limit.`, variant: 'destructive' })
+      return
+    }
     try {
       const metaRes = await fetch('/api/drop/upload-url', {
         method: 'POST',
@@ -108,9 +112,10 @@ export default function DropView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'file', s3Key, fileName: file.name, fileSize: file.size, mimeType })
       })
-      if (!saveRes.ok) throw new Error('Saving drop failed')
+      if (!saveRes.ok) throw new Error((await saveRes.json().catch(() => ({}))).error || 'Saving drop failed')
       toast({ title: 'Dropped', description: file.name })
       fetchItems()
+      loadStatus()
     } catch (e: any) {
       toast({ title: 'Upload failed', description: e.message, variant: 'destructive' })
     }
@@ -137,16 +142,18 @@ export default function DropView() {
       body: JSON.stringify({ type: isUrl ? 'link' : 'text', textContent: text })
     })
     if (!res.ok) {
-      toast({ title: 'Drop failed', variant: 'destructive' })
+      toast({ title: 'Drop failed', description: (await res.json().catch(() => ({}))).error, variant: 'destructive' })
       return
     }
     setTextInput('')
     fetchItems()
+    loadStatus()
   }
 
   const deleteItem = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
     await fetch(`/api/drop/${id}`, { method: 'DELETE' })
+    loadStatus()
     fetchItems()
   }
 
@@ -206,6 +213,7 @@ export default function DropView() {
     if (res.ok) {
       setItems([])
       setImgUrls({})
+      loadStatus()
     } else {
       toast({ title: 'Could not clear Drop', variant: 'destructive' })
     }
@@ -242,6 +250,12 @@ export default function DropView() {
               </Button>
             )}
           </div>
+          {usage && (
+            <div className="mt-2 space-y-1" aria-label="Drop storage">
+              <div className="h-1.5 rounded-full bg-secondary overflow-hidden"><div className={`h-full ${usage.usedBytes / usage.quotaBytes >= 0.9 ? 'bg-destructive' : 'bg-primary'}`} style={{ width: `${Math.min(100, Math.round((usage.usedBytes / usage.quotaBytes) * 100))}%` }} /></div>
+              <p className="text-[11px] text-muted-foreground">{formatBytes(usage.usedBytes)} of {formatBytes(usage.quotaBytes)} used · files up to {formatBytes(usage.maxFileBytes)} · {usage.items}/{usage.maxItems} items · items expire after 30 days</p>
+            </div>
+          )}
           {storageConfigured === false && (
             <p className="mt-2 text-xs rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-300">
               File storage isn't configured on the server, so file uploads are off. Text and links still work.

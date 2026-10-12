@@ -85,3 +85,6 @@ It works with any provider that has an OpenAI-style API and tool calling. Groq i
 2. **NVIDIA NIM instead:** build.nvidia.com → get an API key → set `AI_PROVIDER=nvidia`, `NVIDIA_API_KEY`, and check `AI_MODEL` supports function calling (default `meta/llama-3.3-70b-instruct`). NVIDIA's free hosted tier is meant for development, so it isn't suitable for real users.
 3. Each person gets 300,000 tokens a month and 100,000 a day (`AI_MONTHLY_TOKENS`, `AI_DAILY_TOKENS`). They can ask for more; you grant it with **+AI** on the Admin page.
 4. People need a confirmed email to use it. The assistant only suggests; every change needs the person's approval.
+
+## 8. Plans and limits
+Limits live in `src/shared/plans.ts` (Free and Pro). You can tune the Free plan without code: `DROP_QUOTA_MB` (200), `DROP_MAX_FILE_MB` (25), `DROP_MAX_ITEMS` (300), `AI_MONTHLY_TOKENS`, `AI_DAILY_TOKENS`, `MAX_THREADS_FREE` (30). Drop files are measured in storage when they are registered, and a cleanup removes stored files nothing points at (never-registered uploads, expired items) about every six hours, when the cron pinger runs.

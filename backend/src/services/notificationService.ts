@@ -6,6 +6,7 @@ import { Task } from '../models/Task'
 import { User } from '../models/User'
 import { DEFAULT_NOTIFICATIONS, planNotifications, planDigest, minutesUntilNextCheck, localClock, type NotificationSettings, type NotifTask } from '../../../src/shared/notificationPlan'
 import { sendEmail, digestMessage } from './emailService'
+import { sweepDropIfDue } from './dropService'
 import { dayKeyToDate, addDaysKey, dateToDayKey, ensureTodayGenerated, DEFAULT_TIMEZONE } from './dailyGenerationService'
 
 let configured = false
@@ -184,6 +185,7 @@ let timer: NodeJS.Timeout | null = null
 export function startNotificationScheduler() {
   if (timer) return
   timer = setInterval(() => {
+    void sweepDropIfDue()
     runNotificationTick().catch(err => console.error('Notification tick failed:', err instanceof Error ? err.message : err))
   }, 60_000)
   timer.unref()

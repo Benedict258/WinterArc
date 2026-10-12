@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
@@ -59,6 +59,7 @@ export class StorageNotConfiguredError extends Error {
 }
 
 export function isStorageConfigured() {
+  if (override) return true
   if (cached === undefined) cached = readConfig()
   return cached !== null
 }
@@ -68,19 +69,58 @@ export function resetStorageConfig() {
   cached = undefined
 }
 
-export const getPresignedPutUrl = async (key: string, contentType?: string, expiresIn = 300) => {
-  const { client, bucket } = getStorage()
-  const command = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType })
-  return await getSignedUrl(client, command, { expiresIn })
+export type StoredObject = { key: string; size: number; lastModified: Date }
+
+/** What Drop needs from storage. Production is S3-compatible; tests swap in a fake. */
+export type Storage = {
+  presignPut(key: string, contentType?: string, expiresIn?: number): Promise<string>
+  presignGet(key: string, expiresIn?: number): Promise<string>
+  remove(key: string): Promise<void>
+  /** null when the object isn't there */
+  head(key: string): Promise<{ size: number } | null>
+  list(prefix: string, continuationToken?: string): Promise<{ objects: StoredObject[]; next?: string }>
 }
 
-export const getPresignedGetUrl = async (key: string, expiresIn = 300) => {
-  const { client, bucket } = getStorage()
-  const command = new GetObjectCommand({ Bucket: bucket, Key: key })
-  return await getSignedUrl(client, command, { expiresIn })
+const s3Storage: Storage = {
+  async presignPut(key, contentType, expiresIn = 300) {
+    const { client, bucket } = getStorage()
+    return getSignedUrl(client, new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }), { expiresIn })
+  },
+  async presignGet(key, expiresIn = 300) {
+    const { client, bucket } = getStorage()
+    return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn })
+  },
+  async remove(key) {
+    const { client, bucket } = getStorage()
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  },
+  async head(key) {
+    const { client, bucket } = getStorage()
+    try {
+      const out = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
+      return { size: Number(out.ContentLength ?? 0) }
+    } catch (error: any) {
+      if (error?.$metadata?.httpStatusCode === 404 || error?.name === 'NotFound' || error?.name === 'NoSuchKey') return null
+      throw error
+    }
+  },
+  async list(prefix, continuationToken) {
+    const { client, bucket } = getStorage()
+    const out = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken, MaxKeys: 500 }))
+    return {
+      objects: (out.Contents ?? []).filter(o => o.Key).map(o => ({ key: o.Key!, size: Number(o.Size ?? 0), lastModified: o.LastModified ?? new Date() })),
+      next: out.IsTruncated ? out.NextContinuationToken : undefined,
+    }
+  },
 }
 
-export const deleteS3Object = async (key: string) => {
-  const { client, bucket } = getStorage()
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
-}
+let override: Storage | null = null
+/** Tests replace storage so nothing leaves the process. */
+export const setStorage = (fake: Storage | null) => { override = fake }
+const active = (): Storage => override ?? s3Storage
+
+export const getPresignedPutUrl = (key: string, contentType?: string, expiresIn = 300) => active().presignPut(key, contentType, expiresIn)
+export const getPresignedGetUrl = (key: string, expiresIn = 300) => active().presignGet(key, expiresIn)
+export const deleteS3Object = (key: string) => active().remove(key)
+export const headObject = (key: string) => active().head(key)
+export const listObjects = (prefix: string, token?: string) => active().list(prefix, token)

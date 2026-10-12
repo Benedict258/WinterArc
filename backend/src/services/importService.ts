@@ -5,6 +5,8 @@ import { Goal } from '../models/Goal'
 import { WishlistItem } from '../models/WishlistItem'
 import { markNotificationsDirty } from './notificationService'
 import { getUserBlocks } from './dayBlocksService'
+import { getPlan } from './planService'
+import { assertThreadRoom, PlanLimitError } from './threadService'
 import { resolveBlock, UNSCHEDULED } from '../../../src/shared/dayBlocks'
 
 export class ImportError extends Error {}
@@ -70,7 +72,10 @@ async function resolveThreads(userId: string, names: (string | null | undefined)
     const name = n?.trim()
     if (name && !byName.has(name.toLowerCase()) && !missing.has(name.toLowerCase())) missing.set(name.toLowerCase(), name)
   }
-  const make = create ? [...missing.values()].slice(0, MAX_NEW_THREADS) : []
+  const { limits } = await getPlan(userId)
+  const room = Math.max(0, limits.maxThreads - (await Thread.countDocuments({ userId, status: { $ne: 'archived' } })))
+  // threads beyond the plan's room are not created; their tasks go in without a thread
+  const make = create ? [...missing.values()].slice(0, Math.min(MAX_NEW_THREADS, room)) : []
   if (!dryRun) {
     for (const name of make) {
       const t = await Thread.create({ userId, name, category: 'Other', frequency: 'weekly', taskMode: 'discrete', priority: 'medium', intensity: 'medium' })
@@ -142,6 +147,10 @@ export async function importWinterArc(userId: string, data: z.infer<typeof winte
   const idByName = new Map(existing.map(t => [t.name.trim().toLowerCase(), String(t._id)]))
   const idByOld = new Map<string, string>()
   const newThreads: string[] = []
+  const unknown = new Set(threads.map((t: any) => str(t.name, 100).toLowerCase()).filter(n => !idByName.has(n)))
+  if (!dryRun) {
+    try { await assertThreadRoom(userId, unknown.size) } catch (e) { throw e instanceof PlanLimitError ? new ImportError(e.message) : e }
+  }
   for (const t of threads) {
     const name = str(t.name, 100)
     const known = idByName.get(name.toLowerCase())

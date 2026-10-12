@@ -10,6 +10,7 @@ import { Thread } from './backend/src/models/Thread.ts'
 import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
 import { PushSubscription } from './backend/src/models/PushSubscription.ts'
 import { pushConfigured, vapidPublicKey, sendToUser, runNotificationTick, startNotificationScheduler, markNotificationsDirty } from './backend/src/services/notificationService.ts'
+import { getDropUsage, assertCanUpload, registerFile, addTextItem, DropError, sweepDropIfDue } from './backend/src/services/dropService.ts'
 import { updateSettings } from './backend/src/services/settingsService.ts'
 import { validUnsubscribe } from './backend/src/services/emailService.ts'
 import {
@@ -208,6 +209,7 @@ export function createApp() {
     if (!ok) return res.status(401).json({ error: 'Unauthorized' })
     try {
       const calendar = await syncAllStale().catch(err => { console.error('Calendar sync failed:', errorMessage(err)); return null })
+      void sweepDropIfDue() // stored files nothing points at, at most every six hours
       res.json({ ...(await runNotificationTick()), calendar })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
@@ -673,46 +675,43 @@ export function createApp() {
   // ============================================
   // DROP ENDPOINTS
   // ============================================
-  app.get('/api/drop/status', (req, res) => {
-    res.json({ storageConfigured: isStorageConfigured() })
+  app.get('/api/drop/status', async (req, res) => {
+    try {
+      res.json({ storageConfigured: isStorageConfigured(), usage: await getDropUsage(uid(req)) })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
   })
+
+  const dropFail = (res: express.Response, error: unknown) => {
+    if (error instanceof DropError) return res.status(error.status).json({ error: error.message })
+    return res.status(storageErrorStatus(error)).json({ error: errorMessage(error) })
+  }
 
   app.post('/api/drop/upload-url', validateRequest(dropUploadUrlSchema), async (req, res) => {
     try {
       const { fileName, mimeType, fileSize } = req.body
-      const MAX_SIZE = 100 * 1024 * 1024
-      if (fileSize > MAX_SIZE) {
-        return res.status(400).json({ error: 'File exceeds 100MB limit' })
-      }
+      if (!isStorageConfigured()) throw new StorageNotConfiguredError()
+      await assertCanUpload(uid(req), fileSize)
       const key = `drop/${uid(req)}/${uuidv4()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '-')}`
       const url = await getPresignedPutUrl(key, mimeType, 300)
       res.json({ uploadUrl: url, s3Key: key })
     } catch (error) {
-      res.status(storageErrorStatus(error)).json({ error: errorMessage(error) })
+      dropFail(res, error)
     }
   })
 
   app.post('/api/drop', validateRequest(dropItemSchema), async (req, res) => {
     try {
       const body = req.body
-      // Files live under the owner's own prefix; refuse keys that point anywhere else
-      if (body.type === 'file' && !body.s3Key.startsWith(`drop/${uid(req)}/`)) return res.status(400).json({ error: 'Invalid file key' })
-      const now = new Date()
-      const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-      const doc = await DropItem.create({
-        userId: uid(req),
-        type: body.type,
-        s3Key: body.type === 'file' ? body.s3Key : null,
-        fileName: body.type === 'file' ? body.fileName : null,
-        fileSize: body.type === 'file' ? body.fileSize : null,
-        mimeType: body.type === 'file' ? body.mimeType : null,
-        textContent: body.type === 'text' || body.type === 'link' ? body.textContent : null,
-        createdAt: now,
-        expiresAt,
-      })
-      res.status(201).json(doc)
+      if (body.type === 'file') {
+        // Files live under the owner's own prefix; refuse keys that point anywhere else
+        if (!body.s3Key.startsWith(`drop/${uid(req)}/`)) return res.status(400).json({ error: 'Invalid file key' })
+        return res.status(201).json(await registerFile(uid(req), body))
+      }
+      res.status(201).json(await addTextItem(uid(req), body.type, body.textContent))
     } catch (error) {
-      res.status(500).json({ error: errorMessage(error) })
+      dropFail(res, error)
     }
   })
 
