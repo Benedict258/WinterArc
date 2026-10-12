@@ -1,3 +1,4 @@
+import EventFields, { emptyEvent, eventFromThread, eventValid, describeEvent } from '@/components/EventFields'
 import MainLayout from '@/components/MainLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ const frequencyColors: Record<string, string> = {
 }
 
 function frequencyDescription(thread: any): string {
+  if (thread.taskMode === 'event') return describeEvent(thread)
   switch (thread.frequency) {
     case 'daily': return 'Every day'
     case 'weekly': return 'Once per week'
@@ -57,7 +59,8 @@ export default function ThreadsView() {
     priority: 'medium' as 'low' | 'medium' | 'high',
     intensity: 'medium' as 'light' | 'medium' | 'heavy',
     notes: '',
-    taskMode: 'discrete' as 'discrete' | 'continuous',
+    taskMode: 'discrete' as 'discrete' | 'continuous' | 'event',
+    ...emptyEvent,
   })
 
   const extraCategories = Array.from(new Set(threads.map(t => t.category))).filter(c => !PREDEFINED_CATEGORIES.includes(c))
@@ -69,7 +72,7 @@ export default function ThreadsView() {
     setEditId('new')
     setForm({
       name: '', category: '', frequency: '', fixedDay: null, status: 'active',
-      priority: 'medium', intensity: 'medium', notes: '', taskMode: 'discrete',
+      priority: 'medium', intensity: 'medium', notes: '', taskMode: 'discrete', ...emptyEvent,
     })
   }
 
@@ -85,6 +88,7 @@ export default function ThreadsView() {
       intensity: thread.intensity || 'medium',
       notes: thread.notes || '',
       taskMode: thread.taskMode || 'continuous',
+      ...eventFromThread(thread),
     })
   }
 
@@ -102,6 +106,12 @@ export default function ThreadsView() {
       intensity: form.intensity,
       notes: form.notes,
       taskMode: form.taskMode,
+    }
+    if (form.taskMode === 'event') {
+      // Events repeat on chosen weekdays at a set time; frequency isn't used
+      Object.assign(payload, { frequency: 'weekly', fixedDay: null, eventStart: form.eventStart, eventEnd: form.eventEnd, eventDays: form.eventDays })
+    } else {
+      Object.assign(payload, { eventStart: null, eventEnd: null, eventDays: [] })
     }
     if (editId === 'new') {
       createThread(payload)
@@ -194,14 +204,20 @@ export default function ThreadsView() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex gap-1.5 flex-wrap items-center">
-                        <Badge className={`text-[10px] ${frequencyColors[thread.frequency] || ''}`}>{thread.frequency}</Badge>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px]"
-                          title={thread.taskMode === 'discrete' ? 'Only scheduled when it has a queued task' : 'Scheduled on its days even with no tasks (uses the thread name)'}
-                        >
-                          {thread.taskMode === 'discrete' ? 'only with tasks' : 'always on'}
-                        </Badge>
+                        {thread.taskMode === 'event' ? (
+                          <Badge variant="outline" className="text-[10px]" title="Fixed time on set weekdays">event</Badge>
+                        ) : (
+                          <>
+                            <Badge className={`text-[10px] ${frequencyColors[thread.frequency] || ''}`}>{thread.frequency}</Badge>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px]"
+                              title={thread.taskMode === 'discrete' ? 'Only scheduled when it has a queued task' : 'Scheduled on its days even with no tasks (uses the thread name)'}
+                            >
+                              {thread.taskMode === 'discrete' ? 'only with tasks' : 'always on'}
+                            </Badge>
+                          </>
+                        )}
                         <Badge variant={thread.status === 'active' ? 'default' : 'outline'} className="text-[10px]">{thread.status}</Badge>
                         <Badge
                           variant="outline"
@@ -331,6 +347,7 @@ export default function ThreadsView() {
                 </select>
               </div>
 
+              {form.taskMode !== 'event' && (
               <div>
                 <label className="block text-sm font-medium mb-1">Frequency</label>
                 <select
@@ -346,8 +363,9 @@ export default function ThreadsView() {
                   <option value="fixed-day">Fixed day</option>
                 </select>
               </div>
+              )}
 
-              {form.frequency === 'fixed-day' && (
+              {form.taskMode !== 'event' && form.frequency === 'fixed-day' && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Fixed Day</label>
                   <select
@@ -414,8 +432,16 @@ export default function ThreadsView() {
                     <input type="radio" name="taskMode" value="continuous" checked={form.taskMode === 'continuous'} onChange={() => setForm(f => ({ ...f, taskMode: 'continuous' }))} />
                     Continuous
                   </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="taskMode" value="event" checked={form.taskMode === 'event'} onChange={() => setForm(f => ({ ...f, taskMode: 'event' }))} />
+                    Event / Session
+                  </label>
                 </div>
               </div>
+
+              {form.taskMode === 'event' && (
+                <EventFields value={form} onChange={v => setForm(f => ({ ...f, ...v }))} />
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-1">Notes (optional)</label>
@@ -431,7 +457,7 @@ export default function ThreadsView() {
                 <Button type="button" onClick={closeForm} variant="outline" size="sm" disabled={isCreating || isUpdating}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" disabled={isCreating || isUpdating || !form.name || !form.category || !form.frequency || !form.status || (form.frequency === 'fixed-day' && form.fixedDay === null)}>
+                <Button type="submit" size="sm" disabled={isCreating || isUpdating || !form.name || !form.category || (form.taskMode !== 'event' && !form.frequency) || !form.status || (form.taskMode !== 'event' && form.frequency === 'fixed-day' && form.fixedDay === null) || (form.taskMode === 'event' && !eventValid(form))}>
                   {editId === 'new' ? 'Create' : 'Save'}
                 </Button>
               </div>

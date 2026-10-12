@@ -49,9 +49,13 @@ const threadSchema = new mongoose.Schema(
     },
     taskMode: {
       type: String,
-      enum: ['discrete', 'continuous'],
+      enum: ['discrete', 'continuous', 'event'],
       default: 'continuous',
     },
+    // Event/session threads: wall-clock 'HH:mm' in the user's timezone, repeating on these weekdays (0 = Monday)
+    eventStart: { type: String, default: null },
+    eventEnd: { type: String, default: null },
+    eventDays: { type: [Number], default: [] },
     notes: String,
     resources: [resourceSchema],
   },

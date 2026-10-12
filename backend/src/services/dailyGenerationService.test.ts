@@ -363,3 +363,33 @@ describe('recurring threads over whole weeks', () => {
     expect(perWeek[0]['daily-c']).toBe(7)
   })
 })
+
+describe('event threads', () => {
+  const event = (overrides: Partial<PlanThread> = {}) =>
+    thread('e', { name: 'Study group', taskMode: 'event', frequency: 'weekly', eventStart: '18:30', eventEnd: '20:00', eventDays: [0, 2], ...overrides })
+
+  it('places the event on its weekdays only, at its time', () => {
+    const monday = planDay(MONDAY, [event()], freshState())
+    expect(monday).toHaveLength(1)
+    expect(monday[0]).toMatchObject({ kind: 'event', title: 'Study group', startTime: '18:30', endTime: '20:00', timeBlock: 'evening' })
+    expect(planDay(addDaysKey(MONDAY, 1), [event()], freshState())).toHaveLength(0) // Tuesday
+    expect(planDay(addDaysKey(MONDAY, 2), [event()], freshState())).toHaveLength(1) // Wednesday
+  })
+
+  it('picks the block from the start time', () => {
+    expect(planDay(MONDAY, [event({ eventStart: '09:00' })], freshState())[0].timeBlock).toBe('morning')
+    expect(planDay(MONDAY, [event({ eventStart: '13:00' })], freshState())[0].timeBlock).toBe('afternoon')
+  })
+
+  it('ignores the daily cap and does not use up load', () => {
+    const state = freshState()
+    const actions = planDay(MONDAY, [event(), thread('d', { frequency: 'daily' })], state, { maxDailyIntensity: 2 })
+    expect(actions.map(a => a.kind).sort()).toEqual(['event', 'placeholder'])
+    expect(state.dayLoad).toBe(2) // only the placeholder counts
+  })
+
+  it('is never rotated as a normal thread', () => {
+    const actions = planDay(addDaysKey(MONDAY, 1), [event({ frequency: 'daily' })], freshState())
+    expect(actions).toHaveLength(0)
+  })
+})

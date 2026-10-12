@@ -25,7 +25,10 @@ export type Thread = {
   /** 0 = Monday … 6 = Sunday */
   fixedDay: number | null;
   status: string;
-  taskMode: 'discrete' | 'continuous';
+  taskMode: 'discrete' | 'continuous' | 'event';
+  eventStart?: string | null;
+  eventEnd?: string | null;
+  eventDays?: number[];
   priority: 'low' | 'medium' | 'high';
   intensity: 'light' | 'medium' | 'heavy';
   notes: string;

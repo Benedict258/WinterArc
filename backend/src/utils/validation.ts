@@ -8,6 +8,7 @@ const priorityEnum = z.enum(['low', 'medium', 'high']);
 const intensityEnum = z.enum(['light', 'medium', 'heavy']);
 // Client-generated Mongo ObjectId, so a record created offline keeps the same id once synced
 const clientId = z.string().regex(/^[0-9a-f]{24}$/i, 'Invalid id');
+const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:mm');
 const httpUrl = z.string().trim().url().refine(u => /^https?:\/\//i.test(u), 'URL must start with http:// or https://');
 
 // Thread validation schema
@@ -21,7 +22,10 @@ export const threadSchema = z.object({
   status: z.enum(['active', 'parked', 'archived']).optional(),
   priority: priorityEnum.optional(),
   intensity: intensityEnum.optional(),
-  taskMode: z.enum(['discrete', 'continuous']).optional(),
+  taskMode: z.enum(['discrete', 'continuous', 'event']).optional(),
+  eventStart: clockTime.optional().nullable(),
+  eventEnd: clockTime.optional().nullable(),
+  eventDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   notes: z.string().optional().nullable(),
 });
 export const threadUpdateSchema = threadSchema.omit({ _id: true }).partial();
@@ -46,6 +50,9 @@ export const taskSchema = z.object({
   completedAt: z.string().optional().nullable(),
   priority: priorityEnum.optional(),
   intensity: intensityEnum.optional(),
+  isEvent: z.boolean().optional(),
+  startTime: clockTime.optional().nullable(),
+  endTime: clockTime.optional().nullable(),
   calendarEventId: z.string().optional().nullable(),
   source: z.enum(['manual', 'auto-generated', 'google-calendar']).optional(),
 });

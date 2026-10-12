@@ -18,6 +18,9 @@ export type Task = {
   completedAt: string | null;
   priority: 'low' | 'medium' | 'high';
   intensity: 'light' | 'medium' | 'heavy';
+  isEvent?: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
   calendarEventId: string | null;
   source: string;
   createdAt: string;

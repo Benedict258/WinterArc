@@ -551,6 +551,9 @@ async function startServer() {
           source: t.source,
           priority: t.priority,
           intensity: t.intensity,
+          isEvent: t.isEvent,
+          startTime: t.startTime,
+          endTime: t.endTime,
         })),
         forecast,
       })

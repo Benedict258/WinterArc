@@ -8,7 +8,7 @@ export const threadSchema = z.object({
   fixedDay: z.number().int().min(0).max(6).optional(), // 0 = Monday, 6 = Sunday
   status: z.enum(['active', 'parked', 'archived']).default('active'),
   notes: z.string().optional(),
-  taskMode: z.enum(['discrete', 'continuous']).default('discrete'),
+  taskMode: z.enum(['discrete', 'continuous', 'event']).default('discrete'),
 });
 
 // Task validation schema
