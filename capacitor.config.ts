@@ -4,7 +4,8 @@ import type { CapacitorConfig } from '@capacitor/cli'
 // works offline from the first launch. API calls go to the Render backend
 // (see VITE_API_BASE in the build) with a bearer token instead of cookies.
 const config: CapacitorConfig = {
-  appId: 'dev.benedictisaac.winterarc.beta', // different from the personal app so both can be installed side by side
+  // different from the personal app so both can be installed side by side; CAP_APP_ID overrides it for a store release
+  appId: process.env.CAP_APP_ID || 'dev.benedictisaac.winterarc.beta',
   appName: 'WinterArc',
   webDir: 'dist',
   android: { backgroundColor: '#0b1220' },

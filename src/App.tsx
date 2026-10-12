@@ -20,7 +20,7 @@ import AppearanceApplier from './components/AppearanceApplier'
 import ModuleRoute from './components/ModuleRoute'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
-import { PrivacyPage, TermsPage } from './pages/LegalPages'
+import { PrivacyPage, TermsPage, DeleteAccountPage } from './pages/LegalPages'
 import AdminPage from './pages/AdminPage'
 import AssistantPage from './pages/AssistantPage'
 import ImportPage from './pages/ImportPage'
@@ -42,6 +42,7 @@ function App() {
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/terms" element={<TermsPage />} />
+              <Route path="/delete-account" element={<DeleteAccountPage />} />
               <Route
                 path="/*"
                 element={

@@ -10,7 +10,9 @@ android {
     namespace = "dev.benedictisaac.winterarc"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "dev.benedictisaac.winterarc.beta"
+        // The package name is permanent once an app is on Google Play. The beta id is the default;
+        // set ANDROID_APP_ID (repository variable) to publish under a different one.
+        applicationId System.getenv('ANDROID_APP_ID') ?: "dev.benedictisaac.winterarc.beta"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode buildNumber as int

@@ -6,6 +6,7 @@ import MainLayout from '@/components/MainLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
+import { isNative } from '@/lib/native'
 import { formatBytes, type Limits, type Plan, type PlanId } from '@/shared/plans'
 
 type Status = {
@@ -111,7 +112,10 @@ export default function BillingPage() {
                     </tbody>
                   </table>
                 </div>
-                {data.enabled ? (
+                {isNative() ? (
+                  // Google Play only allows in-app purchases through Play Billing, so the Android app shows the plan but doesn't sell it
+                  <p className="text-sm text-muted-foreground">Plans are managed on the WinterArc website, with the same account.</p>
+                ) : data.enabled ? (
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div className="p-4 rounded-xl border border-border space-y-2">
                       <p className="font-semibold">1 month</p>

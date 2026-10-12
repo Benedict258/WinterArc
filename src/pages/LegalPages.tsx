@@ -59,6 +59,7 @@ export function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>Until you delete it or your account. Drop items expire on the date shown. Reminder logs are removed after 14 days. When you delete your account in Settings, your records, devices, tokens and stored files are erased straight away; backups held by our providers are overwritten on their normal schedule.</p>
       <h2>Your choices</h2>
+      <p>How to delete your account is also explained on the <a className="text-primary hover:underline" href="/delete-account">account deletion page</a>.</p>
       <ul>
         <li><b>Download</b> everything we hold about you: Settings → Privacy &amp; data.</li>
         <li><b>Delete</b> your account and data: Settings → Privacy &amp; data.</li>
@@ -98,6 +99,27 @@ export function TermsPage() {
       <p>You can delete your account at any time in Settings. We may suspend or remove accounts that break these terms or put the service at risk, and we may end the beta with reasonable notice.</p>
       <h2>Changes</h2>
       <p>We may update these terms. If a change matters, we’ll tell you in the app or by email; using WinterArc after that means you accept it.</p>
+    </Page>
+  )
+}
+
+export function DeleteAccountPage() {
+  const { config } = useAuth()
+  return (
+    <Page title="Delete your WinterArc account">
+      <p>You can delete your account and everything in it yourself, at any time.</p>
+      <h2>In the app or on the website</h2>
+      <ul>
+        <li>Sign in to WinterArc.</li>
+        <li>Open <b>Settings</b>, then <b>Privacy &amp; account</b>, then <b>Delete my account</b>.</li>
+        <li>Type your email address (and your password, if you use one) to confirm.</li>
+      </ul>
+      <h2>What is deleted</h2>
+      <p>Straight away and permanently: your account, threads, tasks, goals, wishlist, Drop items and uploaded files, settings, reminders and registered devices, AI assistant history and usage, partner connections and the shared-thread memberships you hold. Tasks you gave to other people in threads you shared stay with them, outside the thread.</p>
+      <h2>What is kept</h2>
+      <p>If you paid for a plan, our payment records (reference, amount and date) are kept for accounting. Backups held by our hosting providers are overwritten on their normal schedule.</p>
+      <h2>Can’t sign in?</h2>
+      <p>{config.supportEmail ? <>Email <a className="text-primary hover:underline" href={`mailto:${config.supportEmail}`}>{config.supportEmail}</a> from the address on the account and ask for it to be deleted.</> : 'Contact the person who invited you and ask for the account to be deleted.'} We’ll confirm before we delete anything.</p>
     </Page>
   )
 }

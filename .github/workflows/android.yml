@@ -8,7 +8,7 @@ name: Android app (beta)
 #
 # One-time setup (repo Settings -> Secrets and variables -> Actions):
 #   secrets:   ANDROID_BETA_KEYSTORE_BASE64, ANDROID_BETA_KEYSTORE_PASSWORD, ANDROID_BETA_KEY_ALIAS
-#   variables: BETA_API_BASE  (e.g. https://winterarc-beta-api.onrender.com)
+#   variables: BETA_API_BASE  (e.g. https://winterarc-beta-api.onrender.com), and optionally ANDROID_APP_ID
 
 on:
   workflow_dispatch:
@@ -33,6 +33,9 @@ jobs:
       VERSION_CODE: ${{ github.run_number }}
       # The bundled app talks to the API directly (see src/lib/api.ts)
       VITE_API_BASE: ${{ vars.BETA_API_BASE }}
+      # Optional: publish under another package name (permanent once on Google Play)
+      ANDROID_APP_ID: ${{ vars.ANDROID_APP_ID }}
+      CAP_APP_ID: ${{ vars.ANDROID_APP_ID }}
     steps:
       - uses: actions/checkout@v4
 
