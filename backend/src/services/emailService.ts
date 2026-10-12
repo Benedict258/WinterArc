@@ -133,3 +133,23 @@ export function threadInviteMessage(to: string, from: { name: string; email: str
     html: layout(`${who} shared “${threadName}” with you`, hasAccount ? 'Open WinterArc to accept or decline.' : 'WinterArc is in private beta, so you’ll need an invite code to join: ask them. Once you have an account with this email address, the invitation will be waiting for you.', `${url}/threads`, 'Open WinterArc'),
   }
 }
+
+export function planEndingMessage(to: string, endsOn: string): Email {
+  const url = `${appUrl()}/billing`
+  return {
+    to,
+    subject: 'Your WinterArc Pro plan ends soon',
+    text: `Your WinterArc Pro plan ends on ${endsOn}. After that you'll go back to the free plan: your data stays, but new files, threads and shared people are limited to the free allowance.\n\nExtend it any time: ${url}`,
+    html: layout('Your Pro plan ends soon', `It ends on ${endsOn}. After that you’ll go back to the free plan: your data stays, but adding new files, threads and shared people is limited to the free allowance.`, url, 'Extend Pro'),
+  }
+}
+
+export function paymentReceiptMessage(to: string, months: number, until: string, amount: string): Email {
+  const url = `${appUrl()}/billing`
+  return {
+    to,
+    subject: 'Thanks for upgrading WinterArc',
+    text: `Payment received (${amount}). Your Pro plan now runs until ${until}.\n\nSee your plan: ${url}`,
+    html: layout('Thanks, you’re on Pro', `Payment received (${amount}). Your Pro plan now runs until ${until}.`, url, 'See your plan'),
+  }
+}

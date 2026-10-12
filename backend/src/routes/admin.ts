@@ -11,6 +11,8 @@ import { ApiToken } from '../models/ApiToken'
 import { AuditLog } from '../models/AuditLog'
 import { AiUsage } from '../models/AiUsage'
 import { grantBonus } from '../services/aiService'
+import { grantPlan } from '../services/billingService'
+import { effectivePlan } from '../services/planService'
 import { deleteAccount } from '../services/accountService'
 import { inviteCodeString } from '../utils/tokens'
 
@@ -70,7 +72,7 @@ adminRouter.get('/users', async (req, res) => {
   res.json({
     total, page, pages: Math.max(1, Math.ceil(total / limit)),
     users: users.map(u => ({
-      id: String(u._id), email: u.email, name: u.name, role: u.role, status: u.status, emailVerified: !!u.emailVerifiedAt,
+      id: String(u._id), email: u.email, name: u.name, role: u.role, status: u.status, plan: effectivePlan(u), planExpiresAt: effectivePlan(u) === 'pro' ? u.planExpiresAt : null, emailVerified: !!u.emailVerifiedAt,
       aiTokens: (aiBy.get(String(u._id))?.inputTokens ?? 0) + (aiBy.get(String(u._id))?.outputTokens ?? 0), aiMoreRequested: !!aiBy.get(String(u._id))?.moreRequestedAt,
       createdAt: u.createdAt, lastSeenAt: u.lastSeenAt, tasks: t.get(String(u._id)) ?? 0, threads: th.get(String(u._id)) ?? 0, dropBytes: d.get(String(u._id)) ?? 0,
     })),
@@ -117,6 +119,15 @@ adminRouter.post('/users/:id/ai-bonus', validateRequest(bonusSchema), async (req
   if (!objectId.test(req.params.id) || !(await User.exists({ _id: req.params.id }))) return res.status(404).json({ error: 'User not found' })
   await grantBonus(req.params.id, req.body.tokens)
   await audit(uid(req), 'ai.bonus', req.params.id, `${req.body.tokens} tokens`)
+  res.json({ ok: true })
+})
+
+const planSchema = z.object({ plan: z.enum(['free', 'pro']), days: z.number().int().min(1).max(3650).optional() })
+adminRouter.post('/users/:id/plan', validateRequest(planSchema), async (req, res) => {
+  if (!objectId.test(req.params.id) || !(await User.exists({ _id: req.params.id }))) return res.status(404).json({ error: 'User not found' })
+  if (req.body.plan === 'pro' && !req.body.days) return res.status(400).json({ error: 'Say how many days of Pro to give.' })
+  await grantPlan(req.params.id, req.body.plan, req.body.days ?? 0)
+  await audit(uid(req), 'plan.set', req.params.id, req.body.plan === 'pro' ? `pro +${req.body.days} days` : 'free')
   res.json({ ok: true })
 })
 

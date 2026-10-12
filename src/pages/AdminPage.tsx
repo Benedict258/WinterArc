@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext'
 type AdminUser = {
   id: string; email: string; name: string; role: string; status: 'active' | 'suspended'; emailVerified: boolean
   createdAt: string; lastSeenAt: string | null; tasks: number; threads: number; dropBytes: number
-  aiTokens: number; aiMoreRequested: boolean
+  aiTokens: number; aiMoreRequested: boolean; plan: 'free' | 'pro'; planExpiresAt: string | null
 }
 type Invite = { id: string; code: string; note: string; maxUses: number; remaining: number; expiresAt: string | null; revokedAt: string | null }
 
@@ -69,6 +69,12 @@ function Users() {
     onError: (e: Error) => toast({ title: 'Action failed', description: e.message, variant: 'destructive' }),
   })
 
+  const setPlan = useMutation({
+    mutationFn: ({ id, plan }: { id: string; plan: 'free' | 'pro' }) => api(`/api/admin/users/${id}/plan`, { method: 'POST', body: JSON.stringify(plan === 'pro' ? { plan, days: 30 } : { plan }) }),
+    onSuccess: () => { refresh(); toast({ title: 'Plan updated' }) },
+    onError: (e: Error) => toast({ title: 'Action failed', description: e.message, variant: 'destructive' }),
+  })
+
   const remove = async (u: AdminUser) => {
     if (await confirmDialog({ title: 'Delete this account?', description: `${u.email} and all of their data and files will be erased. This can’t be undone.`, confirmLabel: 'Delete account', destructive: true } as any)) {
       act.mutate({ id: u.id, action: 'delete' })
@@ -96,11 +102,12 @@ function Users() {
                   <p className="text-xs text-muted-foreground">
                     Joined {when(u.createdAt)} · seen {when(u.lastSeenAt)} · {u.emailVerified ? 'email confirmed' : 'email unconfirmed'}
                   </p>
-                  <p className="text-xs text-muted-foreground">{u.threads} threads · {u.tasks} tasks · Drop {mb(u.dropBytes)} · AI {Math.round(u.aiTokens / 1000)}k tokens{u.aiMoreRequested && <span className="text-primary"> · asked for more</span>}</p>
+                  <p className="text-xs text-muted-foreground">{u.threads} threads · {u.tasks} tasks · Drop {mb(u.dropBytes)} · AI {Math.round(u.aiTokens / 1000)}k tokens{u.aiMoreRequested && <span className="text-primary"> · asked for more</span>} · {u.plan === 'pro' ? `Pro until ${new Date(u.planExpiresAt!).toLocaleDateString()}` : 'Free'}</p>
                 </div>
                 {u.role !== 'admin' && (
                   <div className="flex gap-2 shrink-0">
                     <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => grant.mutate(u.id)}>+AI</Button>
+                    <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => setPlan.mutate({ id: u.id, plan: u.plan === 'pro' ? 'free' : 'pro' })}>{u.plan === 'pro' ? 'End Pro' : 'Give Pro'}</Button>
                     <Button size="sm" variant="outline" disabled={act.isPending} onClick={() => act.mutate({ id: u.id, action: u.status === 'active' ? 'suspend' : 'unsuspend' })}>
                       {u.status === 'active' ? 'Suspend' : 'Restore'}
                     </Button>

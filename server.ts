@@ -46,6 +46,8 @@ import { authRouter } from './backend/src/routes/auth.ts'
 import { accountRouter, handleExport } from './backend/src/routes/account.ts'
 import { adminRouter } from './backend/src/routes/admin.ts'
 import { aiRouter } from './backend/src/routes/ai.ts'
+import { billingRouter, billingWebhook } from './backend/src/routes/billing.ts'
+import { sendPlanRemindersIfDue } from './backend/src/services/billingService.ts'
 import { teamsRouter } from './backend/src/routes/teams.ts'
 import { partnersRouter } from './backend/src/routes/partners.ts'
 import { importRouter, WINTERARC_IMPORT_PATH } from './backend/src/routes/import.ts'
@@ -133,7 +135,7 @@ function storageErrorStatus(error: unknown) {
 }
 
 /** Paths under /api that work without being logged in. */
-const PUBLIC_PATHS = new Set(['/health', '/cron/tick', '/calendar/callback', '/email/unsubscribe'])
+const PUBLIC_PATHS = new Set(['/health', '/cron/tick', '/calendar/callback', '/email/unsubscribe', '/billing/webhook'])
 
 /**
  * Builds the Express app (API only). Needs an open Mongoose connection.
@@ -160,7 +162,9 @@ export function createApp() {
   }))
   // everything takes small JSON; the WinterArc-export import brings its own larger parser
   const smallJson = express.json({ limit: '1mb' })
-  app.use((req, res, next) => (req.path === WINTERARC_IMPORT_PATH ? next() : smallJson(req, res, next)))
+  // the payment webhook is signed over the exact bytes, so keep them
+  const webhookJson = express.json({ limit: '200kb', verify: (req, _res, buf) => { (req as any).rawBody = buf } })
+  app.use((req, res, next) => (req.path === WINTERARC_IMPORT_PATH ? next() : req.path === '/api/billing/webhook' ? webhookJson(req, res, next) : smallJson(req, res, next)))
   app.use(session({
     name: 'winterarc.sid',
     secret: SESSION_SECRET,
@@ -211,12 +215,15 @@ export function createApp() {
     if (!ok) return res.status(401).json({ error: 'Unauthorized' })
     try {
       const calendar = await syncAllStale().catch(err => { console.error('Calendar sync failed:', errorMessage(err)); return null })
+      void sendPlanRemindersIfDue()
       void sweepDropIfDue() // stored files nothing points at, at most every six hours
       res.json({ ...(await runNotificationTick()), calendar })
     } catch (error) {
       res.status(500).json({ error: errorMessage(error) })
     }
   })
+
+  app.post('/api/billing/webhook', billingWebhook)
 
   // One-click stop for the daily email (linked from every digest); the signature proves the link came from us
   const unsubscribeDigest: express.RequestHandler = async (req, res) => {
@@ -675,6 +682,7 @@ export function createApp() {
   app.use('/api/import', importRouter)
   app.use('/api/partners', requireVerified, partnersRouter)
   app.use('/api/teams', requireVerified, teamsRouter)
+  app.use('/api/billing', billingRouter)
 
   // ============================================
   // DROP ENDPOINTS

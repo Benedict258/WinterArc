@@ -26,6 +26,7 @@ import AssistantPage from './pages/AssistantPage'
 import ImportPage from './pages/ImportPage'
 import PartnersPage from './pages/PartnersPage'
 import TeamThreadPage from './pages/TeamThreadPage'
+import BillingPage from './pages/BillingPage'
 
 const queryClient = new QueryClient()
 
@@ -58,6 +59,7 @@ function App() {
                       <Route path="/settings" element={<SettingsView />} />
                       <Route path="/assistant" element={<ModuleRoute module="ai"><AssistantPage /></ModuleRoute>} />
                       <Route path="/partners" element={<ModuleRoute module="partners"><PartnersPage /></ModuleRoute>} />
+                      <Route path="/billing" element={<BillingPage />} />
                       <Route path="/import" element={<ImportPage />} />
                       <Route path="/admin" element={<AdminPage />} />
                     </Routes>

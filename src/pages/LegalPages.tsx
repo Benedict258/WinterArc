@@ -42,6 +42,8 @@ export function PrivacyPage() {
       <p>If you invite an accountability partner (or accept one), they can see only what you tick for them: your streak, weekly counts, thread names or today’s task titles. Nothing is shared until they accept, you can change it at any time, and removing the partnership ends it. To invite someone we use their email address once, to send the invitation.</p>
       <h2>Shared threads</h2>
       <p>If you share a thread, the people you invite can see its name and its team tasks (title, status, due date, priority and who has it). They can’t see your notes, resources or your planned days. A task given to someone lives in their own plan. Removing someone, or leaving, takes tasks out of the thread but doesn’t delete them.</p>
+      <h2>Payments</h2>
+      <p>If you buy a paid plan, the payment is taken by our payment provider (Paystack); we receive confirmation that you paid, the amount and a reference, never your card details. We keep payment records for accounting even after an account is deleted.</p>
       <h2>Why we use it</h2>
       <p>Only to run the service for you: sign you in, plan your days, sync between your devices, and send the reminders and emails you ask for (confirmation, password reset, and the daily summary if you switch it on). We don’t sell your data or use it for advertising, and we don’t read your tasks except to fix a problem you ask us about.</p>
       <h2>Who helps us run it</h2>

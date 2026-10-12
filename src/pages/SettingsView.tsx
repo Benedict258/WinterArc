@@ -176,6 +176,16 @@ export default function SettingsView() {
               </CardContent>
             </Card>
 
+            <Card>
+              <CardHeader>
+                <CardTitle>Plan &amp; usage</CardTitle>
+                <CardDescription>Storage, threads, partners and the AI allowance, and Pro.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" onClick={() => navigate('/billing')}>See plan and usage</Button>
+              </CardContent>
+            </Card>
+
             <AppearanceCard />
             <DayStructureCard />
             <PlannerRulesCard />

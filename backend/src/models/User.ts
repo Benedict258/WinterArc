@@ -22,6 +22,8 @@ const userSchema = new mongoose.Schema(
     /** billing plan; falls back to free once planExpiresAt has passed */
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     planExpiresAt: { type: Date, default: null },
+    /** the plan end we last emailed a renewal reminder for */
+    planReminderFor: { type: Date, default: null },
     termsAcceptedAt: { type: Date, default: null },
     termsVersion: { type: String, default: null },
     signedUpWithCode: { type: String, default: null },
