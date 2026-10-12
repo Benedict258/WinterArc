@@ -450,13 +450,19 @@ async function startServer() {
 
   app.post('/api/threads/:id/resources', validateRequest(threadResourceSchema), async (req, res) => {
     try {
-      const { title, url, description, kind } = req.body
+      const { _id, title, url, description, kind } = req.body
       const thread = await Thread.findById(req.params.id)
       if (!thread) {
         res.status(404).json({ error: 'Thread not found' })
         return
       }
-      thread.resources.push({ title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' } as any)
+      // Replayed offline add: the first attempt may already have landed
+      const already = _id ? thread.resources.find(r => String(r._id) === _id) : null
+      if (already) {
+        res.status(200).json(already)
+        return
+      }
+      thread.resources.push({ ...(_id ? { _id } : {}), title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' } as any)
       await thread.save()
       res.status(201).json(thread.resources[thread.resources.length - 1])
     } catch (error) {
@@ -607,8 +613,10 @@ async function startServer() {
 
   app.post('/api/wishlist', validateRequest(wishlistItemSchema), async (req, res) => {
     try {
-      const item = new WishlistItem(req.body)
-      await item.save()
+      // Replayed offline create: the first attempt may already have landed
+      const existing = req.body._id ? await WishlistItem.findById(req.body._id) : null
+      const item = existing ?? new WishlistItem(req.body)
+      if (!existing) await item.save()
       res.status(201).json(item)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })

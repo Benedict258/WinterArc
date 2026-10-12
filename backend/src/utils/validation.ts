@@ -27,6 +27,7 @@ export const threadSchema = z.object({
 export const threadUpdateSchema = threadSchema.omit({ _id: true }).partial();
 
 export const threadResourceSchema = z.object({
+  _id: clientId.optional(),
   title: z.string().trim().min(1, 'title is required'),
   url: httpUrl,
   description: z.string().optional(),
@@ -52,11 +53,12 @@ export const taskUpdateSchema = taskSchema.omit({ _id: true }).partial();
 
 // WishlistItem validation schema
 export const wishlistItemSchema = z.object({
+  _id: clientId.optional(),
   item: z.string().trim().min(1, 'Item name is required'),
   note: z.string().optional().nullable(),
   acquired: z.boolean().optional(),
 });
-export const wishlistItemUpdateSchema = wishlistItemSchema.partial();
+export const wishlistItemUpdateSchema = wishlistItemSchema.omit({ _id: true }).partial();
 
 // Goal validation schema
 export const goalSchema = z.object({

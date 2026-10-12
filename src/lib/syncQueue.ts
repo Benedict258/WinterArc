@@ -17,7 +17,9 @@ const txDone = (tx: IDBTransaction) =>
 export const QUEUE_CHANGED = 'syncqueue-changed'
 /** Fired after queued changes reached the server, so cached views can refetch. */
 export const QUEUE_FLUSHED = 'syncqueue-flushed'
-const emit = (name: string) => { if (typeof window !== 'undefined') window.dispatchEvent(new Event(name)) }
+/** Fired when the server rejected a queued change for good; detail = { message }. */
+export const QUEUE_DROPPED = 'syncqueue-dropped'
+const emit = (name: string, detail?: unknown) => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name, { detail })) }
 
 export const addToQueue = async (operation: any) => {
   const db = await openDB()
@@ -95,6 +97,15 @@ const operationHandlers: Record<string, OperationHandler> = {
     })
     return response.json()
   },
+  // Any other call (settings, nested resources, …): { method, url, data? }
+  'request': async (operation: any) => {
+    const response = await send(`${API_URL}${operation.url}`, {
+      method: operation.method,
+      headers: operation.data !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: operation.data !== undefined ? JSON.stringify(operation.data) : undefined,
+    })
+    return response.json().catch(() => ({}))
+  },
   'delete': async (operation: any) => {
     await send(`${API_URL}${operation.endpoint}/${operation.id}`, { method: 'DELETE' })
     return { success: true }
@@ -131,6 +142,7 @@ export const processQueue = (): Promise<void> => {
         if (error instanceof HttpError && error.status >= 400 && error.status < 500 && error.status !== 401 && error.status !== 429) {
           console.error(`Dropping operation ${operation.id}:`, error.message)
           await removeFromQueue(operation.id)
+          emit(QUEUE_DROPPED, { message: error.message })
           continue
         }
         console.error(`Failed to process operation ${operation.id}, will retry:`, error)

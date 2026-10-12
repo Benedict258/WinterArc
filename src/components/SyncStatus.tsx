@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CloudOff, RefreshCw } from 'lucide-react'
-import { getQueue, processQueue, isOnline, QUEUE_CHANGED, QUEUE_FLUSHED } from '@/lib/syncQueue'
+import { useToast } from '@/components/ui/use-toast'
+import { getQueue, processQueue, isOnline, QUEUE_CHANGED, QUEUE_FLUSHED, QUEUE_DROPPED } from '@/lib/syncQueue'
 
 const RETRY_MS = 15_000
 
@@ -13,6 +14,7 @@ const RETRY_MS = 15_000
  */
 export default function SyncStatus() {
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const [online, setOnline] = useState(isOnline())
   const [pending, setPending] = useState(0)
 
@@ -20,6 +22,10 @@ export default function SyncStatus() {
     const refreshCount = () => getQueue().then(q => setPending(q.length))
     const flush = () => { processQueue().catch(console.error) }
     const onFlushed = () => queryClient.invalidateQueries()
+    const onDropped = () => {
+      toast({ title: 'A change could not be synced', description: 'The server rejected an offline change, so it was discarded.', variant: 'destructive' })
+      queryClient.invalidateQueries()
+    }
     const onOnline = () => { setOnline(true); flush() }
     const onOffline = () => setOnline(false)
     const onVisible = () => { if (document.visibilityState === 'visible') flush() }
@@ -27,6 +33,7 @@ export default function SyncStatus() {
     refreshCount()
     window.addEventListener(QUEUE_CHANGED, refreshCount)
     window.addEventListener(QUEUE_FLUSHED, onFlushed)
+    window.addEventListener(QUEUE_DROPPED, onDropped)
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
     document.addEventListener('visibilitychange', onVisible)
@@ -34,12 +41,13 @@ export default function SyncStatus() {
     return () => {
       window.removeEventListener(QUEUE_CHANGED, refreshCount)
       window.removeEventListener(QUEUE_FLUSHED, onFlushed)
+      window.removeEventListener(QUEUE_DROPPED, onDropped)
       window.removeEventListener('online', onOnline)
       window.removeEventListener('offline', onOffline)
       document.removeEventListener('visibilitychange', onVisible)
       clearInterval(timer)
     }
-  }, [queryClient])
+  }, [queryClient, toast])
 
   if (online && pending === 0) return null
 

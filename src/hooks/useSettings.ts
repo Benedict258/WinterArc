@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
+import { cacheSettings, getCachedSettings } from '@/lib/storage';
+import { addToQueue } from '@/lib/syncQueue';
+import { onlineOrQueue } from '@/lib/offline';
 
 // Types
 export type Settings = {
@@ -23,11 +26,18 @@ export const useSettings = () => {
   return useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
-      const response = await fetch(`${API_URL}/api/settings`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch settings');
+      try {
+        const response = await fetch(`${API_URL}/api/settings`);
+        if (!response.ok) throw new Error('Failed to fetch settings');
+        const settings = await response.json();
+        await cacheSettings(settings);
+        return settings;
+      } catch (err) {
+        // Offline: last known settings, with queued edits already applied
+        const cached = await getCachedSettings();
+        if (cached) return cached;
+        throw err;
       }
-      return response.json();
     },
   });
 };
@@ -39,19 +49,27 @@ export const useUpdateSettings = () => {
   
   return useMutation({
     mutationFn: async (updates: Partial<Settings>) => {
-      const response = await fetch(`${API_URL}/api/settings`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
+      return onlineOrQueue(async () => {
+        const response = await fetch(`${API_URL}/api/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        });
+        if (!response.ok) throw new Error('Failed to update settings');
+        const updated = await response.json();
+        await cacheSettings(updated);
+        return updated;
+      }, async () => {
+        await addToQueue({ type: 'request', method: 'PUT', url: '/api/settings', data: updates });
+        const current = await getCachedSettings();
+        const local = {
+          ...current,
+          ...updates,
+          gridBalancing: { ...current?.gridBalancing, ...updates.gridBalancing },
+        };
+        if (current) await cacheSettings(local);
+        return local;
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update settings');
-      }
-      
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });

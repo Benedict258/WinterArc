@@ -23,8 +23,14 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Workbox tests RegExps against the full URL, so match on the path.
-            // Never cache auth responses.
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/'),
+            // Never cache auth responses. Tasks, threads, goals, wishlist and settings
+            // are cached in IndexedDB (with queued offline edits applied); a stale
+            // service-worker copy would hide those edits, so they're left out here.
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith('/api/') &&
+              !url.pathname.startsWith('/api/auth/') &&
+              !/^\/api\/(tasks|goals|wishlist|settings)(\/|$)/.test(url.pathname) &&
+              url.pathname !== '/api/threads',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
