@@ -267,18 +267,20 @@ describe('placement scoring', () => {
     expect(actions.map(a => a.taskId).sort()).toEqual(['in3-high', 'overdue-low', 'tomorrow-low'])
   })
 
-  it('heavy work goes to the morning, light to the evening', () => {
+  it('medium work goes to the morning, light to the afternoon, heavy to the evening', () => {
     const threads = [
-      thread('h', { name: 'Heavy', frequency: 'daily', intensity: 'heavy' }),
+      thread('m', { name: 'Medium', frequency: 'daily', intensity: 'medium' }),
       thread('l', { name: 'Light', frequency: 'daily', intensity: 'light' }),
+      thread('h', { name: 'Heavy', frequency: 'daily', intensity: 'heavy' }),
     ]
     const actions = planDay(MONDAY, threads, freshState())
-    expect(actions.find(a => a.threadId === 'h')!.timeBlock).toBe('morning')
-    expect(actions.find(a => a.threadId === 'l')!.timeBlock).toBe('evening')
+    expect(actions.find(a => a.threadId === 'm')!.timeBlock).toBe('morning')
+    expect(actions.find(a => a.threadId === 'l')!.timeBlock).toBe('afternoon')
+    expect(actions.find(a => a.threadId === 'h')!.timeBlock).toBe('evening')
   })
 
-  it('a full morning pushes more heavy work to the afternoon', () => {
-    const state = { ...freshState(), blockLoads: { morning: 8, afternoon: 0, evening: 0 } }
+  it('a full evening pushes more heavy work to the afternoon', () => {
+    const state = { ...freshState(), blockLoads: { morning: 0, afternoon: 0, evening: 8 } }
     const actions = planDay(MONDAY, [thread('h', { frequency: 'daily', intensity: 'heavy' })], state)
     expect(actions[0].timeBlock).toBe('afternoon')
   })

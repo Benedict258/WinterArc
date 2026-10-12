@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { taskSchema } from '@/utils/validation';
 import { initDB, cacheTasks, removeCachedTask, getCachedTasks } from '@/lib/storage';
+import { onlineOrQueue, newId } from '@/lib/offline';
 import { initSyncDB, addToQueue, isOnline, startSyncListener, stopSyncListener, processQueue } from '@/lib/syncQueue';
 
 // Types
@@ -108,14 +109,15 @@ export const useCreateTask = () => {
 
   return useMutation({
     mutationFn: async (newTask: Partial<Omit<Task, '_id' | 'createdAt' | 'updatedAt'>> & { title: string }) => {
-      if (isOnline()) {
+      const body = { ...newTask, _id: newId() };
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/tasks`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(newTask),
+          body: JSON.stringify(body),
         });
         
         if (!response.ok) {
@@ -130,18 +132,17 @@ export const useCreateTask = () => {
         // But we want to update optimistically.
         // We'll let the query client invalidate and refetch.
         return createdTask;
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'create',
           endpoint: '/api/tasks',
-          data: newTask,
+          data: body,
         };
         await addToQueue(operation);
         // Optimistically add to cache
         const tempTask = {
-          ...newTask,
-          _id: `temp-${Date.now()}`, // Temporary ID
+          ...body,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -149,7 +150,7 @@ export const useCreateTask = () => {
         await cacheTasks([tempTask]);
         // Return the temp task so the UI can use it
         return tempTask;
-      }
+      })
     },
     onSuccess: (data) => {
       // If we were online, we already updated cache in mutationFn.
@@ -191,7 +192,7 @@ export const useUpdateTask = () => {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Task> }) => {
-      if (isOnline()) {
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/tasks/${id}`, {
           method: 'PUT',
@@ -209,7 +210,7 @@ export const useUpdateTask = () => {
         // Update cache
         await cacheTasks([updatedTask]);
         return updatedTask;
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'update',
@@ -226,7 +227,7 @@ export const useUpdateTask = () => {
         await cacheTasks(updatedTasks);
         // Return the updated task for UI
         return { ...currentTasks.find(t => t._id === id), ...updates, updatedAt: new Date().toISOString() };
-      }
+      })
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -261,7 +262,7 @@ export const useDeleteTask = () => {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      if (isOnline()) {
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/tasks/${id}`, {
           method: 'DELETE',
@@ -275,7 +276,7 @@ export const useDeleteTask = () => {
         await removeCachedTask(id);
         
         return { success: true };
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'delete',
@@ -287,7 +288,7 @@ export const useDeleteTask = () => {
         await removeCachedTask(id);
         
         return { success: true };
-      }
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -322,7 +323,7 @@ export const useCompleteTask = () => {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      if (isOnline()) {
+      return onlineOrQueue(async () => {
         // Online: send to API directly
         const response = await fetch(`${API_URL}/api/tasks/${id}/complete`, {
           method: 'PATCH',
@@ -337,7 +338,7 @@ export const useCompleteTask = () => {
         await cacheTasks([completedTask]);
         
         return completedTask;
-      } else {
+      }, async () => {
         // Offline: add to queue
         const operation = {
           type: 'update', // We'll treat complete as an update operation
@@ -354,7 +355,7 @@ export const useCompleteTask = () => {
         await cacheTasks(updatedTasks);
         
         return { ...currentTasks.find(t => t._id === id), status: 'done', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-      }
+      })
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

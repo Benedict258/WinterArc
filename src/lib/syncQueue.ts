@@ -13,11 +13,20 @@ const txDone = (tx: IDBTransaction) =>
     tx.onabort = () => reject(tx.error)
   })
 
+/** Lets the UI show the pending count without polling IndexedDB. */
+export const QUEUE_CHANGED = 'syncqueue-changed'
+/** Fired after queued changes reached the server, so cached views can refetch. */
+export const QUEUE_FLUSHED = 'syncqueue-flushed'
+/** Fired when the server rejected a queued change for good; detail = { message }. */
+export const QUEUE_DROPPED = 'syncqueue-dropped'
+const emit = (name: string, detail?: unknown) => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name, { detail })) }
+
 export const addToQueue = async (operation: any) => {
   const db = await openDB()
   const tx = db.transaction(QUEUE_STORE, 'readwrite')
   tx.objectStore(QUEUE_STORE).add({ ...operation, timestamp: Date.now() })
   await txDone(tx)
+  emit(QUEUE_CHANGED)
 }
 
 export const getQueue = async (): Promise<any[]> => {
@@ -40,6 +49,7 @@ export const removeFromQueue = async (id: number) => {
   const tx = db.transaction(QUEUE_STORE, 'readwrite')
   tx.objectStore(QUEUE_STORE).delete(id)
   await txDone(tx)
+  emit(QUEUE_CHANGED)
 }
 
 export const clearQueue = async () => {
@@ -47,6 +57,7 @@ export const clearQueue = async () => {
   const tx = db.transaction(QUEUE_STORE, 'readwrite')
   tx.objectStore(QUEUE_STORE).clear()
   await txDone(tx)
+  emit(QUEUE_CHANGED)
 }
 
 export const isOnline = (): boolean => {
@@ -86,6 +97,15 @@ const operationHandlers: Record<string, OperationHandler> = {
     })
     return response.json()
   },
+  // Any other call (settings, nested resources, …): { method, url, data? }
+  'request': async (operation: any) => {
+    const response = await send(`${API_URL}${operation.url}`, {
+      method: operation.method,
+      headers: operation.data !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: operation.data !== undefined ? JSON.stringify(operation.data) : undefined,
+    })
+    return response.json().catch(() => ({}))
+  },
   'delete': async (operation: any) => {
     await send(`${API_URL}${operation.endpoint}/${operation.id}`, { method: 'DELETE' })
     return { success: true }
@@ -104,6 +124,7 @@ export const processQueue = (): Promise<void> => {
   processing = (async () => {
     if (!isOnline()) return
     const queue = await getQueue()
+    let sent = 0
     for (const operation of queue) {
       const handler = operationHandlers[operation.type]
       if (!handler) {
@@ -114,12 +135,14 @@ export const processQueue = (): Promise<void> => {
       try {
         await handler(operation)
         await removeFromQueue(operation.id)
+        sent++
       } catch (error) {
         // A 4xx will never succeed on retry (e.g. it was edited offline before
         // its create synced); drop it. Network errors and 5xx stay queued.
         if (error instanceof HttpError && error.status >= 400 && error.status < 500 && error.status !== 401 && error.status !== 429) {
           console.error(`Dropping operation ${operation.id}:`, error.message)
           await removeFromQueue(operation.id)
+          emit(QUEUE_DROPPED, { message: error.message })
           continue
         }
         console.error(`Failed to process operation ${operation.id}, will retry:`, error)
@@ -127,6 +150,7 @@ export const processQueue = (): Promise<void> => {
         break
       }
     }
+    if (sent > 0) emit(QUEUE_FLUSHED)
   })().finally(() => { processing = null })
   return processing
 }

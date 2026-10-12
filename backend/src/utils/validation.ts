@@ -6,10 +6,13 @@ import { z } from 'zod';
 
 const priorityEnum = z.enum(['low', 'medium', 'high']);
 const intensityEnum = z.enum(['light', 'medium', 'heavy']);
+// Client-generated Mongo ObjectId, so a record created offline keeps the same id once synced
+const clientId = z.string().regex(/^[0-9a-f]{24}$/i, 'Invalid id');
 const httpUrl = z.string().trim().url().refine(u => /^https?:\/\//i.test(u), 'URL must start with http:// or https://');
 
 // Thread validation schema
 export const threadSchema = z.object({
+  _id: clientId.optional(),
   name: z.string().trim().min(1, 'Thread name is required'),
   category: z.enum(['Role/Program', 'Active Build', 'Learning Track', 'Application/Outreach', 'Other']).optional(),
   frequency: z.enum(['daily', 'multiple', 'weekly', 'fixed-day']),
@@ -21,9 +24,10 @@ export const threadSchema = z.object({
   taskMode: z.enum(['discrete', 'continuous']).optional(),
   notes: z.string().optional().nullable(),
 });
-export const threadUpdateSchema = threadSchema.partial();
+export const threadUpdateSchema = threadSchema.omit({ _id: true }).partial();
 
 export const threadResourceSchema = z.object({
+  _id: clientId.optional(),
   title: z.string().trim().min(1, 'title is required'),
   url: httpUrl,
   description: z.string().optional(),
@@ -32,6 +36,7 @@ export const threadResourceSchema = z.object({
 
 // Task validation schema
 export const taskSchema = z.object({
+  _id: clientId.optional(),
   title: z.string().trim().min(1, 'Task title is required'),
   threadId: z.string().nullable().optional(),
   date: z.string().optional().nullable(),
@@ -44,22 +49,24 @@ export const taskSchema = z.object({
   calendarEventId: z.string().optional().nullable(),
   source: z.enum(['manual', 'auto-generated', 'google-calendar']).optional(),
 });
-export const taskUpdateSchema = taskSchema.partial();
+export const taskUpdateSchema = taskSchema.omit({ _id: true }).partial();
 
 // WishlistItem validation schema
 export const wishlistItemSchema = z.object({
+  _id: clientId.optional(),
   item: z.string().trim().min(1, 'Item name is required'),
   note: z.string().optional().nullable(),
   acquired: z.boolean().optional(),
 });
-export const wishlistItemUpdateSchema = wishlistItemSchema.partial();
+export const wishlistItemUpdateSchema = wishlistItemSchema.omit({ _id: true }).partial();
 
 // Goal validation schema
 export const goalSchema = z.object({
+  _id: clientId.optional(),
   period: z.string().trim().min(1, 'Period is required'),
   text: z.string().trim().min(1, 'Goal text is required'),
 });
-export const goalUpdateSchema = goalSchema.partial();
+export const goalUpdateSchema = goalSchema.omit({ _id: true }).partial();
 
 // CalendarSync validation schema
 export const calendarSyncSchema = z.object({

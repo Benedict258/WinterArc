@@ -2,10 +2,10 @@
 // One database, one connection, shared with the sync queue (syncQueue.ts).
 
 const DB_NAME = 'workspace-db'
-// v2: every store is created in one place. v1 was opened by two modules with
+// v3 adds wishlist + settings. v2: every store is created in one place. v1 was opened by two modules with
 // different stores, so whichever ran second never got its stores.
-const DB_VERSION = 2
-const DATA_STORES = ['threads', 'tasks', 'goals'] as const
+const DB_VERSION = 3
+const DATA_STORES = ['threads', 'tasks', 'goals', 'wishlist', 'settings'] as const
 export const QUEUE_STORE = 'sync-queue'
 
 type DataStore = typeof DATA_STORES[number]
@@ -110,6 +110,7 @@ export const removeCachedTask = (id: string) => safe('Failed to remove cached ta
 export const getCachedTasks = () => safe('Failed to get cached tasks', [] as any[], () => readAll('tasks'))
 
 export const cacheGoals = (goals: any[]) => safe('Failed to cache goals', undefined, () => replaceAll('goals', goals))
+export const upsertCachedGoals = (goals: any[]) => safe('Failed to cache goals', undefined, () => upsert('goals', goals))
 export const getCachedGoals = () => safe('Failed to get cached goals', [] as any[], () => readAll('goals'))
 
 export const clearCache = () =>
@@ -119,3 +120,11 @@ export const clearCache = () =>
     for (const name of DATA_STORES) tx.objectStore(name).clear()
     await txDone(tx)
   })
+
+export const cacheWishlist = (items: any[]) => safe('Failed to cache wishlist', undefined, () => replaceAll('wishlist', items))
+export const upsertCachedWishlist = (items: any[]) => safe('Failed to cache wishlist', undefined, () => upsert('wishlist', items))
+export const removeCachedWishlistItem = (id: string) => safe('Failed to remove cached wishlist item', undefined, () => remove('wishlist', id))
+export const getCachedWishlist = () => safe('Failed to get cached wishlist', [] as any[], () => readAll('wishlist'))
+
+export const cacheSettings = (settings: any) => safe('Failed to cache settings', undefined, () => replaceAll('settings', [settings]))
+export const getCachedSettings = () => safe('Failed to get cached settings', null as any, async () => (await readAll('settings'))[0] ?? null)

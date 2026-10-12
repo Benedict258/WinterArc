@@ -5,6 +5,11 @@ export async function getThreads() {
 }
 
 export async function createThread(data: any) {
+  // Replayed offline create: the first attempt may already have landed
+  if (data._id) {
+    const existing = await Thread.findById(data._id)
+    if (existing) return existing
+  }
   const thread = new Thread(data)
   return await thread.save()
 }

@@ -13,6 +13,7 @@ import SettingsView from './pages/SettingsView'
 import DropView from './pages/DropView'
 import { Toaster } from './components/ui/toaster'
 import { AuthProvider } from './context/AuthContext'
+import SyncStatus from './components/SyncStatus'
 import PasscodeGate from './components/PasscodeGate'
 
 const queryClient = new QueryClient()
@@ -35,6 +36,7 @@ function App() {
                 <Route path="/drop" element={<DropView />} />
                 <Route path="/settings" element={<SettingsView />} />
               </Routes>
+              <SyncStatus />
               <Toaster />
             </BrowserRouter>
           </PasscodeGate>
