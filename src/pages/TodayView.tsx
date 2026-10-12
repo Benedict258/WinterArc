@@ -23,6 +23,11 @@ export default function TodayView() {
   const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({ morning: true, afternoon: true, evening: true, unscheduled: true })
 
   const { data: tasks = [], isLoading: tasksLoading } = useTasks({ date: todayString })
+  // Tasks you scheduled yourself on earlier days and didn't finish (planner-placed ones are
+  // swept back to their queue each morning)
+  const twoWeeksAgo = toDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 14))
+  const { data: overdueRaw = [] } = useTasks({ status: 'pending', before: todayString, since: twoWeeksAgo })
+  const overdue = overdueRaw.filter((t: any) => !t.isEvent)
   const { mutate: updateTask } = useUpdateTask()
   const { mutate: createTask, isPending: isCreatingTask } = useCreateTask()
   const { mutate: deleteTask } = useDeleteTask()
@@ -190,6 +195,35 @@ export default function TodayView() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Overdue — your own unfinished tasks from earlier days */}
+        {overdue.length > 0 && (
+          <Card className="border-red-500/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base text-red-600 dark:text-red-400">Overdue · {overdue.length}</CardTitle>
+              <CardDescription className="text-xs">Unfinished from earlier days. Move it to today, send it back to the queue, or skip it.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {overdue.map((t: any) => (
+                <div key={t._id} className="space-y-1.5">
+                  <TaskRow
+                    task={{
+                      id: t._id, title: t.title, threadId: t.threadId,
+                      threadName: t.threadId ? threadMap.get(t.threadId) || 'Unknown' : null,
+                      status: t.status, priority: t.priority, intensity: t.intensity, dueDate: t.dueDate || null,
+                    }}
+                    onToggle={() => updateTask({ id: t._id, updates: { status: 'done', completedAt: new Date().toISOString() } })}
+                  />
+                  <div className="flex gap-2 pl-8 sm:pl-10">
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => updateTask({ id: t._id, updates: { date: todayString, timeBlock: 'unscheduled' } })}>Move to today</Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => updateTask({ id: t._id, updates: { date: null, timeBlock: 'unscheduled' } })}>Back to queue</Button>
+                    <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={() => updateTask({ id: t._id, updates: { status: 'skipped' } })}>Skip</Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Expand/Collapse All */}
         <div className="flex justify-end">

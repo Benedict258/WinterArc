@@ -1,6 +1,5 @@
 import { Thread } from '../models/Thread'
 import { Task } from '../models/Task'
-import { WeeklyProgress } from '../models/WeeklyProgress'
 import { Settings } from '../models/Settings'
 
 // ============================================
@@ -84,6 +83,8 @@ export type PlanState = {
   blockLoads: Record<TimeBlock, number>
   /** intensity already on the day being planned (light=1, medium=2, heavy=4) */
   dayLoad?: number
+  /** fixed-day threads that missed yesterday's slot and get one makeup today */
+  makeup?: Set<string>
 }
 
 export type PlanAction = {
@@ -108,6 +109,8 @@ export type PlanOptions = {
   maxDailyIntensity?: number
   /** Grid balancing: once a day is half full, place lighter work first and skip heavy. */
   preferLowIntensityOnBusyDays?: boolean
+  /** most no-due-date backlog tasks pulled in as filler on a day (default 2) */
+  backlogPerDay?: number
 }
 
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 }
@@ -224,6 +227,8 @@ export function pickBlock(loads: Record<TimeBlock, number>, intensity: string = 
  *    Continuous threads with an empty queue get a placeholder; discrete ones
  *    are skipped. Everything except fixed-day threads must fit under the cap;
  *    on busy days heavy work waits and lighter work is preferred.
+ * 3. Backlog filler — while the day is under half the cap, pull in up to a
+ *    couple of the best no-thread, no-due-date tasks.
  * Each placement goes to a time block by intensity and current block load.
  */
 export function planDay(dayKey: string, threads: PlanThread[], state: PlanState, opts: PlanOptions = {}): PlanAction[] {
@@ -316,7 +321,8 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
     if (appearances >= target) continue
 
     if (thread.frequency === 'fixed-day') {
-      if (thread.fixedDay !== dayIdx) continue
+      // Its day, or the one makeup day after missing it
+      if (thread.fixedDay !== dayIdx && !state.makeup?.has(thread.id)) continue
     } else if (appearances >= paceQuota(target, dayIdx, threadPhase(thread.id))) {
       continue
     }
@@ -389,6 +395,18 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
     bump(thread.id)
   }
 
+  // 3. Backlog filler — no-thread, no-due-date tasks fill spare room on light days,
+  // best first, a couple at a time so the backlog drains without crowding threads out.
+  const fillerMax = opts.backlogPerDay ?? 2
+  let filled = 0
+  const backlog = state.queue.filter(t => t.threadId === null && t.dueKey === null).sort(byScore)
+  for (const task of backlog) {
+    if (filled >= fillerMax || state.dayLoad! >= cap / 2) break
+    if (!fits(intensityWeight(task.intensity))) continue
+    consume(task, 'queued')
+    filled++
+  }
+
   return actions
 }
 
@@ -456,9 +474,59 @@ async function loadQueue(): Promise<PlanTask[]> {
   return docs.map(toPlanTask)
 }
 
+/**
+ * Days this week on which each thread has a task (done or pending, not skipped,
+ * not an event). Counting real tasks means work you add by hand counts toward
+ * the weekly target, and undoing a placement never leaves the count off.
+ */
 async function loadAppearances(threadIds: string[], weekKey: string): Promise<Map<string, number>> {
-  const docs = await WeeklyProgress.find({ threadId: { $in: threadIds }, weekStart: dayKeyToDate(weekKey) })
-  return new Map(docs.map(p => [String(p.threadId), p.appearances]))
+  const docs = await Task.find(
+    {
+      threadId: { $in: threadIds },
+      date: { $gte: dayKeyToDate(weekKey), $lt: dayKeyToDate(addDaysKey(weekKey, 7)) },
+      status: { $ne: 'skipped' },
+      isEvent: { $ne: true },
+    },
+    { threadId: 1, date: 1 }
+  )
+  const daysByThread = new Map<string, Set<string>>()
+  for (const t of docs) {
+    const id = String(t.threadId)
+    if (!daysByThread.has(id)) daysByThread.set(id, new Set())
+    daysByThread.get(id)!.add(dateToDayKey(t.date as Date))
+  }
+  return new Map([...daysByThread].map(([id, days]) => [id, days.size]))
+}
+
+const ROLLOVER_DAYS = 14
+
+/**
+ * Deal with unfinished work from earlier days (last two weeks), so Today starts clean:
+ *  - events that passed are marked skipped (missed);
+ *  - placeholders ("work on <thread>") are skipped — they were only a nudge;
+ *  - real tasks the planner placed go back to their queue to be rescheduled;
+ *  - tasks you scheduled yourself stay put (Today shows them as Overdue).
+ * Every moved item records `missedOn`. Returns the fixed-day threads whose slot
+ * was missed yesterday — they get one makeup today.
+ */
+export async function rolloverMissed(dayKey: string, threads: PlanThread[]): Promise<Set<string>> {
+  const todayStart = dayKeyToDate(dayKey)
+  const range = { status: 'pending', date: { $gte: dayKeyToDate(addDaysKey(dayKey, -ROLLOVER_DAYS)), $lt: todayStart } }
+  const skip = [{ $set: { status: 'skipped', missedOn: '$date' } }]
+
+  await Task.updateMany({ ...range, isEvent: true }, skip)
+  await Task.updateMany({ ...range, isEvent: { $ne: true }, source: 'auto-generated' }, skip)
+  await Task.updateMany(
+    { ...range, isEvent: { $ne: true }, source: { $ne: 'auto-generated' }, scheduledBy: 'generator' },
+    [{ $set: { missedOn: '$date', date: null, timeBlock: 'unscheduled', scheduledBy: null } }]
+  )
+
+  const yesterday = addDaysKey(dayKey, -1)
+  const owed = threads.filter(t => t.frequency === 'fixed-day' && t.taskMode !== 'event' &&
+    t.fixedDay === mondayIndex(yesterday) && t.fixedDay !== mondayIndex(dayKey))
+  if (!owed.length) return new Set()
+  const missed = await Task.find({ threadId: { $in: owed.map(t => t.id) }, missedOn: dayKeyToDate(yesterday) }, { threadId: 1 })
+  return new Set(missed.map(t => String(t.threadId)))
 }
 
 /** Plan `dayKey` and write it to the database. */
@@ -468,15 +536,16 @@ export async function generateToday(dayKey: string) {
   const threads = threadDocs.map(toPlanThread)
   const weekKey = weekStartKey(dayKey)
 
+  const makeup = await rolloverMissed(dayKey, threads)
   const state: PlanState = {
     appearances: await loadAppearances(threads.map(t => t.id), weekKey),
     queue: await loadQueue(),
+    makeup,
     ...(await loadDayLoad(dayKey)),
   }
 
   const actions = planDay(dayKey, threads, state, planOptions)
   const date = dayKeyToDate(dayKey)
-  const weekStart = dayKeyToDate(weekKey)
 
   for (const a of actions) {
     if (a.kind === 'event') {
@@ -515,13 +584,6 @@ export async function generateToday(dayKey: string) {
         priority: a.priority,
         intensity: a.intensity,
       })
-    }
-    if (a.threadId && threads.some(t => t.id === a.threadId)) {
-      await WeeklyProgress.updateOne(
-        { threadId: a.threadId, weekStart },
-        { $inc: { appearances: 1 } },
-        { upsert: true }
-      )
     }
   }
 
@@ -679,12 +741,6 @@ async function doRebalance(now: Date): Promise<RebalanceResult> {
         { $set: { date: null, timeBlock: 'unscheduled', scheduledBy: null } }
       )
       returnedToQueue++
-    }
-    if (t.threadId) {
-      await WeeklyProgress.updateOne(
-        { threadId: t.threadId, weekStart: weekStartDate, appearances: { $gt: 0 } },
-        { $inc: { appearances: -1 } }
-      )
     }
   }
 

@@ -13,6 +13,14 @@ export async function getTasks(filters: any = {}) {
     query.date = { $gte: startDate, $lt: endDate }
   }
 
+  // Earlier days only (before) and no further back than `since`: used for the Overdue list
+  if (filters.before || filters.since) {
+    query.date = {
+      ...(filters.since ? { $gte: new Date(`${String(filters.since).slice(0, 10)}T00:00:00.000Z`) } : {}),
+      ...(filters.before ? { $lt: new Date(`${String(filters.before).slice(0, 10)}T00:00:00.000Z`) } : {}),
+    }
+  }
+
   if (filters.status) query.status = filters.status
   if (filters.threadId !== undefined && filters.threadId !== null) {
     if (filters.threadId === 'null' || filters.threadId === '') {

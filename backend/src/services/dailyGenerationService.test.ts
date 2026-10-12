@@ -393,3 +393,54 @@ describe('event threads', () => {
     expect(actions).toHaveLength(0)
   })
 })
+
+describe('backlog filler', () => {
+  const backlog = (id: string, o: Partial<PlanTask> = {}) => task(id, null, o)
+
+  it('pulls in the best no-due-date backlog tasks on an empty day, a couple at a time', () => {
+    const queue = [backlog('low', { priority: 'low' }), backlog('high', { priority: 'high' }), backlog('mid'), backlog('mid2')]
+    const actions = planDay(MONDAY, [], freshState(queue), { maxDailyIntensity: 10 })
+    expect(actions.map(a => a.taskId)).toEqual(['high', 'mid'])
+  })
+
+  it('leaves room: stops once the day is half full', () => {
+    const threads = [thread('d', { frequency: 'daily', intensity: 'heavy' })]
+    const actions = planDay(MONDAY, threads, freshState([backlog('b1', { intensity: 'light' })]), { maxDailyIntensity: 6 })
+    expect(actions.map(a => a.kind)).toEqual(['placeholder']) // heavy thread = 4 of 6, already over half
+  })
+
+  it('ignores tasks that belong to a thread or have a far-off due date', () => {
+    const queue = [task('t', 'x'), backlog('far', { dueKey: addDaysKey(MONDAY, 20) })]
+    expect(planDay(MONDAY, [], freshState(queue), { maxDailyIntensity: 10 })).toHaveLength(0)
+  })
+
+  it('can be switched off', () => {
+    expect(planDay(MONDAY, [], freshState([backlog('b')]), { backlogPerDay: 0 })).toHaveLength(0)
+  })
+})
+
+describe('fixed-day makeup', () => {
+  const fixedMonday = thread('f', { frequency: 'fixed-day', fixedDay: 0, taskMode: 'continuous' })
+  const tuesday = addDaysKey(MONDAY, 1)
+
+  it('places a missed fixed-day thread once on the next day', () => {
+    const state = { ...freshState(), makeup: new Set(['f']) }
+    const actions = planDay(tuesday, [fixedMonday], state)
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({ threadId: 'f', kind: 'placeholder' })
+  })
+
+  it('does nothing on the off day without a makeup', () => {
+    expect(planDay(tuesday, [fixedMonday], freshState())).toHaveLength(0)
+  })
+
+  it('skips the makeup if the thread already happened this week', () => {
+    const state = { ...freshState(), makeup: new Set(['f']), appearances: new Map([['f', 1]]) }
+    expect(planDay(tuesday, [fixedMonday], state)).toHaveLength(0)
+  })
+
+  it('makeup ignores the daily cap, like the fixed day itself', () => {
+    const state = { ...freshState(), makeup: new Set(['f']), dayLoad: 6 }
+    expect(planDay(tuesday, [fixedMonday], state, { maxDailyIntensity: 6 })).toHaveLength(1)
+  })
+})

@@ -51,7 +51,7 @@ const initialize = async () => {
 // We'll not start/stop the listener in this hook to avoid multiple instances.
 
 // Fetch tasks with optional filters
-export const useTasks = (filters: { date?: string; status?: string; threadId?: string | null } = {}) => {
+export const useTasks = (filters: { date?: string; status?: string; threadId?: string | null; before?: string; since?: string } = {}) => {
   const queryClient = useQueryClient();
   
   // Initialize DB on first call
@@ -73,6 +73,9 @@ export const useTasks = (filters: { date?: string; status?: string; threadId?: s
           return cachedTasks.filter((task: any) => {
             if (filters.date && (!task.date || !task.date.startsWith(filters.date))) return false
             if (filters.status && task.status !== filters.status) return false
+            const day = typeof task.date === 'string' ? task.date.slice(0, 10) : null
+            if (filters.before && (!day || day >= filters.before)) return false
+            if (filters.since && (!day || day < filters.since)) return false
             if (filters.threadId === null && task.threadId) return false
             if (filters.threadId && filters.threadId !== null && task.threadId !== filters.threadId) return false
             return true
@@ -85,10 +88,12 @@ export const useTasks = (filters: { date?: string; status?: string; threadId?: s
 };
 
 // Helper to fetch tasks from API
-const fetchTasksFromAPI = async (filters: { date?: string; status?: string; threadId?: string | null }): Promise<Task[]> => {
+const fetchTasksFromAPI = async (filters: { date?: string; status?: string; threadId?: string | null; before?: string; since?: string }): Promise<Task[]> => {
   const queryParams = new URLSearchParams();
   if (filters.date) queryParams.append('date', filters.date);
   if (filters.status) queryParams.append('status', filters.status);
+  if (filters.before) queryParams.append('before', filters.before);
+  if (filters.since) queryParams.append('since', filters.since);
   // null means "no thread" (backlog); undefined means "any thread"
   if (filters.threadId === null) queryParams.append('threadId', 'null');
   else if (filters.threadId) queryParams.append('threadId', filters.threadId);

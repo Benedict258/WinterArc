@@ -44,6 +44,8 @@ const taskSchema = new mongoose.Schema(
     isEvent: { type: Boolean, default: false },
     startTime: { type: String, default: null },
     endTime: { type: String, default: null },
+    // Set when an unfinished task was swept off a past day (the day it was missed)
+    missedOn: { type: Date, default: null },
     calendarEventId: String,
     source: {
       type: String,
