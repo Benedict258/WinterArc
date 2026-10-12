@@ -172,11 +172,12 @@ function bestTasksFirst(dayKey: string) {
     a.id.localeCompare(b.id)
 }
 
-// Heavy work in the morning, light work in the evening — then balance load.
+// Medium work in the morning, light in the afternoon, heavy in the evening
+// — then balance load. Lower cost = more preferred.
 const BLOCK_PREFERENCE: Record<string, Record<TimeBlock, number>> = {
-  heavy: { morning: 0, afternoon: 2, evening: 4 },
-  medium: { morning: 1, afternoon: 0, evening: 1 },
-  light: { morning: 2, afternoon: 1, evening: 0 },
+  heavy: { morning: 4, afternoon: 2, evening: 0 },
+  medium: { morning: 0, afternoon: 1, evening: 1 },
+  light: { morning: 1, afternoon: 0, evening: 1 },
 }
 
 /** Block for a task of this intensity, given the load already in each block. */
