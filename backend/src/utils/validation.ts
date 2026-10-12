@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { blocksProblem } from '../../../src/shared/dayBlocks';
+import { ACCENTS } from '../../../src/shared/appearance';
 
 // NOTE: no `.default()` on any field. zod v4 applies defaults even inside
 // `.partial()`, which would silently overwrite existing values on PUT.
@@ -116,6 +117,15 @@ export const plannerSettingsSchema = z.object({
   }),
 }).partial();
 
+export const appearanceSchema = z.object({
+  mode: z.enum(['dark', 'light', 'system']),
+  accent: z.enum(ACCENTS.map(a => a.id) as [string, ...string[]]),
+  density: z.enum(['comfortable', 'compact']),
+}).partial();
+export const modulesSchema = z.object({
+  wishlist: z.boolean(), goals: z.boolean(), drop: z.boolean(), events: z.boolean(),
+}).partial();
+
 export const settingsSchema = z.object({
   timezone: z.string().refine(tz => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
@@ -125,6 +135,8 @@ export const settingsSchema = z.object({
   gridBalancing: gridBalancingSchema.optional(),
   notifications: notificationSettingsSchema.optional(),
   planner: plannerSettingsSchema.optional(),
+  appearance: appearanceSchema.optional(),
+  modules: modulesSchema.optional(),
 });
 export const settingsUpdateSchema = settingsSchema.partial();
 

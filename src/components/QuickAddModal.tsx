@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { toDayKey } from '@/lib/utils'
 import { blockForTime } from '@/shared/dayBlocks'
 import { useDayBlocks } from '@/hooks/useDayBlocks'
+import { useSettings } from '@/hooks/useSettings'
+import { normalizeModules } from '@/shared/appearance'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCreateTask } from '@/hooks/useTasks'
@@ -15,6 +17,8 @@ interface QuickAddModalProps {
 export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const todayString = toDayKey()
   const { blocks, options } = useDayBlocks()
+  const { data: settings } = useSettings()
+  const eventsOn = normalizeModules(settings?.modules).events
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(todayString)
   const [dueDate, setDueDate] = useState('')
@@ -115,10 +119,10 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
               />
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          {eventsOn && <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} className="accent-primary" />
             This is an event / session (fixed time)
-          </label>
+          </label>}
           {isEvent && (
             <div className="grid grid-cols-2 gap-3">
               <div>

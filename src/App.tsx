@@ -16,6 +16,8 @@ import { AuthProvider } from './context/AuthContext'
 import DialogHost from './components/DialogHost'
 import SyncStatus from './components/SyncStatus'
 import AuthGate from './components/AuthGate'
+import AppearanceApplier from './components/AppearanceApplier'
+import ModuleRoute from './components/ModuleRoute'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 
@@ -24,7 +26,7 @@ const queryClient = new QueryClient()
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <BrowserRouter>
           <AuthProvider>
             <Routes>
@@ -41,11 +43,12 @@ function App() {
                       <Route path="/threads" element={<ThreadsView />} />
                       <Route path="/threads/:id" element={<ThreadDetailView />} />
                       <Route path="/backlog" element={<BacklogView />} />
-                      <Route path="/wishlist" element={<WishlistView />} />
-                      <Route path="/goals" element={<GoalsView />} />
-                      <Route path="/drop" element={<DropView />} />
+                      <Route path="/wishlist" element={<ModuleRoute module="wishlist"><WishlistView /></ModuleRoute>} />
+                      <Route path="/goals" element={<ModuleRoute module="goals"><GoalsView /></ModuleRoute>} />
+                      <Route path="/drop" element={<ModuleRoute module="drop"><DropView /></ModuleRoute>} />
                       <Route path="/settings" element={<SettingsView />} />
                     </Routes>
+                    <AppearanceApplier />
                     <DialogHost />
                     <SyncStatus />
                   </AuthGate>

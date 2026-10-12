@@ -14,6 +14,19 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Apply the saved accent and density before first paint (see AppearanceApplier)
+      try {
+        var look = JSON.parse(localStorage.getItem('winterarc.look') || 'null');
+        if (look) {
+          var r = document.documentElement;
+          r.style.setProperty('--primary', look.hsl);
+          r.style.setProperty('--ring', look.hsl);
+          r.style.setProperty('--primary-foreground', look.fg);
+          r.dataset.density = look.density;
+        }
+      } catch (e) {}
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // Stash the install prompt where Settings → Install App can use it

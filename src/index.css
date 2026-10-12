@@ -68,6 +68,11 @@
   }
 }
 
+/* Compact density: everything is rem-based, so a smaller root size tightens the whole app */
+html[data-density='compact'] {
+  font-size: 14.5px;
+}
+
 @layer base {
   * {
     @apply border-border transition-colors duration-300;

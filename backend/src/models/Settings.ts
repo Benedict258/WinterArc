@@ -40,6 +40,17 @@ const settingsSchema = new mongoose.Schema(
       // ordered day structure (2-6 blocks); see src/shared/dayBlocks.ts. Unset = defaults.
       blocks: { type: mongoose.Schema.Types.Mixed, default: undefined },
     },
+    appearance: {
+      mode: { type: String, enum: ['dark', 'light', 'system'], default: 'dark' },
+      accent: { type: String, default: 'lime', maxlength: 24 },
+      density: { type: String, enum: ['comfortable', 'compact'], default: 'comfortable' },
+    },
+    modules: {
+      wishlist: { type: Boolean, default: true },
+      goals: { type: Boolean, default: true },
+      drop: { type: Boolean, default: true },
+      events: { type: Boolean, default: true },
+    },
     gridBalancing: {
       maxDailyIntensity: {
         type: Number,

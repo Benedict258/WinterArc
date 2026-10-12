@@ -9,6 +9,8 @@ import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/u
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { dueInDays } from '@/lib/utils'
+import { useSettings } from '@/hooks/useSettings'
+import { normalizeModules } from '@/shared/appearance'
 import { confirmDialog, promptDialog } from '@/components/DialogHost'
 
 const PREDEFINED_CATEGORIES = ['Role/Program', 'Active Build', 'Learning Track', 'Application/Outreach', 'Other']
@@ -33,6 +35,8 @@ function frequencyDescription(thread: any): string {
 }
 
 export default function ThreadsView() {
+  const { data: settings } = useSettings()
+  const eventsOn = normalizeModules(settings?.modules).events
   const navigate = useNavigate()
   const { data: threads = [], isLoading, error } = useThreads()
   const { mutate: createThread, isPending: isCreating } = useCreateThread()
@@ -432,10 +436,10 @@ export default function ThreadsView() {
                     <input type="radio" name="taskMode" value="continuous" checked={form.taskMode === 'continuous'} onChange={() => setForm(f => ({ ...f, taskMode: 'continuous' }))} />
                     Continuous
                   </label>
-                  <label className="flex items-center gap-2 text-sm">
+ {(eventsOn || form.taskMode === 'event') && <label className="flex items-center gap-2 text-sm">
                     <input type="radio" name="taskMode" value="event" checked={form.taskMode === 'event'} onChange={() => setForm(f => ({ ...f, taskMode: 'event' }))} />
                     Event / Session
-                  </label>
+                  </label>}
                 </div>
               </div>
 

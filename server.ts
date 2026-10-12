@@ -580,10 +580,10 @@ export function createApp() {
     try {
       let settings = await Settings.findOne({ userId: uid(req) })
       if (!settings) settings = new Settings({ userId: uid(req) })
-      const { planner, notifications, gridBalancing, ...rest } = req.body
+      const { planner, notifications, gridBalancing, appearance, modules, ...rest } = req.body
       Object.assign(settings, rest)
       // Nested groups merge field by field so a partial update keeps the rest
-      for (const [group, value] of Object.entries({ planner, notifications, gridBalancing })) {
+      for (const [group, value] of Object.entries({ planner, notifications, gridBalancing, appearance, modules })) {
         if (!value) continue
         for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
           settings.set(`${group}.${key}`, v)

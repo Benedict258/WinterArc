@@ -10,6 +10,8 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import { toDayKey } from '@/lib/utils'
+import { detectTimezone, timezoneList } from '@/lib/timezones'
+import { AppearanceCard, DayStructureCard, ModulesCard, PlannerRulesCard } from '@/components/CustomizeCards'
 
 export default function SettingsView() {
   const { logout, user } = useAuth()
@@ -32,7 +34,8 @@ export default function SettingsView() {
     isSyncing,
   } = useCalendar()
   
-  const [editTimezone, setEditTimezone] = useState('Africa/Lagos')
+  const [editTimezone, setEditTimezone] = useState(detectTimezone)
+  const tzList = timezoneList(editTimezone)
   const [editMultipleThreadsPerWeekTarget, setEditMultipleThreadsPerWeekTarget] = useState(3)
   const [isDirty, setIsDirty] = useState(false)
 
@@ -54,7 +57,7 @@ export default function SettingsView() {
   // Initialize edit form with current settings
   useEffect(() => {
     if (settings) {
-      setEditTimezone(settings.timezone || 'Africa/Lagos')
+      setEditTimezone(settings.timezone || detectTimezone())
       setEditMultipleThreadsPerWeekTarget(settings.multipleThreadsPerWeekTarget || 3)
       setIsDirty(false)
     }
@@ -170,6 +173,10 @@ export default function SettingsView() {
               </CardContent>
             </Card>
 
+            <AppearanceCard />
+            <DayStructureCard />
+            <PlannerRulesCard />
+            <ModulesCard />
             <NotificationsCard />
 
             {/* Google Calendar */}
@@ -262,12 +269,7 @@ export default function SettingsView() {
                     }}
                     className="mt-2 w-full p-2 rounded-lg border border-border bg-background"
                   >
-                    <option value="Africa/Lagos">Africa/Lagos (WAT, UTC+1)</option>
-                    <option value="Europe/London">Europe/London (GMT/BST)</option>
-                    <option value="America/New_York">America/New_York (EST/EDT)</option>
-                    <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
-                    <option value="Asia/Tokyo">Asia/Tokyo (JST, UTC+9)</option>
-                    <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
+                    {tzList.map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
                 </div>
                 <div>

@@ -6,18 +6,11 @@ import BlockEditor from '@/components/BlockEditor'
 import { useAuth } from '@/context/AuthContext'
 import { TEMPLATES, PRESETS, getTemplate, type PresetId, type TemplateThread } from '@/shared/templates'
 import { blocksProblem, blockRange, type DayBlock } from '@/shared/dayBlocks'
+import { detectTimezone, timezoneList } from '@/lib/timezones'
 
 const ICONS: Record<string, typeof FileText> = { GraduationCap, Code2, Dumbbell, Clapperboard, FileText }
 const DAY = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-const detectTimezone = () => {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' }
-}
-const timezones = (current: string) => {
-  let all: string[] = []
-  try { all = (Intl as any).supportedValuesOf('timeZone') } catch { /* older browsers */ }
-  return all.includes(current) ? all : [current, ...all]
-}
 
 function describe(t: TemplateThread) {
   if (t.taskMode === 'event') return `${t.eventDays?.map(d => DAY[d]).join(', ')} ${t.eventStart}–${t.eventEnd}`
@@ -39,7 +32,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState('')
 
   const template = getTemplate(templateId)
-  const tzList = useMemo(() => timezones(timezone), [timezone])
+  const tzList = useMemo(() => timezoneList(timezone), [timezone])
 
   const choose = (id: string) => {
     const t = getTemplate(id)!

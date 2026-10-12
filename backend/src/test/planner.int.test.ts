@@ -208,6 +208,24 @@ describe.skipIf(!available)('planner rules against the database', () => {
     expect((await c.agent.get('/api/settings')).body.planner.blocks.map((x: any) => x.id)).toEqual(['am', 'pm'])
   })
 
+  it('settings API: appearance and modules merge field by field and reject unknown values', async () => {
+    const { agent } = await signedUpAgent(ctx, 'look@example.com')
+    const first = (await agent.get('/api/settings')).body
+    expect(first.appearance).toMatchObject({ mode: 'dark', accent: 'lime', density: 'comfortable' })
+    expect(first.modules).toMatchObject({ wishlist: true, goals: true, drop: true, events: true })
+    expect((await agent.put('/api/settings').send({ appearance: { accent: 'violet' } })).status).toBe(200)
+    expect((await agent.put('/api/settings').send({ appearance: { density: 'compact' }, modules: { drop: false } })).status).toBe(200)
+    const now = (await agent.get('/api/settings')).body
+    expect(now.appearance).toMatchObject({ mode: 'dark', accent: 'violet', density: 'compact' })
+    expect(now.modules).toMatchObject({ drop: false, wishlist: true })
+    expect((await agent.put('/api/settings').send({ appearance: { accent: 'neon-pink' } })).status).toBe(400)
+    expect((await agent.put('/api/settings').send({ appearance: { mode: 'sepia' } })).status).toBe(400)
+    expect((await agent.put('/api/settings').send({ modules: { drop: 'no' } })).status).toBe(400)
+    // another user's look is their own
+    const other = await signedUpAgent(ctx, 'look2@example.com')
+    expect((await other.agent.get('/api/settings')).body.appearance.accent).toBe('lime')
+  })
+
   it('generation for one user never creates tasks for another', async () => {
     await clean()
     await thread({ frequency: 'daily' })

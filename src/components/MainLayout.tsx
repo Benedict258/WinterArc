@@ -23,11 +23,15 @@ import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import QuickAddModal from '@/components/QuickAddModal'
 import { useAuth } from '@/context/AuthContext'
+import { useSettings, useUpdateSettings } from '@/hooks/useSettings'
+import { normalizeModules, type ModuleId } from '@/shared/appearance'
 
 interface NavItem {
   label: string
   path: string
   icon: LucideIcon
+  /** hidden when the user switches this module off */
+  module?: ModuleId
 }
 
 const navItems: NavItem[] = [
@@ -35,9 +39,9 @@ const navItems: NavItem[] = [
   { label: 'Week', path: '/week', icon: CalendarDays },
   { label: 'Threads', path: '/threads', icon: GitBranch },
   { label: 'Backlog', path: '/backlog', icon: Inbox },
-  { label: 'Wishlist', path: '/wishlist', icon: Heart },
-  { label: 'Goals', path: '/goals', icon: Target },
-  { label: 'Drop', path: '/drop', icon: Upload },
+  { label: 'Wishlist', path: '/wishlist', icon: Heart, module: 'wishlist' },
+  { label: 'Goals', path: '/goals', icon: Target, module: 'goals' },
+  { label: 'Drop', path: '/drop', icon: Upload, module: 'drop' },
   { label: 'Settings', path: '/settings', icon: SettingsIcon },
 ]
 
@@ -68,7 +72,11 @@ function VerifyBanner({ onResend }: { onResend: () => Promise<{ ok: boolean; err
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  const { theme, setTheme } = useTheme()
+  const { resolvedTheme, setTheme } = useTheme()
+  const { data: settings } = useSettings()
+  const { mutate: saveSettings } = useUpdateSettings()
+  const modules = normalizeModules(settings?.modules)
+  const visibleNav = navItems.filter(item => !item.module || modules[item.module])
   const { logout, user, resendVerification } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
@@ -82,8 +90,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   // The mobile drawer always shows labels; on desktop it's the pinned state
   const expanded = pinnedExpanded || mobileOpen
-  const isDark = theme === 'dark'
-  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark')
+  const isDark = resolvedTheme === 'dark'
+  const toggleTheme = () => {
+    const mode = isDark ? 'light' : 'dark'
+    setTheme(mode)
+    saveSettings({ appearance: { mode } })
+  }
 
   useEffect(() => {
     try {
@@ -172,7 +184,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {navItems.map((item) => {
+          {visibleNav.map((item) => {
             const Icon = item.icon
             const active = isActive(item.path, location.pathname)
             return (

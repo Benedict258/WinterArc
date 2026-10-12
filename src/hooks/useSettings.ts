@@ -7,6 +7,7 @@ import { onlineOrQueue } from '@/lib/offline';
 // Types
 import type { NotificationSettings } from '@/shared/notificationPlan'
 import type { DayBlock } from '@/shared/dayBlocks'
+import type { Appearance, Modules } from '@/shared/appearance'
 export type Settings = {
   _id: string;
   timezone: string;
@@ -17,6 +18,8 @@ export type Settings = {
     preferLowIntensityOnBusyDays: boolean;
   };
   notifications?: NotificationSettings;
+  appearance?: Partial<Appearance>;
+  modules?: Partial<Modules>;
   planner?: {
     rollover?: boolean;
     makeup?: boolean;
@@ -52,6 +55,17 @@ export const useSettings = () => {
   });
 };
 
+const GROUPS = ['planner', 'notifications', 'gridBalancing', 'appearance', 'modules'] as const
+
+/** Apply a partial update locally the way the server does: nested groups merge field by field. */
+export function mergeSettings(current: any, updates: Partial<Settings>) {
+  const merged: any = { ...current, ...updates }
+  for (const g of GROUPS) {
+    if (updates[g]) merged[g] = { ...current?.[g], ...updates[g] }
+  }
+  return merged
+}
+
 // Update settings
 export const useUpdateSettings = () => {
   const queryClient = useQueryClient();
@@ -72,14 +86,17 @@ export const useUpdateSettings = () => {
       }, async () => {
         await addToQueue({ type: 'request', method: 'PUT', url: '/api/settings', data: updates });
         const current = await getCachedSettings();
-        const local = {
-          ...current,
-          ...updates,
-          gridBalancing: { ...current?.gridBalancing, ...updates.gridBalancing },
-        };
+        const local = mergeSettings(current, updates);
         if (current) await cacheSettings(local);
         return local;
       });
+    },
+    // Show the change straight away; the server's answer replaces it (or it is rolled back on error)
+    onMutate: async (updates: Partial<Settings>) => {
+      await queryClient.cancelQueries({ queryKey: ['settings'] });
+      const previous = queryClient.getQueryData(['settings']);
+      if (previous) queryClient.setQueryData(['settings'], mergeSettings(previous, updates));
+      return { previous };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -88,7 +105,8 @@ export const useUpdateSettings = () => {
       queryClient.invalidateQueries({ queryKey: ['week'] });
       // The Settings page shows its own confirmation
     },
-    onError: () => {
+    onError: (_error, _updates, context) => {
+      if (context?.previous) queryClient.setQueryData(['settings'], context.previous);
       toast({
         title: 'Error',
         description: 'Failed to update settings.',
