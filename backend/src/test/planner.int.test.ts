@@ -93,7 +93,8 @@ describe.skipIf(!available)('planner rules against the database', () => {
 
   it('backlog filler: pulls in no-thread, no-due-date tasks (at most two) and leaves thread tasks alone', async () => {
     await clean()
-    const t = await thread({ taskMode: 'discrete', frequency: 'weekly' })
+    // Thursday-only thread, so it never competes for Monday's room (a weekly thread's day depends on its random id)
+    const t = await thread({ taskMode: 'discrete', frequency: 'fixed-day', fixedDay: 3 })
     for (const title of ['b1', 'b2', 'b3']) await Task.create({ userId, title, status: 'pending', date: null })
     await Task.create({ userId, title: 'thread task', threadId: t._id, status: 'pending', date: null })
 
