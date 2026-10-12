@@ -7,6 +7,7 @@ import session from 'express-session'
 import { MongoStore } from 'connect-mongo'
 
 import { Thread } from './backend/src/models/Thread.ts'
+import { createIdempotent } from './backend/src/utils/idempotentCreate.ts'
 import { Task } from './backend/src/models/Task.ts'
 import { WishlistItem } from './backend/src/models/WishlistItem.ts'
 import { Goal } from './backend/src/models/Goal.ts'
@@ -451,20 +452,19 @@ async function startServer() {
   app.post('/api/threads/:id/resources', validateRequest(threadResourceSchema), async (req, res) => {
     try {
       const { _id, title, url, description, kind } = req.body
+      const resource = { ...(_id ? { _id } : {}), title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' }
+      // One atomic update: a replayed add (same _id) matches nothing and is a no-op
+      const result = await Thread.updateOne(
+        { _id: req.params.id, ...(_id ? { 'resources._id': { $ne: _id } } : {}) },
+        { $push: { resources: resource } }
+      )
       const thread = await Thread.findById(req.params.id)
       if (!thread) {
         res.status(404).json({ error: 'Thread not found' })
         return
       }
-      // Replayed offline add: the first attempt may already have landed
-      const already = _id ? thread.resources.find(r => String(r._id) === _id) : null
-      if (already) {
-        res.status(200).json(already)
-        return
-      }
-      thread.resources.push({ ...(_id ? { _id } : {}), title, url, description: description || '', kind: kind === 'resource' ? 'resource' : 'link' } as any)
-      await thread.save()
-      res.status(201).json(thread.resources[thread.resources.length - 1])
+      const saved = _id ? thread.resources.find(r => String(r._id) === _id) : thread.resources[thread.resources.length - 1]
+      res.status(result.modifiedCount ? 201 : 200).json(saved)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
     }
@@ -613,10 +613,7 @@ async function startServer() {
 
   app.post('/api/wishlist', validateRequest(wishlistItemSchema), async (req, res) => {
     try {
-      // Replayed offline create: the first attempt may already have landed
-      const existing = req.body._id ? await WishlistItem.findById(req.body._id) : null
-      const item = existing ?? new WishlistItem(req.body)
-      if (!existing) await item.save()
+      const item = await createIdempotent(WishlistItem, req.body)
       res.status(201).json(item)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
@@ -656,10 +653,7 @@ async function startServer() {
 
   app.post('/api/goals', validateRequest(goalSchema), async (req, res) => {
     try {
-      // Replayed offline create: the first attempt may already have landed
-      const existing = req.body._id ? await Goal.findById(req.body._id) : null
-      const goal = existing ?? new Goal(req.body)
-      if (!existing) await goal.save()
+      const goal = await createIdempotent(Goal, req.body)
       res.status(201).json(goal)
     } catch (error) {
       res.status(400).json({ error: errorMessage(error) })
