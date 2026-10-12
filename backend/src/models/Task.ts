@@ -52,7 +52,7 @@ const taskSchema = new mongoose.Schema(
     calendarEventId: String,
     source: {
       type: String,
-      enum: ['manual', 'auto-generated', 'google-calendar'],
+      enum: ['manual', 'auto-generated', 'google-calendar', 'import'],
       default: 'manual',
     },
     // Set when the daily generator put this task on a day, so "Rebalance"

@@ -7,6 +7,7 @@ import { useSettings, useUpdateSettings } from '@/hooks/useSettings'
 import { useGridSettings, useUpdateGridSettings, useRebalanceWeek } from '@/hooks/useGrid'
 import { useCalendar } from '@/hooks/useCalendar'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import { toDayKey } from '@/lib/utils'
@@ -15,6 +16,7 @@ import PrivacyCard from '@/components/PrivacyCard'
 import { AppearanceCard, DayStructureCard, ModulesCard, PlannerRulesCard } from '@/components/CustomizeCards'
 
 export default function SettingsView() {
+  const navigate = useNavigate()
   const { logout, user } = useAuth()
   const { toast } = useToast()
   const { data: settings, isLoading: settingsLoading, error: settingsError } = useSettings()
@@ -399,6 +401,9 @@ export default function SettingsView() {
                 <Button onClick={handleExportData} className="w-full justify-start gap-2" variant="outline">
                   <Download size={18} />
                   Export All Data (JSON)
+                </Button>
+                <Button onClick={() => navigate('/import')} variant="outline" className="w-full justify-start gap-2">
+                  <Upload size={18} />Import from CSV, Todoist, Notion or WinterArc
                 </Button>
                 <Button
                   id="pwa-install-button"

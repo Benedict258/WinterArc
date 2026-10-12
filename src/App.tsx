@@ -23,6 +23,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import AdminPage from './pages/AdminPage'
 import AssistantPage from './pages/AssistantPage'
+import ImportPage from './pages/ImportPage'
 
 const queryClient = new QueryClient()
 
@@ -53,6 +54,7 @@ function App() {
                       <Route path="/drop" element={<ModuleRoute module="drop"><DropView /></ModuleRoute>} />
                       <Route path="/settings" element={<SettingsView />} />
                       <Route path="/assistant" element={<ModuleRoute module="ai"><AssistantPage /></ModuleRoute>} />
+                      <Route path="/import" element={<ImportPage />} />
                       <Route path="/admin" element={<AdminPage />} />
                     </Routes>
                     <AppearanceApplier />

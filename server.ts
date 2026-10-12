@@ -45,6 +45,7 @@ import { authRouter } from './backend/src/routes/auth.ts'
 import { accountRouter, handleExport } from './backend/src/routes/account.ts'
 import { adminRouter } from './backend/src/routes/admin.ts'
 import { aiRouter } from './backend/src/routes/ai.ts'
+import { importRouter, WINTERARC_IMPORT_PATH } from './backend/src/routes/import.ts'
 import {
   threadSchema,
   threadUpdateSchema,
@@ -154,7 +155,9 @@ export function createApp() {
     origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.includes(origin)),
     credentials: true,
   }))
-  app.use(express.json({ limit: '1mb' }))
+  // everything takes small JSON; the WinterArc-export import brings its own larger parser
+  const smallJson = express.json({ limit: '1mb' })
+  app.use((req, res, next) => (req.path === WINTERARC_IMPORT_PATH ? next() : smallJson(req, res, next)))
   app.use(session({
     name: 'winterarc.sid',
     secret: SESSION_SECRET,
@@ -665,6 +668,7 @@ export function createApp() {
   app.use('/api/account', accountRouter)
   app.use('/api/admin', requireAdmin, adminRouter)
   app.use('/api/ai', requireVerified, aiRouter)
+  app.use('/api/import', importRouter)
 
   // ============================================
   // DROP ENDPOINTS

@@ -24,8 +24,8 @@ describe.skipIf(!available)('account export/deletion and admin area', () => {
   const fill = async (userId: string) => {
     const t = await Thread.create({ userId, name: 'Mine', category: 'Other', frequency: 'daily', taskMode: 'continuous' })
     await Task.create({ userId, title: 'a task', threadId: t._id })
-    await Goal.create({ userId, title: 'a goal' } as any).catch(() => {})
-    await WishlistItem.create({ userId, title: 'a wish' } as any).catch(() => {})
+    await Goal.create({ userId, period: 'Q4-2026', text: 'a goal' })
+    await WishlistItem.create({ userId, item: 'a wish' })
     await DropItem.create({ userId, type: 'text', textContent: 'note', expiresAt: new Date(Date.now() + 86_400_000) })
     await PushSubscription.create({ userId, endpoint: `https://push.example/${userId}`, keys: { p256dh: 'k', auth: 'a' } })
     await ApiToken.create({ userId, tokenHash: `h${userId}`, label: 'x', expiresAt: new Date(Date.now() + 1e9) })
@@ -33,6 +33,7 @@ describe.skipIf(!available)('account export/deletion and admin area', () => {
   const holdings = async (userId: string) => (await Promise.all([
     Thread.countDocuments({ userId }), Task.countDocuments({ userId }), DropItem.countDocuments({ userId }),
     Settings.countDocuments({ userId }), PushSubscription.countDocuments({ userId }), ApiToken.countDocuments({ userId }),
+    Goal.countDocuments({ userId }), WishlistItem.countDocuments({ userId }),
   ])).reduce((a, b) => a + b, 0)
 
   describe('export', () => {

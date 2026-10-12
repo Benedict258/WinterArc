@@ -146,6 +146,13 @@ describe.skipIf(!available)('tenant isolation', () => {
     setPushSender(null)
   })
 
+  it('bulk inserts work, and refuse documents without a user', async () => {
+    const docs = [{ userId: alice.userId, title: 'bulk 1' }, { userId: alice.userId, title: 'bulk 2' }]
+    await expect(Task.insertMany(docs)).resolves.toHaveLength(2)
+    await expect(Task.insertMany([{ userId: alice.userId, title: 'ok' }, { title: 'orphan' }])).rejects.toThrow(/need a userId/)
+    expect(await Task.countDocuments({ userId: alice.userId, title: 'orphan' })).toBe(0)
+  })
+
   it('refuses any query that forgets the user filter', async () => {
     await expect(Thread.find({})).rejects.toThrow(/Tenant guard/)
     await expect(Task.findOne({ title: 'Alice task' })).rejects.toThrow(/Tenant guard/)

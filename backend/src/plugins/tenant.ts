@@ -44,10 +44,12 @@ export function tenantGuard(schema: Schema) {
     const first = this.pipeline()[0]?.$match
     assertTenantFilter(this.model().modelName, 'aggregate', first, this.options)
   })
-  schema.pre('insertMany', function (_next: unknown, docs: any) {
+  // Declares `next`, so Mongoose waits for it: it must always be called
+  schema.pre('insertMany', function (next: (error?: Error) => void, docs: any) {
     const list = Array.isArray(docs) ? docs : [docs]
     for (const d of list) {
-      if (!isUserIdValue(d?.userId)) throw new Error('Tenant guard: insertMany() documents need a userId')
+      if (!isUserIdValue(d?.userId)) return next(new Error('Tenant guard: insertMany() documents need a userId'))
     }
+    next()
   })
 }
