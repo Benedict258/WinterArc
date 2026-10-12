@@ -103,6 +103,26 @@ export const pushSubscriptionSchema = z.object({
   keys: z.object({ p256dh: z.string().min(1).max(512), auth: z.string().min(1).max(512) }),
 });
 
+const blockWeights = z.object({
+  morning: z.number().int().min(0).max(10),
+  afternoon: z.number().int().min(0).max(10),
+  evening: z.number().int().min(0).max(10),
+});
+export const plannerSettingsSchema = z.object({
+  rollover: z.boolean(),
+  makeup: z.boolean(),
+  backlogPerDay: z.number().int().min(0).max(5),
+  dueWindowDays: z.number().int().min(0).max(14),
+  blockStarts: z.object({ afternoon: z.number().int().min(1).max(22), evening: z.number().int().min(2).max(23) })
+    .refine(b => b.afternoon < b.evening, 'Afternoon must start before the evening'),
+  blockLabels: z.object({
+    morning: z.string().trim().min(1).max(24),
+    afternoon: z.string().trim().min(1).max(24),
+    evening: z.string().trim().min(1).max(24),
+  }),
+  blockPreference: z.object({ light: blockWeights, medium: blockWeights, heavy: blockWeights }),
+}).partial();
+
 export const settingsSchema = z.object({
   timezone: z.string().refine(tz => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
@@ -111,6 +131,7 @@ export const settingsSchema = z.object({
   multipleThreadsPerWeekTarget: z.number().int().min(1).max(7),
   gridBalancing: gridBalancingSchema.optional(),
   notifications: notificationSettingsSchema.optional(),
+  planner: plannerSettingsSchema.optional(),
 });
 export const settingsUpdateSchema = settingsSchema.partial();
 

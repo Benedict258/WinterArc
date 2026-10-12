@@ -444,3 +444,29 @@ describe('fixed-day makeup', () => {
     expect(planDay(tuesday, [fixedMonday], state, { maxDailyIntensity: 6 })).toHaveLength(1)
   })
 })
+
+describe('custom day structure', () => {
+  it('moves the afternoon and evening boundaries for events', () => {
+    const e = thread('e', { taskMode: 'event', frequency: 'weekly', eventStart: '15:00', eventEnd: '16:00', eventDays: [0] })
+    expect(planDay(MONDAY, [e], freshState())[0].timeBlock).toBe('afternoon')
+    expect(planDay(MONDAY, [e], freshState(), { blockStarts: { afternoon: 12, evening: 14 } })[0].timeBlock).toBe('evening')
+  })
+
+  it('uses the user\'s own intensity preferences', () => {
+    const heavy = thread('h', { frequency: 'daily', intensity: 'heavy' })
+    expect(planDay(MONDAY, [heavy], freshState())[0].timeBlock).toBe('evening') // default: heavy in the evening
+    const prefs = {
+      light: { morning: 0, afternoon: 0, evening: 0 },
+      medium: { morning: 0, afternoon: 0, evening: 0 },
+      heavy: { morning: 0, afternoon: 5, evening: 5 },
+    }
+    expect(planDay(MONDAY, [heavy], freshState(), { blockPreference: prefs })[0].timeBlock).toBe('morning')
+  })
+
+  it('backlogPerDay 0 turns the filler off and dueWindowDays narrows the due pass', () => {
+    const backlog = [task('b1', null), task('b2', null)]
+    expect(planDay(MONDAY, [], freshState(backlog), { backlogPerDay: 0 })).toHaveLength(0)
+    const due = task('d', null, { dueKey: addDaysKey(MONDAY, 3) })
+    expect(planDay(MONDAY, [], freshState([due]), { backlogPerDay: 0, dueWindowDays: 0 })).toHaveLength(0)
+  })
+})

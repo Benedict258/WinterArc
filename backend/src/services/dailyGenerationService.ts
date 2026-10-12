@@ -112,7 +112,15 @@ export type PlanOptions = {
   preferLowIntensityOnBusyDays?: boolean
   /** most no-due-date backlog tasks pulled in as filler on a day (default 2) */
   backlogPerDay?: number
+  /** hour (0-23) at which the afternoon and the evening begin; the morning runs until the afternoon */
+  blockStarts?: BlockStarts
+  /** per intensity, how much each block is disfavoured (lower = preferred) */
+  blockPreference?: BlockPreference
 }
+
+export type BlockStarts = { afternoon: number; evening: number }
+export type BlockPreference = Record<'light' | 'medium' | 'heavy', Record<TimeBlock, number>>
+export const DEFAULT_BLOCK_STARTS: BlockStarts = { afternoon: 12, evening: 17 }
 
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 }
 export const INTENSITY_WEIGHT: Record<string, number> = { light: 1, medium: 2, heavy: 4 }
@@ -185,24 +193,28 @@ function bestTasksFirst(dayKey: string) {
 
 // Medium work in the morning, light in the afternoon, heavy in the evening
 // — then balance load. Lower cost = more preferred.
-const BLOCK_PREFERENCE: Record<string, Record<TimeBlock, number>> = {
+export const DEFAULT_BLOCK_PREFERENCE: BlockPreference = {
   heavy: { morning: 4, afternoon: 2, evening: 0 },
   medium: { morning: 0, afternoon: 1, evening: 1 },
   light: { morning: 1, afternoon: 0, evening: 1 },
 }
 
 /** Time block an event falls in, by its start time ('HH:mm'). */
-export function blockForTime(time: string | null | undefined): TimeBlock {
+export function blockForTime(time: string | null | undefined, starts: BlockStarts = DEFAULT_BLOCK_STARTS): TimeBlock {
   const hour = Number((time ?? '').split(':')[0])
   if (!Number.isFinite(hour)) return 'morning'
-  if (hour < 12) return 'morning'
-  if (hour < 17) return 'afternoon'
+  if (hour < starts.afternoon) return 'morning'
+  if (hour < starts.evening) return 'afternoon'
   return 'evening'
 }
 
 /** Block for a task of this intensity, given the load already in each block. */
-export function pickBlock(loads: Record<TimeBlock, number>, intensity: string = 'medium'): TimeBlock {
-  const pref = BLOCK_PREFERENCE[intensity] ?? BLOCK_PREFERENCE.medium
+export function pickBlock(
+  loads: Record<TimeBlock, number>,
+  intensity: string = 'medium',
+  preference: BlockPreference = DEFAULT_BLOCK_PREFERENCE
+): TimeBlock {
+  const pref = (preference as Record<string, Record<TimeBlock, number>>)[intensity] ?? preference.medium
   let best: TimeBlock = 'morning'
   let bestCost = Infinity
   for (const block of TIME_BLOCKS) {
@@ -248,7 +260,7 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
 
   const place = (action: Omit<PlanAction, 'timeBlock'>) => {
     const weight = intensityWeight(action.intensity)
-    const block = pickBlock(state.blockLoads, action.intensity)
+    const block = pickBlock(state.blockLoads, action.intensity, opts.blockPreference)
     state.blockLoads[block] += weight
     state.dayLoad! += weight
     actions.push({ ...action, timeBlock: block })
@@ -280,7 +292,7 @@ export function planDay(dayKey: string, threads: PlanThread[], state: PlanState,
       threadId: thread.id,
       taskId: null,
       title: thread.name,
-      timeBlock: blockForTime(thread.eventStart),
+      timeBlock: blockForTime(thread.eventStart, opts.blockStarts),
       priority: thread.priority,
       intensity: thread.intensity,
       dueKey: null,
@@ -442,13 +454,38 @@ function toPlanTask(t: any): PlanTask {
   }
 }
 
+function normalizeStarts(raw: any): BlockStarts {
+  const a = Number(raw?.afternoon)
+  const e = Number(raw?.evening)
+  if (Number.isInteger(a) && Number.isInteger(e) && a >= 1 && a < e && e <= 23) return { afternoon: a, evening: e }
+  return DEFAULT_BLOCK_STARTS
+}
+
+function normalizePreference(raw: any): BlockPreference {
+  const out = {} as BlockPreference
+  for (const k of ['light', 'medium', 'heavy'] as const) {
+    out[k] = {} as Record<TimeBlock, number>
+    for (const b of TIME_BLOCKS) {
+      const v = Number(raw?.[k]?.[b])
+      out[k][b] = Number.isFinite(v) ? v : DEFAULT_BLOCK_PREFERENCE[k][b]
+    }
+  }
+  return out
+}
+
 async function loadSchedulingSettings(userId: string) {
   const settings = await Settings.findOne({ userId })
   return {
     timezone: settings?.timezone || DEFAULT_TIMEZONE,
     multipleTarget: settings?.multipleThreadsPerWeekTarget || 3,
+    rollover: settings?.planner?.rollover ?? true,
+    makeup: settings?.planner?.makeup ?? true,
     planOptions: {
       multipleTarget: settings?.multipleThreadsPerWeekTarget || 3,
+      backlogPerDay: settings?.planner?.backlogPerDay ?? 2,
+      dueWindowDays: settings?.planner?.dueWindowDays ?? 3,
+      blockStarts: normalizeStarts(settings?.planner?.blockStarts),
+      blockPreference: normalizePreference(settings?.planner?.blockPreference),
       maxDailyIntensity: settings?.gridBalancing?.maxDailyIntensity ?? 6,
       preferLowIntensityOnBusyDays: settings?.gridBalancing?.preferLowIntensityOnBusyDays ?? true,
     } satisfies PlanOptions,
@@ -511,7 +548,13 @@ const ROLLOVER_DAYS = 14
  * Every moved item records `missedOn`. Returns the fixed-day threads whose slot
  * was missed yesterday — they get one makeup today.
  */
-export async function rolloverMissed(userId: string, dayKey: string, threads: PlanThread[]): Promise<Set<string>> {
+export async function rolloverMissed(
+  userId: string,
+  dayKey: string,
+  threads: PlanThread[],
+  rules: { rollover?: boolean; makeup?: boolean } = {}
+): Promise<Set<string>> {
+  if (rules.rollover === false) return new Set()
   const todayStart = dayKeyToDate(dayKey)
   const past = await Task.find({
     userId,
@@ -530,6 +573,7 @@ export async function rolloverMissed(userId: string, dayKey: string, threads: Pl
   }
   if (ops.length) await Task.bulkWrite(ops)
 
+  if (rules.makeup === false) return new Set()
   const yesterday = addDaysKey(dayKey, -1)
   const owed = threads.filter(t => t.frequency === 'fixed-day' && t.taskMode !== 'event' &&
     t.fixedDay === mondayIndex(yesterday) && t.fixedDay !== mondayIndex(dayKey))
@@ -540,12 +584,12 @@ export async function rolloverMissed(userId: string, dayKey: string, threads: Pl
 
 /** Plan `dayKey` and write it to the database. */
 export async function generateToday(userId: string, dayKey: string) {
-  const { planOptions } = await loadSchedulingSettings(userId)
+  const { planOptions, rollover, makeup: makeupRule } = await loadSchedulingSettings(userId)
   const threadDocs = await Thread.find({ userId, status: 'active' })
   const threads = threadDocs.map(toPlanThread)
   const weekKey = weekStartKey(dayKey)
 
-  const makeup = await rolloverMissed(userId, dayKey, threads)
+  const makeup = await rolloverMissed(userId, dayKey, threads, { rollover, makeup: makeupRule })
   const state: PlanState = {
     appearances: await loadAppearances(userId, threads.map(t => t.id), weekKey),
     queue: await loadQueue(userId),

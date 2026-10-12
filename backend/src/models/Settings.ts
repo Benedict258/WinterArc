@@ -31,6 +31,23 @@ const settingsSchema = new mongoose.Schema(
         minutesBefore: { type: Number, default: 15 },
       },
     },
+    // Planner rules and day structure. Defaults reproduce the original behaviour.
+    planner: {
+      rollover: { type: Boolean, default: true },
+      makeup: { type: Boolean, default: true },
+      backlogPerDay: { type: Number, default: 2, min: 0, max: 5 },
+      dueWindowDays: { type: Number, default: 3, min: 0, max: 14 },
+      blockStarts: {
+        afternoon: { type: Number, default: 12 },
+        evening: { type: Number, default: 17 },
+      },
+      blockLabels: {
+        morning: { type: String, default: 'Morning' },
+        afternoon: { type: String, default: 'Afternoon' },
+        evening: { type: String, default: 'Evening' },
+      },
+      blockPreference: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    },
     gridBalancing: {
       maxDailyIntensity: {
         type: Number,

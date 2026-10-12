@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 import { dbReachable, startTestApp, signedUpAgent } from './harness'
 import { Task } from '../models/Task'
 import { Thread } from '../models/Thread'
+import { Settings } from '../models/Settings'
 import { generateToday, rolloverMissed } from '../services/dailyGenerationService'
 
 const available = await dbReachable()
@@ -104,6 +105,38 @@ describe.skipIf(!available)('planner rules against the database', () => {
     expect(backlogToday).toHaveLength(2)
     // one backlog task is still waiting (which one depends on creation order, so don't assume)
     expect(await Task.countDocuments({ userId, threadId: null, date: null })).toBe(1)
+  })
+
+  it('rules can be switched off per user: no rollover, no makeup', async () => {
+    await clean()
+    const t = await thread({ frequency: 'fixed-day', fixedDay: 0 })
+    const placed = await Task.create({ userId, status: 'pending', date: day(MONDAY), title: 'x', threadId: t._id, scheduledBy: 'generator' })
+    const threads = await asPlan()
+    expect((await rolloverMissed(userId, TUESDAY, threads, { rollover: false })).size).toBe(0)
+    expect((await Task.findOne({ _id: placed._id, userId }))!.date).toEqual(day(MONDAY)) // left alone
+    await rolloverMissed(userId, TUESDAY, threads, { makeup: false })
+    expect((await rolloverMissed(userId, TUESDAY, threads, { makeup: false })).size).toBe(0)
+  })
+
+  it('settings API: planner rules save, merge with earlier values and reject nonsense', async () => {
+    const { agent } = await signedUpAgent(ctx, 'rules@example.com')
+    expect((await agent.get('/api/settings')).body.planner).toMatchObject({ rollover: true, backlogPerDay: 2 })
+    const saved = await agent.put('/api/settings').send({ planner: { backlogPerDay: 0 } })
+    expect(saved.status).toBe(200)
+    await agent.put('/api/settings').send({ planner: { rollover: false } })
+    expect((await agent.get('/api/settings')).body.planner).toMatchObject({ backlogPerDay: 0, rollover: false, makeup: true })
+    expect((await agent.put('/api/settings').send({ planner: { backlogPerDay: 99 } })).status).toBe(400)
+    expect((await agent.put('/api/settings').send({ planner: { blockStarts: { afternoon: 18, evening: 10 } } })).status).toBe(400)
+  })
+
+  it('a user\'s planner rules apply only to that user', async () => {
+    await clean()
+    await Settings.updateOne({ userId }, { $set: { 'planner.backlogPerDay': 0 } }, { upsert: true })
+    for (const id of [userId, otherId]) await Task.create({ userId: id, title: 'b', status: 'pending', date: null })
+    await generateToday(userId, MONDAY)
+    await generateToday(otherId, MONDAY)
+    expect(await Task.countDocuments({ userId, date: day(MONDAY) })).toBe(0)
+    expect(await Task.countDocuments({ userId: otherId, date: day(MONDAY) })).toBe(1)
   })
 
   it('generation for one user never creates tasks for another', async () => {
