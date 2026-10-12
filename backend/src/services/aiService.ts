@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { AiUsage } from '../models/AiUsage'
 import { AiProposal } from '../models/AiProposal'
 import { Settings } from '../models/Settings'
@@ -15,26 +14,51 @@ export class AiError extends Error {
 
 // ------------------------------------------------------------------ config
 
-/** Claude Opus 5.5 unless AI_MODEL says otherwise (e.g. claude-sonnet-5-5 or claude-haiku-5-5 to cost less). */
-const model = () => process.env.AI_MODEL || 'claude-opus-5-5'
+// Any provider with an OpenAI-style chat-completions API works. Groq is the default; NVIDIA NIM
+// (build.nvidia.com) or any other compatible endpoint can be selected with AI_PROVIDER.
+type Provider = { id: string; label: string; baseUrl: string; keyEnv: string; model: string }
+const PROVIDERS: Record<string, Provider> = {
+  groq: { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', keyEnv: 'GROQ_API_KEY', model: 'openai/gpt-oss-120b' },
+  nvidia: { id: 'nvidia', label: 'NVIDIA', baseUrl: 'https://integrate.api.nvidia.com/v1', keyEnv: 'NVIDIA_API_KEY', model: 'meta/llama-3.3-70b-instruct' },
+  custom: { id: 'custom', label: 'your AI provider', baseUrl: '', keyEnv: 'AI_API_KEY', model: '' },
+}
+export const provider = (): Provider => PROVIDERS[process.env.AI_PROVIDER ?? 'groq'] ?? PROVIDERS.groq
+const apiKey = () => process.env[provider().keyEnv] || process.env.AI_API_KEY || ''
+const baseUrl = () => (process.env.AI_BASE_URL || provider().baseUrl).replace(/\/$/, '')
+const model = () => process.env.AI_MODEL || provider().model
 const monthlyAllowance = () => Number(process.env.AI_MONTHLY_TOKENS) || 300_000
 const dailyCap = () => Number(process.env.AI_DAILY_TOKENS) || 100_000
 const requestCap = () => Number(process.env.AI_REQUEST_TOKENS) || 120_000
 const MAX_STEPS = 8
 const PROPOSAL_TTL_MS = 7 * 24 * 3600 * 1000
 
-export type ModelCaller = (params: Record<string, any>) => Promise<any>
+/** Sends one chat-completions request and returns the parsed JSON. Errors carry `status` and the provider's message. */
+export type ModelCaller = (body: Record<string, any>) => Promise<any>
 
-let client: Anthropic | null = null
-const realCaller: ModelCaller = async params => {
-  client ??= new Anthropic() // reads ANTHROPIC_API_KEY
-  return client.beta.messages.create(params as any)
+const realCaller: ModelCaller = async body => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 90_000)
+  try {
+    const res = await fetch(`${baseUrl()}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey()}` },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    const data: any = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw Object.assign(new Error(String(data?.error?.message ?? res.statusText)), { status: res.status, code: data?.error?.code, retryAfter: res.headers.get('retry-after') })
+    }
+    return data
+  } finally {
+    clearTimeout(timer)
+  }
 }
 let caller: ModelCaller = realCaller
 /** Tests replace the model so nothing leaves the process. */
 export const setModelCaller = (fn: ModelCaller | null) => { caller = fn ?? realCaller }
 
-export const aiConfigured = () => caller !== realCaller || !!process.env.ANTHROPIC_API_KEY
+export const aiConfigured = () => caller !== realCaller || (!!apiKey() && !!baseUrl() && !!model())
 
 // ------------------------------------------------------------------- usage
 
@@ -59,8 +83,8 @@ async function assertQuota(userId: string, now: Date) {
 }
 
 async function recordUsage(userId: string, usage: any, now: Date) {
-  const input = (usage?.input_tokens ?? 0) + (usage?.cache_creation_input_tokens ?? 0) + (usage?.cache_read_input_tokens ?? 0)
-  const output = usage?.output_tokens ?? 0
+  const input = usage?.prompt_tokens ?? 0
+  const output = usage?.completion_tokens ?? 0
   const month = monthOf(now)
   const today = now.toISOString().slice(0, 10)
   await AiUsage.updateOne({ userId, month }, { $inc: { inputTokens: input, outputTokens: output, requests: 1 } }, { upsert: true })
@@ -87,10 +111,10 @@ async function loadContext(userId: string, now: Date) {
   const today = toDayKey(now, tz)
   const blocks = normalizeBlocks(settings?.planner?.blocks)
   const [threads, upcoming, backlog, goals] = await Promise.all([
-    Thread.find({ userId, status: { $ne: 'archived' } }).limit(60),
-    Task.find({ userId, date: { $gte: dayKeyToDate(today), $lt: dayKeyToDate(addDaysKey(today, 8)) } }).sort({ date: 1 }).limit(100),
-    Task.find({ userId, date: null, status: 'pending' }).sort({ createdAt: -1 }).limit(25),
-    Goal.find({ userId }).sort({ createdAt: -1 }).limit(10),
+    Thread.find({ userId, status: { $ne: 'archived' } }).limit(40),
+    Task.find({ userId, date: { $gte: dayKeyToDate(today), $lt: dayKeyToDate(addDaysKey(today, 8)) } }).sort({ date: 1 }).limit(60),
+    Task.find({ userId, date: null, status: 'pending' }).sort({ createdAt: -1 }).limit(15),
+    Goal.find({ userId }).sort({ createdAt: -1 }).limit(8),
   ])
   const nameOf = new Map(threads.map(t => [String(t._id), t.name]))
   const task = (t: any) => ({
@@ -141,15 +165,15 @@ const PROPOSE_TOOLS = [
     eventStart: { type: 'string', description: 'HH:mm, for event threads' }, eventEnd: { type: 'string' }, eventDays: { type: 'array', items: { type: 'integer' } }, notes: { type: 'string' },
   }, ['name', 'frequency']) },
   { name: 'propose_update_thread', description: 'Suggest changing an existing thread.', input_schema: obj({ threadId: { type: 'string' }, changes: obj({
-    name: { type: 'string' }, frequency: { type: 'string', enum: ['daily', 'multiple', 'weekly', 'fixed-day'] }, fixedDay: { type: ['integer', 'null'] },
+    name: { type: 'string' }, frequency: { type: 'string', enum: ['daily', 'multiple', 'weekly', 'fixed-day'] }, fixedDay: { type: 'integer', description: '0 = Monday … 6 = Sunday' },
     priority: priorityEnum, intensity: intensityEnum, status: { type: 'string', enum: ['active', 'parked', 'archived'] }, notes: { type: 'string' },
   }) }, ['threadId', 'changes']) },
   { name: 'propose_create_tasks', description: 'Suggest adding one or more tasks. Leave date out to put a task in the backlog; set dueDate for deadlines.', input_schema: obj({ tasks: { type: 'array', items: obj({
     title: { type: 'string' }, thread: { type: 'string', description: 'Name of an existing thread (or one you are proposing)' }, date: { ...day, description: 'Day to do it' }, dueDate: day,
     timeBlock: { type: 'string', description: 'A day-block id from the context' }, intensity: intensityEnum, priority: priorityEnum,
   }, ['title']) } }, ['tasks']) },
-  { name: 'propose_update_task', description: 'Suggest changing a task: move it to another day or block, rename it, mark it done or skipped, change its due date, intensity or priority. date null sends it back to the backlog.', input_schema: obj({ taskId: { type: 'string' }, changes: obj({
-    title: { type: 'string' }, date: { type: ['string', 'null'] }, dueDate: { type: ['string', 'null'] }, timeBlock: { type: 'string' },
+  { name: 'propose_update_task', description: 'Suggest changing a task: move it to another day or block, rename it, mark it done or skipped, change its due date, intensity or priority. date "none" sends it back to the backlog.', input_schema: obj({ taskId: { type: 'string' }, changes: obj({
+    title: { type: 'string' }, date: { type: 'string', description: 'YYYY-MM-DD, or "none" to send it back to the backlog' }, dueDate: { type: 'string', description: 'YYYY-MM-DD, or "none" to remove the due date' }, timeBlock: { type: 'string', description: 'A day-block id from the context, or "unscheduled"' },
     status: { type: 'string', enum: ['pending', 'done', 'skipped'] }, intensity: intensityEnum, priority: priorityEnum,
   }) }, ['taskId', 'changes']) },
   { name: 'propose_delete_task', description: 'Suggest deleting a task. Only when the person asked to remove it.', input_schema: obj({ taskId: { type: 'string' } }, ['taskId']) },
@@ -166,7 +190,7 @@ const PROPOSE_TOOLS = [
   { name: 'propose_rebalance_week', description: 'Suggest re-planning the rest of this week.', input_schema: obj({}) },
 ]
 
-const TOOLS = [...READ_TOOLS, ...PROPOSE_TOOLS]
+const TOOLS = [...READ_TOOLS, ...PROPOSE_TOOLS].map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }))
 
 export type ProposalCard = { id: string; kind: string; summary: string; details: string[]; destructive: boolean }
 
@@ -230,78 +254,93 @@ export type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
 const REFUSAL_TEXT = 'I can’t help with that one. Try rephrasing, or ask me about your plan.'
 
+/** Models differ in whether they take a reasoning setting; gpt-oss does, on Groq and NVIDIA. */
+function requestBody(system: string, convo: any[]) {
+  const m = model()
+  return {
+    model: m,
+    messages: [{ role: 'system', content: system }, ...convo],
+    tools: TOOLS,
+    tool_choice: 'auto',
+    temperature: 0.3,
+    max_tokens: 4096,
+    ...(/gpt-oss/i.test(m) ? { reasoning_effort: 'medium' } : {}),
+  }
+}
+
+/** Providers sometimes reject a malformed tool call from the model (HTTP 400); one retry usually fixes it. */
+const isBadToolCall = (e: any) => e?.status === 400 && /tool_use_failed|failed to call|tool call|failed_generation|function/i.test(`${e?.code ?? ''} ${e?.message ?? ''}`)
+
+async function callModel(body: Record<string, any>) {
+  try {
+    return await caller(body)
+  } catch (error: any) {
+    if (isBadToolCall(error)) {
+      try { return await caller(body) } catch (again: any) { error = again }
+    }
+    if (error?.status === 429 || error?.status === 503 || error?.status === 529 || error?.name === 'AbortError') {
+      throw new AiError(503, 'The assistant is busy right now. Try again in a moment.', 'ai_busy')
+    }
+    // providers sometimes echo the key back in an error; never log it
+    const key = apiKey()
+    console.error('AI call failed:', error?.status, key ? String(error?.message).split(key).join('[key]') : error?.message)
+    throw new AiError(502, 'The assistant couldn’t answer just now. Try again.', 'ai_failed')
+  }
+}
+
+const parseArgs = (raw: unknown): { ok: true; value: any } | { ok: false } => {
+  if (raw && typeof raw === 'object') return { ok: true, value: raw }
+  try {
+    const v = JSON.parse(String(raw || '{}'))
+    return v && typeof v === 'object' && !Array.isArray(v) ? { ok: true, value: v } : { ok: false }
+  } catch { return { ok: false } }
+}
+
 /** One user turn: call the model, run read tools, collect proposals. Nothing the model asks for is applied here. */
 export async function chat(userId: string, messages: ChatMessage[], now = new Date()): Promise<{ reply: string; proposals: ProposalCard[] }> {
   if (!aiConfigured()) throw new AiError(503, 'The AI assistant isn’t set up on this server.', 'ai_unconfigured')
   await assertQuota(userId, now)
 
   const context = await loadContext(userId, now)
+  const system = `${SYSTEM}\n\nCurrent context (JSON, the person's own data):\n${JSON.stringify(context)}`
   const convo: any[] = messages.map(m => ({ role: m.role, content: m.content }))
   const proposals: ProposalCard[] = []
   let spent = 0
   let reply = ''
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const params: Record<string, any> = {
-      model: model(),
-      max_tokens: 16000,
-      output_config: { effort: 'medium' },
-      system: [
-        { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
-        { type: 'text', text: `Current context (JSON, the person's own data):\n${JSON.stringify(context)}` },
-      ],
-      tools: TOOLS,
-      messages: convo,
-    }
-    if (process.env.AI_FALLBACKS !== 'off') {
-      params.betas = ['server-side-fallback-2026-07-01']
-      params.fallbacks = 'default'
-    }
-
-    let response: any
-    try {
-      response = await caller(params)
-    } catch (error: any) {
-      // The fallback parameter is a beta; if the API rejects it, retry once without
-      if (params.fallbacks && error?.status === 400 && /fallback/i.test(String(error?.message))) {
-        delete params.fallbacks
-        delete params.betas
-        response = await caller(params)
-      } else if (error?.status === 429 || error?.status === 529) {
-        throw new AiError(503, 'The assistant is busy right now. Try again in a moment.', 'ai_busy')
-      } else {
-        console.error('AI call failed:', error?.status, error?.message)
-        throw new AiError(502, 'The assistant couldn’t answer just now. Try again.', 'ai_failed')
-      }
-    }
-
+    const response = await callModel(requestBody(system, convo))
     spent += await recordUsage(userId, response.usage, now)
 
-    if (response.stop_reason === 'refusal') { reply = REFUSAL_TEXT; break }
-    const text = (response.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim()
-    const calls = (response.content ?? []).filter((b: any) => b.type === 'tool_use')
-    if (response.stop_reason !== 'tool_use' || !calls.length) {
+    const choice = response.choices?.[0]
+    const msg = choice?.message ?? {}
+    const text = typeof msg.content === 'string' ? msg.content.trim() : ''
+    const calls: any[] = Array.isArray(msg.tool_calls) ? msg.tool_calls : []
+
+    if (choice?.finish_reason === 'content_filter') { reply = REFUSAL_TEXT; break }
+    if (!calls.length) {
       reply = text || (proposals.length ? 'I’ve put suggestions below for you to review.' : 'Done.')
-      if (response.stop_reason === 'max_tokens') reply += '\n(I ran out of room; ask me to continue.)'
+      if (choice?.finish_reason === 'length') reply += '\n(I ran out of room; ask me to continue.)'
       break
     }
 
-    // Echo the assistant turn back unchanged (thinking blocks included), then answer every tool call in one message
-    convo.push({ role: 'assistant', content: response.content })
-    const results = []
+    // Keep the assistant turn as sent, then answer every tool call with its own tool message
+    convo.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls })
     for (const call of calls) {
+      const name = String(call.function?.name ?? '')
+      const args = parseArgs(call.function?.arguments)
       let out: string
       try {
-        out = call.name.startsWith('propose_')
-          ? await runProposeTool(userId, call.name, call.input ?? {}, proposals)
-          : await runReadTool(userId, call.name, call.input ?? {}, now)
+        if (!args.ok) out = 'Error: the arguments were not valid JSON. Call the tool again with a JSON object.'
+        else if (name.startsWith('propose_')) out = await runProposeTool(userId, name, args.value, proposals)
+        else if (READ_TOOLS.some(t => t.name === name)) out = await runReadTool(userId, name, args.value, now)
+        else out = 'Error: unknown tool.'
       } catch (error) {
-        console.error('AI tool failed:', call.name, error instanceof Error ? error.message : error)
+        console.error('AI tool failed:', name, error instanceof Error ? error.message : error)
         out = 'Error: that tool failed.'
       }
-      results.push({ type: 'tool_result', tool_use_id: call.id, content: out.slice(0, 20_000), ...(out.startsWith('Error') ? { is_error: true } : {}) })
+      convo.push({ role: 'tool', tool_call_id: String(call.id), content: out.slice(0, 20_000) })
     }
-    convo.push({ role: 'user', content: results })
 
     if (spent > requestCap()) {
       reply = 'That took more than one request’s share of your allowance, so I stopped. Ask me to continue if you want more.'

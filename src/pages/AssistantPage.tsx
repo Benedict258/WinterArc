@@ -171,7 +171,7 @@ export default function AssistantPage() {
         </div>
 
         {status && !status.enabled && (
-          <div className="p-4 rounded-lg border border-border bg-card text-sm">The assistant isn’t switched on for this server yet. The person running it needs to add an Anthropic API key.</div>
+          <div className="p-4 rounded-lg border border-border bg-card text-sm">The assistant isn’t switched on for this server yet. The person running it needs to add an AI provider key (Groq or NVIDIA).</div>
         )}
 
         {shownUsage && status?.enabled && <UsageBar usage={shownUsage} onMore={askMore} />}

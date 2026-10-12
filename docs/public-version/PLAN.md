@@ -46,7 +46,7 @@ Status: M0-M6, the AI assistant (M8) and imports from CSV, Todoist, Notion and W
 
 **Drop.** Per-user quota (default 200 MB), files expire after 30 days, upload URLs check remaining quota, orphan cleanup job.
 
-**AI assistant.** Server-side calls to the Claude API with the user's workspace summarized into context; tools for "create thread", "queue tasks", "rebalance". Every call metered per user (tokens) against a monthly allowance; hard daily/monthly caps; plan tier raises the cap.
+**AI assistant.** Server-side calls to an OpenAI-compatible model API (Groq by default, NVIDIA NIM or any other provider selectable) with the user's workspace summarized into context; tools for "create thread", "queue tasks", "rebalance". Every call metered per user (tokens) against a monthly allowance; hard daily/monthly caps; plan tier raises the cap.
 
 **Google Calendar.** Per-user OAuth. Public use needs Google's OAuth verification (weeks; needs privacy policy, demo video, domain). Start the application early; until approved it runs in "Testing" mode for up to 100 named users.
 

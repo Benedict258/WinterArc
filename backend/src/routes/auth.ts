@@ -8,6 +8,7 @@ import {
   AuthError, signup, login, googleLogin, verifyEmail, forgotPassword, resetPassword,
   sendVerification, issueNativeToken, toPublicUser, inviteRequired,
 } from '../services/authService'
+import { aiConfigured, provider } from '../services/aiService'
 import { User } from '../models/User'
 import { ApiToken } from '../models/ApiToken'
 import { hashToken } from '../utils/tokens'
@@ -57,7 +58,7 @@ async function start(req: Request, res: Response, user: any, client?: string) {
 export const authRouter = Router()
 
 authRouter.get('/config', (_req, res) => {
-  res.json({ inviteRequired: inviteRequired(), googleClientId: process.env.GOOGLE_CLIENT_ID || null, supportEmail: process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || null })
+  res.json({ inviteRequired: inviteRequired(), googleClientId: process.env.GOOGLE_CLIENT_ID || null, supportEmail: process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || null, aiProvider: aiConfigured() ? provider().label : null })
 })
 
 authRouter.post('/signup', rateLimit('signup', 10, 60 * 60 * 1000), validateRequest(signupSchema), async (req, res) => {

@@ -97,9 +97,19 @@ async function threadName(userId: string, id: string) {
 
 export class ActionError extends Error {}
 
+/** Models can't send null in every tool schema, so "none" (or empty) means "clear this field". */
+function normalizeNone(kind: ActionKind, raw: any) {
+  if (kind !== 'update_task' || !raw?.changes || typeof raw.changes !== 'object') return raw
+  const changes = { ...raw.changes }
+  for (const k of ['date', 'dueDate']) {
+    if (typeof changes[k] === 'string' && ['none', 'null', ''].includes(changes[k].trim().toLowerCase())) changes[k] = null
+  }
+  return { ...raw, changes }
+}
+
 /** Validate arguments and describe the change for the person. Throws ActionError with a message the model can act on. */
 export async function describeAction(userId: string, kind: ActionKind, raw: unknown): Promise<{ args: any; summary: string; details: string[] }> {
-  const parsed = ACTION_SCHEMAS[kind].safeParse(raw)
+  const parsed = ACTION_SCHEMAS[kind].safeParse(normalizeNone(kind, raw))
   if (!parsed.success) throw new ActionError(parsed.error.issues.map(i => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '))
   const a: any = parsed.data
   switch (kind) {

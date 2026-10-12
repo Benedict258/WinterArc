@@ -80,7 +80,8 @@ Files are stored under each user's own folder.
 - GitHub Actions runs everything against a real MongoDB on every push to `WinterArcBeta`.
 
 ## 7. AI assistant (optional)
-1. console.anthropic.com → **API keys** → create one → add it in Render as `ANTHROPIC_API_KEY`. Set a spend limit there too.
-2. Each person gets 300,000 tokens a month and 100,000 a day (`AI_MONTHLY_TOKENS`, `AI_DAILY_TOKENS`). Roughly 100 chats a month. They can ask for more; you grant it with **+AI** on the Admin page.
-3. The default model is `claude-opus-5-5`. To spend less, set `AI_MODEL` to `claude-sonnet-5-5` (about half the price) or `claude-haiku-5-5` (about a twentieth).
+It works with any provider that has an OpenAI-style API and tool calling. Groq is the default.
+1. **Groq:** console.groq.com → **API Keys** → create one → add it in Render as `GROQ_API_KEY`. The default model is `openai/gpt-oss-120b`; change it with `AI_MODEL` (for example `llama-3.3-70b-versatile`). The free plan has small per-minute token limits, so add a card to move to the Developer plan before inviting testers (no minimum spend); a chat uses a few thousand tokens.
+2. **NVIDIA NIM instead:** build.nvidia.com → get an API key → set `AI_PROVIDER=nvidia`, `NVIDIA_API_KEY`, and check `AI_MODEL` supports function calling (default `meta/llama-3.3-70b-instruct`). NVIDIA's free hosted tier is meant for development, so it isn't suitable for real users.
+3. Each person gets 300,000 tokens a month and 100,000 a day (`AI_MONTHLY_TOKENS`, `AI_DAILY_TOKENS`). They can ask for more; you grant it with **+AI** on the Admin page.
 4. People need a confirmed email to use it. The assistant only suggests; every change needs the person's approval.
