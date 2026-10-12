@@ -40,7 +40,7 @@ export async function enablePush(): Promise<PushState> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(subscription.toJSON()),
   })
-  if (!res.ok) throw new Error('Could not register this device with the server.')
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not register this device with the server.')
   return 'on'
 }
 

@@ -1,32 +1,49 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
-import { processQueue } from '@/lib/syncQueue'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { processQueue, clearQueue } from '@/lib/syncQueue'
+import { clearCache } from '@/lib/storage'
 import { isNative, setToken, clearToken } from '@/lib/native'
 
+export type AuthUser = { id: string; email: string; name: string; role: 'user' | 'admin'; emailVerified: boolean }
+export type AuthConfig = { inviteRequired: boolean; googleClientId: string | null }
+type Result = { ok: boolean; error?: string; code?: string }
+export type SignupInput = { email: string; password: string; name?: string; inviteCode?: string }
+
 interface AuthContextType {
+  user: AuthUser | null
   isAuthenticated: boolean
   /** true until the first /api/auth/me check finishes */
   isChecking: boolean
-  login: (passcode: string) => Promise<{ ok: boolean; error?: string }>
+  config: AuthConfig
+  login: (email: string, password: string) => Promise<Result>
+  signup: (input: SignupInput) => Promise<Result>
+  googleLogin: (credential: string, inviteCode?: string) => Promise<Result>
   logout: () => Promise<void>
+  refreshUser: () => Promise<void>
+  resendVerification: () => Promise<Result>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Any 401 from the API (expired session, server restart without a store, …)
-// drops the user back to the passcode gate instead of silently showing stale
-// cached data.
-// Remembers that this device was unlocked, so the app still opens with no
-// internet (the passcode can't be checked offline). The server still enforces
-// the session on every API call; this only decides whether to show the UI.
-const AUTH_FLAG = 'winterarc.unlocked'
-const readFlag = () => { try { return localStorage.getItem(AUTH_FLAG) === '1' } catch { return false } }
-const writeFlag = (on: boolean) => { try { on ? localStorage.setItem(AUTH_FLAG, '1') : localStorage.removeItem(AUTH_FLAG) } catch { /* storage unavailable */ } }
+// Remembers who was signed in on this device, so the app still opens with no
+// internet (the password can't be checked offline). The server still enforces
+// the session on every API call; this only decides what to show.
+const USER_KEY = 'winterarc.user'
+const readUser = (): AuthUser | null => {
+  try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null') } catch { return null }
+}
+const writeUser = (user: AuthUser | null) => {
+  try { user ? localStorage.setItem(USER_KEY, JSON.stringify(user)) : localStorage.removeItem(USER_KEY) } catch { /* storage unavailable */ }
+}
 
+// Any 401 from the API (expired session, suspended account, password reset on
+// another device) drops the user back to the sign-in screen instead of silently
+// showing stale cached data.
 let onUnauthorized: (() => void) | null = null
 let fetchPatched = false
 // Bumped on every successful login. A request sent before the latest login
-// (e.g. the offline queue replaying while the backend wakes up) may come back
-// 401 afterwards — that must not lock the freshly unlocked app.
+// (e.g. the offline queue replaying) may come back 401 afterwards — that must
+// not sign out the freshly signed-in user.
 let authEpoch = 0
 
 function patchFetchFor401() {
@@ -39,66 +56,110 @@ function patchFetchFor401() {
     if (response.status === 401 && epochAtSend === authEpoch) {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       const path = new URL(url, window.location.origin).pathname
-      if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) { writeFlag(false); clearToken(); onUnauthorized?.() }
+      if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) onUnauthorized?.()
     }
     return response
   }
 }
 
+const json = (body: unknown): RequestInit => ({
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+})
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
-  const [isChecking, setIsChecking] = useState<boolean>(true)
+  const queryClient = useQueryClient()
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [isChecking, setIsChecking] = useState(true)
+  const [config, setConfig] = useState<AuthConfig>({ inviteRequired: true, googleClientId: null })
+
+  const forget = useCallback(async () => {
+    writeUser(null)
+    clearToken()
+    await Promise.all([clearCache(), clearQueue().catch(() => {})])
+    queryClient.clear()
+    setUser(null)
+  }, [queryClient])
 
   useEffect(() => {
     patchFetchFor401()
-    onUnauthorized = () => setIsAuthenticated(false)
+    onUnauthorized = () => { void forget() }
+    fetch('/api/auth/config').then(r => r.json()).then(setConfig).catch(() => {})
     fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
       .then(r => r.json())
       .then(d => {
-        writeFlag(!!d.authenticated)
-        setIsAuthenticated(!!d.authenticated)
+        if (d.authenticated && d.user) {
+          writeUser(d.user)
+          setUser(d.user)
+        } else {
+          void forget()
+        }
       })
-      // Network failure (offline / server asleep): stay unlocked if we were before
-      .catch(() => setIsAuthenticated(readFlag()))
+      // Network failure (offline / server asleep): stay signed in as before
+      .catch(() => setUser(readUser()))
       .finally(() => setIsChecking(false))
-    return () => {
-      onUnauthorized = null
-    }
-  }, [])
+    return () => { onUnauthorized = null }
+  }, [forget])
 
-  const login = async (passcode: string) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passcode, client: isNative() ? 'native' : 'web' })
-    })
-    if (res.ok) {
-      if (isNative()) {
-        const { token } = await res.json().catch(() => ({ token: null }))
-        if (!token) return { ok: false, error: 'Login failed' }
-        setToken(token)
-      }
-      authEpoch++
-      writeFlag(true)
-      setIsAuthenticated(true)
-      // Replay anything queued while locked/offline, now with a valid session
-      processQueue().catch(console.error)
-      return { ok: true }
+  /** After a successful sign-in: wipe cached data if a different person was using this device. */
+  const adopt = async (next: AuthUser, token?: string) => {
+    const previous = readUser()
+    if (previous && previous.id !== next.id) {
+      await Promise.all([clearCache(), clearQueue().catch(() => {})])
+      queryClient.clear()
     }
-    const body = await res.json().catch(() => ({}))
-    return { ok: false, error: body.error as string | undefined }
+    authEpoch++
+    if (token) setToken(token)
+    writeUser(next)
+    setUser(next)
+    // Replay anything queued while signed out/offline, now with a valid session
+    processQueue().catch(console.error)
   }
 
+  const authenticate = async (path: string, body: Record<string, unknown>): Promise<Result> => {
+    try {
+      const res = await fetch(path, json({
+        ...body,
+        client: isNative() ? 'native' : 'web',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }))
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) return { ok: false, error: data.error || 'Something went wrong. Please try again.', code: data.code }
+      if (isNative() && !data.token) return { ok: false, error: 'Sign-in failed. Please try again.' }
+      await adopt(data.user, data.token)
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'Can’t reach the server. Check your connection and try again.' }
+    }
+  }
+
+  const login = (email: string, password: string) => authenticate('/api/auth/login', { email, password })
+  const signup = (input: SignupInput) => authenticate('/api/auth/signup', { ...input })
+  const googleLogin = (credential: string, inviteCode?: string) => authenticate('/api/auth/google', { credential, inviteCode })
+
   const logout = async () => {
-    writeFlag(false)
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
-    clearToken()
-    setIsAuthenticated(false)
+    await forget()
+  }
+
+  const refreshUser = async () => {
+    const d = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' }).then(r => r.json()).catch(() => null)
+    if (d?.authenticated && d.user) {
+      writeUser(d.user)
+      setUser(d.user)
+    }
+  }
+
+  const resendVerification = async (): Promise<Result> => {
+    const res = await fetch('/api/auth/resend-verification', json({})).catch(() => null)
+    if (!res) return { ok: false, error: 'Can’t reach the server.' }
+    return res.ok ? { ok: true } : { ok: false, error: (await res.json().catch(() => ({}))).error || 'Please try again later.' }
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isChecking, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isChecking, config, login, signup, googleLogin, logout, refreshUser, resendVerification }}>
       {children}
     </AuthContext.Provider>
   )

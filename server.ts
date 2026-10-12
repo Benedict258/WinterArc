@@ -153,7 +153,7 @@ export function createApp() {
     resave: false,
     saveUninitialized: false,
     // Persist sessions in Mongo so a restart doesn't log everyone out (tests use the in-memory store)
-    store: IS_TEST ? undefined : MongoStore.create({
+    store: (IS_TEST || process.env.SESSION_STORE === 'memory') ? undefined : MongoStore.create({
       client: mongoose.connection.getClient() as any,
       collectionName: 'sessions',
       ttl: 60 * 60 * 24 * 30,

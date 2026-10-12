@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { toDayKey } from '@/lib/utils'
 
 export default function SettingsView() {
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const { toast } = useToast()
   const { data: settings, isLoading: settingsLoading, error: settingsError } = useSettings()
   const { 
@@ -147,24 +147,24 @@ export default function SettingsView() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ShieldCheck size={20} className="text-primary" />
-                  Security & Access Control
+                  Account
                 </CardTitle>
-                <CardDescription>Passcode gate protection for your private workspace</CardDescription>
+                <CardDescription>Signed in as {user?.email}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="p-4 rounded-lg bg-secondary flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                      <p className="text-sm font-semibold">Passcode Protection Active</p>
+                      <span className={`w-2 h-2 rounded-full ${user?.emailVerified ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                      <p className="text-sm font-semibold">{user?.emailVerified ? 'Email confirmed' : 'Email not confirmed yet'}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Access is gated to Benedict Isaac. Sessions remain unlocked on this device until you manually lock.
+                    <p className="text-xs text-muted-foreground break-words">
+                      {user?.name ? `${user.name} · ` : ''}{user?.email}
                     </p>
                   </div>
                   <Button onClick={logout} variant="outline" size="sm" className="gap-2 shrink-0">
                     <Lock size={15} />
-                    Lock Session Now
+                    Sign out
                   </Button>
                 </div>
               </CardContent>

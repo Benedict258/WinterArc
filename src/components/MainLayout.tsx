@@ -5,7 +5,7 @@ import {
   Menu,
   Sun,
   Moon,
-  Lock,
+  LogOut,
   CalendarDays,
   Sun as TodayIcon,
   GitBranch,
@@ -49,10 +49,27 @@ function isActive(itemPath: string, pathname: string) {
   return pathname === itemPath || pathname.startsWith(`${itemPath}/`)
 }
 
+/** Shown until the user confirms their email: push and sharing need a confirmed address. */
+function VerifyBanner({ onResend }: { onResend: () => Promise<{ ok: boolean; error?: string }> }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const resend = async () => {
+    setState('sending')
+    setState((await onResend()).ok ? 'sent' : 'error')
+  }
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs bg-amber-500/10 text-amber-700 dark:text-amber-300 border-b border-amber-500/30">
+      <span className="min-w-0">Confirm your email address to turn on notifications. Check your inbox for the link.</span>
+      <button onClick={resend} disabled={state === 'sending' || state === 'sent'} className="font-semibold underline underline-offset-2 disabled:no-underline disabled:opacity-70">
+        {state === 'sent' ? 'Sent — check your inbox' : state === 'error' ? 'Couldn’t send, try again' : 'Resend email'}
+      </button>
+    </div>
+  )
+}
+
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
-  const { logout } = useAuth()
+  const { logout, user, resendVerification } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [pinnedExpanded, setPinnedExpanded] = useState<boolean>(() => {
@@ -212,11 +229,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <button
             onClick={() => logout()}
             className={cn(rowClass, 'w-full text-muted-foreground hover:text-foreground hover:bg-secondary')}
-            title={expanded ? undefined : 'Lock workspace'}
-            aria-label="Lock workspace"
+            title={expanded ? undefined : 'Sign out'}
+            aria-label="Sign out"
           >
-            <Lock size={18} className="shrink-0" />
-            {expanded && <span>Lock workspace</span>}
+            <LogOut size={18} className="shrink-0" />
+            {expanded && <span>Sign out</span>}
           </button>
         </div>
       </aside>
@@ -253,12 +270,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <button
             onClick={() => logout()}
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            aria-label="Lock workspace"
+            aria-label="Sign out"
           >
-            <Lock size={18} />
+            <LogOut size={18} />
           </button>
         </header>
 
+        {user && !user.emailVerified && <VerifyBanner onResend={resendVerification} />}
         <main className="p-4 sm:p-6">{children}</main>
       </div>
 

@@ -55,7 +55,9 @@ export default function DropView() {
           return data
         })
       }
-    } catch {}
+    } catch {
+      // offline or server asleep: keep what we have and try again on the next poll
+    }
   }
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export default function DropView() {
         })
       }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- imgUrls is only read to skip images we already have
   }, [items])
 
   const uploadFile = async (file: File) => {
