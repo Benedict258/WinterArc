@@ -547,6 +547,12 @@ async function startServer() {
         if (!DAY_KEY_RE.test(date.slice(0, 10))) return res.status(400).json({ error: 'Invalid date' })
         filters.date = date
       }
+      for (const key of ['before', 'since'] as const) {
+        const value = str(req.query[key])
+        if (!value) continue
+        if (!DAY_KEY_RE.test(value.slice(0, 10))) return res.status(400).json({ error: `Invalid ${key}` })
+        filters[key] = value
+      }
       if (str(req.query.status)) filters.status = str(req.query.status)
       if (str(req.query.threadId) !== undefined) filters.threadId = str(req.query.threadId)
       const tasks = await taskService.getTasks(filters)
