@@ -139,6 +139,8 @@ export const dropUpdateSchema = z.object({
 
 export const loginSchema = z.object({
   passcode: z.string().min(1).max(256),
+  // 'native' asks for a bearer token instead of a session cookie
+  client: z.enum(['web', 'native']).optional(),
 });
 
 export type ThreadInput = z.infer<typeof threadSchema>;

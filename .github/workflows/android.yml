@@ -1,9 +1,10 @@
 name: Android app
 
-# Builds the WinterArc Android app (Trusted Web Activity) and publishes the
+# Builds the native WinterArc Android app (Capacitor: the web app is bundled
+# inside, so it opens and works offline without the network) and publishes the
 # signed APK (sideload) and AAB (Play Store) as a GitHub Release.
-# The app loads the live site, so it only needs rebuilding when android/
-# changes — website updates reach the app automatically.
+# Unlike the old web-wrapper, the UI ships inside the app, so rebuild whenever
+# the web code changes.
 
 on:
   workflow_dispatch:
@@ -11,6 +12,11 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'capacitor.config.ts'
       - '.github/workflows/android.yml'
 
 permissions:
@@ -21,17 +27,28 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION_CODE: ${{ github.run_number }}
+      # The bundled app talks to the API directly (see src/lib/api.ts)
+      VITE_API_BASE: https://winterarc-f74u.onrender.com
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
+
+      - name: Build the web app and copy it into the Android project
+        run: |
+          npm ci
+          npm run build:client
+          npx cap sync android
 
       - name: Restore signing key
         env:
@@ -48,18 +65,7 @@ jobs:
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: gradle --no-daemon assembleRelease bundleRelease
-
-      - name: Verify signature matches assetlinks.json
-        run: |
-          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | tee certs.txt
-          APK_FP=$(grep -m1 'SHA-256 digest' certs.txt | awk '{print toupper($NF)}' | sed 's/../&:/g; s/:$//')
-          SITE_FP=$(grep -o '"[0-9A-F:]\{95\}"' public/.well-known/assetlinks.json | tr -d '"')
-          echo "APK:  $APK_FP"; echo "Site: $SITE_FP"
-          if [ "$APK_FP" != "$SITE_FP" ]; then
-            echo "::error::APK signing fingerprint doesn't match public/.well-known/assetlinks.json"; exit 1
-          fi
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
 
       - name: Collect outputs
         run: |
@@ -81,6 +87,7 @@ jobs:
           body: |
             Install on your phone: download **WinterArc-1.0.${{ github.run_number }}.apk** and open it
             (allow "install unknown apps" for your browser or file manager when asked).
+            It installs over the previous WinterArc app (same signing key).
 
             The `.aab` file is for uploading to Google Play.
           files: out/*

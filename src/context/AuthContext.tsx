@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { processQueue } from '@/lib/syncQueue'
+import { isNative, setToken, clearToken } from '@/lib/native'
 
 interface AuthContextType {
   isAuthenticated: boolean
@@ -38,7 +39,7 @@ function patchFetchFor401() {
     if (response.status === 401 && epochAtSend === authEpoch) {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       const path = new URL(url, window.location.origin).pathname
-      if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) { writeFlag(false); onUnauthorized?.() }
+      if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) { writeFlag(false); clearToken(); onUnauthorized?.() }
     }
     return response
   }
@@ -70,9 +71,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passcode })
+      body: JSON.stringify({ passcode, client: isNative() ? 'native' : 'web' })
     })
     if (res.ok) {
+      if (isNative()) {
+        const { token } = await res.json().catch(() => ({ token: null }))
+        if (!token) return { ok: false, error: 'Login failed' }
+        setToken(token)
+      }
       authEpoch++
       writeFlag(true)
       setIsAuthenticated(true)
@@ -87,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     writeFlag(false)
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
+    clearToken()
     setIsAuthenticated(false)
   }
 

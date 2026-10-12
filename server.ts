@@ -8,6 +8,7 @@ import { MongoStore } from 'connect-mongo'
 
 import { Thread } from './backend/src/models/Thread.ts'
 import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
+import { ApiToken } from './backend/src/models/ApiToken.ts'
 import { PushSubscription } from './backend/src/models/PushSubscription.ts'
 import { pushConfigured, vapidPublicKey, sendToAll, runNotificationTick, startNotificationScheduler } from './backend/src/services/notificationService.ts'
 import { createIdempotent } from './backend/src/utils/idempotentCreate.ts'
@@ -213,10 +214,33 @@ function trustProxySetting() {
   return raw === 'true' ? true : raw
 }
 
-const ALLOWED_ORIGINS = (process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev')
-  .split(',')
-  .map(s => s.trim().replace(/\/$/, ''))
-  .filter(Boolean)
+// The native app's WebView origins (Capacitor). It authenticates with a bearer
+// token, not cookies, so allowing these origins doesn't expose cookie sessions.
+const NATIVE_ORIGINS = ['https://localhost', 'http://localhost', 'capacitor://localhost']
+
+const ALLOWED_ORIGINS = [
+  ...(process.env.FRONTEND_ORIGIN || 'https://winterarc.benedictisaac.dev')
+    .split(',')
+    .map(s => s.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+  ...NATIVE_ORIGINS,
+]
+
+const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex')
+const NATIVE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000
+
+function bearerToken(req: express.Request) {
+  const header = req.headers.authorization
+  return header?.startsWith('Bearer ') ? header.slice(7).trim() : null
+}
+
+/** Logged in by session cookie (web) or bearer token (native app). */
+async function isAuthenticated(req: express.Request) {
+  if (req.session?.authenticated) return true
+  const token = bearerToken(req)
+  if (!token) return false
+  return !!(await ApiToken.exists({ tokenHash: hashToken(token), expiresAt: { $gt: new Date() } }))
+}
 
 function passcodeMatches(input: string) {
   const expected = crypto.createHash('sha256').update(process.env.APP_PASSCODE!).digest()
@@ -296,6 +320,12 @@ async function startServer() {
       return res.status(401).json({ error: 'Invalid passcode' })
     }
     loginFailures.delete(ip)
+    if (req.body.client === 'native') {
+      const token = crypto.randomBytes(32).toString('hex')
+      return ApiToken.create({ tokenHash: hashToken(token), label: 'native app', expiresAt: new Date(Date.now() + NATIVE_TOKEN_TTL_MS) })
+        .then(() => res.json({ ok: true, token }))
+        .catch(() => res.status(500).json({ error: 'Login failed' }))
+    }
     // New session id on login (prevents session fixation)
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ error: 'Login failed' })
@@ -304,16 +334,18 @@ async function startServer() {
     })
   })
 
-  app.post('/api/auth/logout', (req, res) => {
+  app.post('/api/auth/logout', async (req, res) => {
+    const token = bearerToken(req)
+    if (token) await ApiToken.deleteOne({ tokenHash: hashToken(token) }).catch(() => {})
     req.session.destroy(() => {
       res.clearCookie('winterarc.sid')
       res.json({ ok: true })
     })
   })
 
-  app.get('/api/auth/me', (req, res) => {
+  app.get('/api/auth/me', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
-    res.json({ authenticated: !!req.session?.authenticated })
+    res.json({ authenticated: await isAuthenticated(req).catch(() => false) })
   })
 
   // ============================================
@@ -343,9 +375,9 @@ async function startServer() {
   })
 
   // Protect all API routes except auth/health
-  app.use('/api', (req, res, next) => {
+  app.use('/api', async (req, res, next) => {
     if (req.path.startsWith('/auth') || req.path === '/health' || req.path === '/cron/tick') return next()
-    if (req.session?.authenticated) return next()
+    if (await isAuthenticated(req).catch(() => false)) return next()
     return res.status(401).json({ error: 'Unauthorized' })
   })
 

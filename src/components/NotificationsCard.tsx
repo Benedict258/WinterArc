@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings'
 import { DEFAULT_NOTIFICATIONS, type NotificationSettings } from '@/shared/notificationPlan'
+import { isNative } from '@/lib/native'
+import { nativeNotificationsGranted, requestNativeNotifications, scheduleReminders } from '@/lib/nativeReminders'
 import { getPushState, enablePush, disablePush, sendTestPush, type PushState } from '@/lib/push'
 
 export default function NotificationsCard() {
@@ -14,7 +16,16 @@ export default function NotificationsCard() {
   const [state, setState] = useState<PushState>('off')
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => { getPushState().then(setState).catch(() => setState('unsupported')) }, [])
+  const native = isNative()
+  useEffect(() => {
+    const load = native
+      ? nativeNotificationsGranted().then((granted): PushState => (granted ? 'on' : 'off'))
+      : getPushState()
+    load.then(setState).catch(() => setState('unsupported'))
+  }, [native])
+
+  // The phone schedules its own reminders, so re-plan whenever the preferences change
+  useEffect(() => { if (native && state === 'on') scheduleReminders().catch(() => {}) }, [native, state, settings?.notifications])
 
   const prefs: NotificationSettings = {
     dailyPlan: { ...DEFAULT_NOTIFICATIONS.dailyPlan, ...settings?.notifications?.dailyPlan },
@@ -46,16 +57,16 @@ export default function NotificationsCard() {
         <div className="p-4 rounded-lg bg-secondary flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-sm">
             {state === 'unsupported' && 'This browser can’t receive push notifications.'}
-            {state === 'denied' && 'Notifications are blocked for this site. Allow them in your browser or system settings, then come back.'}
+            {state === 'denied' && 'Notifications are blocked. Allow them in your system settings, then come back.'}
             {state === 'off' && 'Notifications are off on this device.'}
             {state === 'on' && 'Notifications are on for this device.'}
           </p>
           <div className="flex gap-2 shrink-0">
-            {state === 'off' && <Button size="sm" disabled={busy} onClick={() => run(enablePush, 'Notifications enabled')}>Enable</Button>}
+            {state === 'off' && <Button size="sm" disabled={busy} onClick={() => run(native ? async () => ((await requestNativeNotifications()) ? 'on' : 'denied') : enablePush, 'Notifications enabled')}>Enable</Button>}
             {state === 'on' && (
               <>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => run(async () => { await sendTestPush() }, 'Test sent')}>Send test</Button>
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(disablePush)}>Turn off</Button>
+                {!native && <Button size="sm" variant="outline" disabled={busy} onClick={() => run(async () => { await sendTestPush() }, 'Test sent')}>Send test</Button>}
+                {!native && <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(disablePush)}>Turn off</Button>}
               </>
             )}
           </div>
