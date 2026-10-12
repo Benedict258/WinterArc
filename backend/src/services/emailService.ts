@@ -118,3 +118,18 @@ export function partnerInviteMessage(to: string, from: { name: string; email: st
     html: layout(`${who} wants an accountability partner`, hasAccount ? 'Open WinterArc to accept or decline. Nothing is shared until you accept, and you choose what you share.' : 'WinterArc is in private beta, so you’ll need an invite code to join: ask them. Once you have an account with this email address, the request will be waiting for you.', `${url}/partners`, 'Open WinterArc'),
   }
 }
+
+export function threadInviteMessage(to: string, from: { name: string; email: string }, threadName: string, role: 'editor' | 'viewer', hasAccount: boolean): Email {
+  const who = from.name || from.email
+  const url = appUrl()
+  const what = role === 'editor' ? 'to work on' : 'to follow'
+  const text = hasAccount
+    ? `${who} (${from.email}) invited you ${what} the shared thread “${threadName}” on WinterArc.\n\nOpen the Threads page to accept or decline: ${url}/threads`
+    : `${who} (${from.email}) invited you ${what} the shared thread “${threadName}” on WinterArc, a daily planner.\n\nWinterArc is in private beta, so you'll need an invite code to join: ask ${who}. Once you have an account with this email address, the invitation will be waiting on the Threads page: ${url}/threads`
+  return {
+    to,
+    subject: `${who} shared a thread with you on WinterArc`,
+    text,
+    html: layout(`${who} shared “${threadName}” with you`, hasAccount ? 'Open WinterArc to accept or decline.' : 'WinterArc is in private beta, so you’ll need an invite code to join: ask them. Once you have an account with this email address, the invitation will be waiting for you.', `${url}/threads`, 'Open WinterArc'),
+  }
+}

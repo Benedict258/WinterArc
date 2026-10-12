@@ -47,6 +47,8 @@ const taskSchema = new mongoose.Schema(
     isEvent: { type: Boolean, default: false },
     startTime: { type: String, default: null },
     endTime: { type: String, default: null },
+    // Tasks in a shared thread belong to whoever they're assigned to (userId); this is who created it, when someone else did
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     // Set when an unfinished task was swept off a past day (the day it was missed)
     missedOn: { type: Date, default: null },
     calendarEventId: String,
@@ -69,6 +71,7 @@ const taskSchema = new mongoose.Schema(
 taskSchema.index({ userId: 1, date: 1 })
 taskSchema.index({ userId: 1, threadId: 1, date: 1 })
 taskSchema.index({ userId: 1, status: 1, date: 1 })
+taskSchema.index({ threadId: 1, status: 1 })
 taskSchema.plugin(tenantGuard)
 
 export const Task = mongoose.model('Task', taskSchema)

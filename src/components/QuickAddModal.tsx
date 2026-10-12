@@ -30,7 +30,8 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const [startTime, setStartTime] = useState('18:00')
   const [endTime, setEndTime] = useState('19:00')
 
-  const { data: threads = [] } = useThreads()
+  const { data: allThreads = [] } = useThreads()
+  const threads = allThreads.filter(t => t.role !== 'viewer') // viewers can't add to a shared thread
   const { mutate: createTask, isPending } = useCreateTask()
 
   if (!isOpen) return null

@@ -33,6 +33,10 @@ export type Thread = {
   intensity: 'light' | 'medium' | 'heavy';
   notes: string;
   resources: ThreadResource[];
+  /** set on threads other people own and share with you */
+  sharedWithMe?: boolean;
+  role?: 'editor' | 'viewer';
+  ownerName?: string;
   createdAt: string;
   updatedAt: string;
 };

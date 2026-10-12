@@ -446,8 +446,10 @@ async function loadDayLoad(userId: string, dayKey: string, blocks: DayBlock[]): 
 }
 
 async function loadQueue(userId: string): Promise<PlanTask[]> {
-  const docs = await Task.find({ userId, date: null, status: 'pending' })
-  return docs.map(toPlanTask)
+  const [docs, own] = await Promise.all([Task.find({ userId, date: null, status: 'pending' }), Thread.find({ userId }, { _id: 1 })])
+  const mine = new Set(own.map(t => String(t._id)))
+  // a task in someone else's shared thread has no rotation of mine to wait in: it is plain backlog to my planner
+  return docs.map(toPlanTask).map(t => (t.threadId && !mine.has(t.threadId) ? { ...t, threadId: null } : t))
 }
 
 /**

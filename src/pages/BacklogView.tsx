@@ -16,7 +16,8 @@ export default function BacklogView() {
 
   const unscheduledTasks = tasks.filter((task: any) => !task.date)
 
-  const { data: threads = [] } = useThreads()
+  const { data: allThreads = [] } = useThreads()
+  const threads = allThreads.filter(t => t.role !== 'viewer')
   const threadMap = new Map(threads.map(t => [t._id, t.name]))
 
   const { mutate: createTask, isPending: isCreating } = useCreateTask()

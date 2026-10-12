@@ -1,9 +1,12 @@
 import { Thread } from '../models/Thread'
 import { getPlan } from './planService'
+import { threadsSharedWithMe } from './sharedThreadService'
 import { createIdempotent } from '../utils/idempotentCreate'
 
 export async function getThreads(userId: string) {
-  return await Thread.find({ userId, status: { $ne: 'archived' } })
+  const own = await Thread.find({ userId, status: { $ne: 'archived' } })
+  // threads other people shared with me come along (marked sharedWithMe) so their tasks have names
+  return [...own, ...(await threadsSharedWithMe(userId))]
 }
 
 /** Free accounts have a cap on live threads. `adding` is how many are about to be created. */

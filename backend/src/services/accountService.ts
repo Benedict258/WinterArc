@@ -14,6 +14,7 @@ import { AiUsage } from '../models/AiUsage'
 import { AiProposal } from '../models/AiProposal'
 import { deleteS3Object } from './s3'
 import { removeAllFor } from './partnerService'
+import { removeAllSharingFor } from './sharedThreadService'
 
 /** Everything we hold about a person, as one JSON document (their copy of their data). */
 export async function exportAccount(userId: string) {
@@ -56,7 +57,7 @@ export async function deleteAccount(userId: string) {
     AiProposal.deleteMany({ userId }),
   ])
   const gone = await User.findOne({ _id: userId }, { email: 1 })
-  if (gone) await removeAllFor(userId, gone.email)
+  if (gone) { await removeAllFor(userId, gone.email); await removeAllSharingFor(userId, gone.email) }
   await User.deleteOne({ _id: userId })
   return { records: results.reduce((n, r) => n + (r.deletedCount ?? 0), 0), files: files.length }
 }

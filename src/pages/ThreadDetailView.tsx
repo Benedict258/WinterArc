@@ -9,7 +9,7 @@ import { useThread, useThreadStats, useAddResource, useDeleteResource } from '@/
 import { useTasks, useUpdateTask, useDeleteTask, useCreateTask } from '@/hooks/useTasks'
 import { useUpdateThread } from '@/hooks/useThreads'
 import {
-  ArrowLeft, Edit2, Trash2, ExternalLink, Plus, Flame, BarChart3, Calendar, FileText, Link2, Save, X, Check, ChevronDown
+  ArrowLeft, Users, Edit2, Trash2, ExternalLink, Plus, Flame, BarChart3, Calendar, FileText, Link2, Save, X, Check, ChevronDown
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { safeHref } from '@/lib/utils'
@@ -167,6 +167,9 @@ export default function ThreadDetailView() {
               {isFixedDay && <Badge variant="outline" className="text-[10px]">Every {DAY_LABELS[thread.fixedDay ?? 0]}</Badge>}
             </div>
           </div>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/teams/${id}`)} className="gap-1.5">
+            <Users size={14} /> Share
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setEditingMeta(true)} className="gap-1.5">
             <Edit2 size={14} /> Edit Details
           </Button>

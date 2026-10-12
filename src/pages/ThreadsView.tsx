@@ -1,3 +1,4 @@
+import SharedThreadsSection from '@/components/SharedThreadsSection'
 import EventFields, { emptyEvent, eventFromThread, eventValid, describeEvent } from '@/components/EventFields'
 import MainLayout from '@/components/MainLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,7 +39,9 @@ export default function ThreadsView() {
   const { data: settings } = useSettings()
   const eventsOn = normalizeModules(settings?.modules).events
   const navigate = useNavigate()
-  const { data: threads = [], isLoading, error } = useThreads()
+  const { data: allThreads = [], isLoading, error } = useThreads()
+  // threads shared with you have their own cards (and page) in SharedThreadsSection
+  const threads = allThreads.filter(t => !t.sharedWithMe)
   const { mutate: createThread, isPending: isCreating } = useCreateThread()
   const { mutate: updateThread, isPending: isUpdating } = useUpdateThread()
   const { mutate: deleteThread, isPending: isDeleting } = useDeleteThread()
@@ -137,6 +140,8 @@ export default function ThreadsView() {
             <Plus size={16} /> New Thread
           </Button>
         </div>
+
+        <SharedThreadsSection />
 
         {isLoading ? (
           <p className="text-center py-8 text-sm text-muted-foreground">Loading threads...</p>

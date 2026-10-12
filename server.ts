@@ -46,6 +46,7 @@ import { authRouter } from './backend/src/routes/auth.ts'
 import { accountRouter, handleExport } from './backend/src/routes/account.ts'
 import { adminRouter } from './backend/src/routes/admin.ts'
 import { aiRouter } from './backend/src/routes/ai.ts'
+import { teamsRouter } from './backend/src/routes/teams.ts'
 import { partnersRouter } from './backend/src/routes/partners.ts'
 import { importRouter, WINTERARC_IMPORT_PATH } from './backend/src/routes/import.ts'
 import {
@@ -673,6 +674,7 @@ export function createApp() {
   app.use('/api/ai', requireVerified, aiRouter)
   app.use('/api/import', importRouter)
   app.use('/api/partners', requireVerified, partnersRouter)
+  app.use('/api/teams', requireVerified, teamsRouter)
 
   // ============================================
   // DROP ENDPOINTS

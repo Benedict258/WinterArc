@@ -1,4 +1,5 @@
 import { resolveTaskBlock } from './dayBlocksService'
+import { canAttachTasks } from './sharedThreadService'
 import { markNotificationsDirty } from './notificationService'
 import { Task } from '../models/Task'
 import { Thread } from '../models/Thread'
@@ -38,7 +39,7 @@ export async function getTasks(userId: string, filters: any = {}) {
 
 /** A task may only point at one of the user's own threads. */
 async function assertOwnThread(userId: string, threadId: unknown) {
-  if (threadId && !(await Thread.exists({ _id: threadId, userId }))) {
+  if (threadId && !(await Thread.exists({ _id: threadId, userId })) && !(await canAttachTasks(userId, String(threadId)))) {
     throw new Error('Thread not found')
   }
 }

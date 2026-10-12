@@ -25,6 +25,7 @@ import AdminPage from './pages/AdminPage'
 import AssistantPage from './pages/AssistantPage'
 import ImportPage from './pages/ImportPage'
 import PartnersPage from './pages/PartnersPage'
+import TeamThreadPage from './pages/TeamThreadPage'
 
 const queryClient = new QueryClient()
 
@@ -49,6 +50,7 @@ function App() {
                       <Route path="/week" element={<WeekView />} />
                       <Route path="/threads" element={<ThreadsView />} />
                       <Route path="/threads/:id" element={<ThreadDetailView />} />
+                      <Route path="/teams/:id" element={<TeamThreadPage />} />
                       <Route path="/backlog" element={<BacklogView />} />
                       <Route path="/wishlist" element={<ModuleRoute module="wishlist"><WishlistView /></ModuleRoute>} />
                       <Route path="/goals" element={<ModuleRoute module="goals"><GoalsView /></ModuleRoute>} />
