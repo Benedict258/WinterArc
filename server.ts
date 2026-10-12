@@ -8,6 +8,8 @@ import { MongoStore } from 'connect-mongo'
 
 import { Thread } from './backend/src/models/Thread.ts'
 import { quarterRange, computeStreak, completionStats } from './backend/src/services/analyticsService.ts'
+import { PushSubscription } from './backend/src/models/PushSubscription.ts'
+import { pushConfigured, vapidPublicKey, sendToAll, runNotificationTick, startNotificationScheduler } from './backend/src/services/notificationService.ts'
 import { createIdempotent } from './backend/src/utils/idempotentCreate.ts'
 import { Task } from './backend/src/models/Task.ts'
 import { WishlistItem } from './backend/src/models/WishlistItem.ts'
@@ -39,6 +41,7 @@ import {
   dropItemSchema,
   dropUpdateSchema,
   loginSchema,
+  pushSubscriptionSchema,
 } from './backend/src/utils/validation.ts'
 
 declare module 'express-session' {
@@ -325,9 +328,23 @@ async function startServer() {
     })
   })
 
+  // Keep-alive + scheduler tick for an external pinger (e.g. cron-job.org) on free hosting.
+  // Authenticated by a shared secret so it can run without a session.
+  app.get('/api/cron/tick', async (req, res) => {
+    const secret = process.env.CRON_SECRET
+    const given = typeof req.query.key === 'string' ? req.query.key : ''
+    const ok = !!secret && given.length === secret.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))
+    if (!ok) return res.status(401).json({ error: 'Unauthorized' })
+    try {
+      res.json(await runNotificationTick())
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
   // Protect all API routes except auth/health
   app.use('/api', (req, res, next) => {
-    if (req.path.startsWith('/auth') || req.path === '/health') return next()
+    if (req.path.startsWith('/auth') || req.path === '/health' || req.path === '/cron/tick') return next()
     if (req.session?.authenticated) return next()
     return res.status(401).json({ error: 'Unauthorized' })
   })
@@ -699,6 +716,45 @@ async function startServer() {
     }
   })
 
+  // ============================================
+  // PUSH NOTIFICATIONS
+  // ============================================
+  app.get('/api/push/config', (req, res) => {
+    res.json({ enabled: pushConfigured(), publicKey: vapidPublicKey() })
+  })
+
+  app.post('/api/push/subscribe', validateRequest(pushSubscriptionSchema), async (req, res) => {
+    try {
+      await PushSubscription.findOneAndUpdate(
+        { endpoint: req.body.endpoint },
+        { ...req.body, userAgent: String(req.headers['user-agent'] ?? '').slice(0, 300) },
+        { upsert: true, new: true }
+      )
+      res.status(201).json({ ok: true })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
+  app.post('/api/push/unsubscribe', async (req, res) => {
+    try {
+      if (typeof req.body?.endpoint === 'string') await PushSubscription.deleteOne({ endpoint: req.body.endpoint })
+      res.json({ ok: true })
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
+  app.post('/api/push/test', async (req, res) => {
+    try {
+      if (!pushConfigured()) return res.status(503).json({ error: 'Push is not configured on the server (VAPID keys missing).' })
+      const result = await sendToAll({ title: 'WinterArc', body: 'Notifications are working on this device.', url: '/', tag: 'test' })
+      res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: errorMessage(error) })
+    }
+  })
+
   app.get('/api/export', async (req, res) => {
     try {
       const threads = await Thread.find()
@@ -965,6 +1021,8 @@ async function startServer() {
     .catch(err => console.error('Daily generation failed:', errorMessage(err)))
   runDaily()
   setInterval(runDaily, 10 * 60 * 1000)
+
+  startNotificationScheduler()
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Workspace full-stack app running on http://0.0.0.0:${PORT}`)

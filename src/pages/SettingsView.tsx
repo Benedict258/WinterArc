@@ -1,3 +1,4 @@
+import NotificationsCard from '@/components/NotificationsCard'
 import MainLayout from '@/components/MainLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -165,6 +166,8 @@ export default function SettingsView() {
                 </div>
               </CardContent>
             </Card>
+
+            <NotificationsCard />
 
             {/* Google Calendar */}
             <Card>

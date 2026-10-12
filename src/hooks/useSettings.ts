@@ -5,6 +5,7 @@ import { addToQueue } from '@/lib/syncQueue';
 import { onlineOrQueue } from '@/lib/offline';
 
 // Types
+import type { NotificationSettings } from '@/shared/notificationPlan'
 export type Settings = {
   _id: string;
   timezone: string;
@@ -14,6 +15,7 @@ export type Settings = {
     maxDailyIntensity: number;
     preferLowIntensityOnBusyDays: boolean;
   };
+  notifications?: NotificationSettings;
   createdAt: string;
   updatedAt: string;
 };

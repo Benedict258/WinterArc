@@ -175,3 +175,19 @@ not production.
 | `S3_DROP_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for Drop files | B2 bucket, keyID, applicationKey |
 | `S3_REGION`, `S3_ENDPOINT` | for Drop files | B2 region + `https://s3.<region>.backblazeb2.com` |
 | `S3_FORCE_PATH_STYLE` | | only for MinIO-style endpoints |
+
+
+---
+
+## Push notifications
+
+Daily plan, due tasks and event reminders are sent by the API with Web Push.
+
+1. Locally run `npm run push:keys` and add the two keys to Render as
+   `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`; set `VAPID_SUBJECT` to `mailto:you@example.com`.
+   (`CRON_SECRET` is generated for you by the Blueprint.)
+2. The free Render plan sleeps, so nothing can send while it's asleep. Add a free
+   pinger (e.g. cron-job.org) that calls
+   `https://winterarc-f74u.onrender.com/api/cron/tick?key=<CRON_SECRET>` **every 5 minutes**.
+   It wakes the server and runs the reminder check each time (reminders are sent once).
+3. On each device: Settings → Notifications → **Enable**, then **Send test**.

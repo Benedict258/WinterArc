@@ -92,6 +92,17 @@ export const gridBalancingSchema = z.object({
 });
 export const gridBalancingUpdateSchema = gridBalancingSchema.partial();
 
+export const notificationSettingsSchema = z.object({
+  dailyPlan: z.object({ enabled: z.boolean(), time: clockTime }),
+  dueTasks: z.object({ enabled: z.boolean() }),
+  eventReminders: z.object({ enabled: z.boolean(), minutesBefore: z.number().int().min(0).max(240) }),
+});
+
+export const pushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(2048),
+  keys: z.object({ p256dh: z.string().min(1).max(512), auth: z.string().min(1).max(512) }),
+});
+
 export const settingsSchema = z.object({
   timezone: z.string().refine(tz => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
@@ -99,6 +110,7 @@ export const settingsSchema = z.object({
   weeklyGenerationRules: z.any().optional(),
   multipleThreadsPerWeekTarget: z.number().int().min(1).max(7),
   gridBalancing: gridBalancingSchema.optional(),
+  notifications: notificationSettingsSchema.optional(),
 });
 export const settingsUpdateSchema = settingsSchema.partial();
 
