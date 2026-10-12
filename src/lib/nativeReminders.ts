@@ -125,10 +125,16 @@ export async function requestNativeNotifications() {
 }
 
 /** Re-plan on launch, when returning to the app, and after offline changes sync. */
+export const DATA_CHANGED = 'winterarc-data-changed'
+
 export function startNativeReminders() {
   if (!isNative()) return
   const run = () => { scheduleReminders().catch(err => console.warn('Scheduling reminders failed:', err)) }
+  // Edits can arrive in bursts; wait for them to settle
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const runSoon = () => { clearTimeout(timer); timer = setTimeout(run, 2000) }
   run()
   App.addListener('appStateChange', ({ isActive }) => { if (isActive) run() })
-  window.addEventListener(QUEUE_FLUSHED, run)
+  window.addEventListener(QUEUE_FLUSHED, runSoon)
+  window.addEventListener(DATA_CHANGED, runSoon)
 }

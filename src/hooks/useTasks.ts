@@ -162,6 +162,7 @@ export const useCreateTask = () => {
       // But we don't want to lose the optimistic update.
       // We'll invalidate the query so that when we come online, we refetch and update the cache properly.
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      window.dispatchEvent(new Event('winterarc-data-changed'));
       queryClient.invalidateQueries({ queryKey: ['thread-stats'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['week'] });
@@ -234,6 +235,7 @@ export const useUpdateTask = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      window.dispatchEvent(new Event('winterarc-data-changed'));
       queryClient.invalidateQueries({ queryKey: ['thread-stats'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['week'] });
@@ -295,6 +297,7 @@ export const useDeleteTask = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      window.dispatchEvent(new Event('winterarc-data-changed'));
       queryClient.invalidateQueries({ queryKey: ['thread-stats'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['week'] });
@@ -362,6 +365,7 @@ export const useCompleteTask = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      window.dispatchEvent(new Event('winterarc-data-changed'));
       queryClient.invalidateQueries({ queryKey: ['thread-stats'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['week'] });
