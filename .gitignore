@@ -7,3 +7,6 @@ dist/
 *.pem
 *.keystore
 *.jks
+
+# stray session file
+state.json
