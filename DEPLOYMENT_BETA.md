@@ -102,3 +102,6 @@ You can also give anyone Pro by hand with **Give Pro** on the Admin page (30 day
 
 ## 10. Privacy Policy and Terms
 They are at `/privacy`, `/terms` and `/delete-account` and are written for what the app does today. In Render set `SUPPORT_EMAIL` (the contact shown), `LEGAL_NAME` (who runs the service, for example your name or company) and `LEGAL_JURISDICTION` (for example `Nigeria`), so the pages name them. When you change the text in `src/pages/LegalPages.tsx` in a way people should agree to again, bump `TERMS_VERSION` in `src/shared/legal.ts`. These are plain-language drafts, not legal advice: have a lawyer review them before you open to the public.
+
+## 11. Content-Security-Policy
+`vercel.json` sends a strict Content-Security-Policy with every page: scripts only from the site itself and Google sign-in, no inline scripts, no plugins, no framing. The API (`/api/*`) sends `default-src 'none'`. If you add a new outside service the browser must talk to or load from (analytics, another font host, a different sign-in), add its address to `vercel.json` or the browser will block it; the console shows "Refused to …" when that happens. Files uploaded to Drop are fetched straight from your storage bucket over https, which the policy allows.
