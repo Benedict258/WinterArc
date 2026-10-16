@@ -10,3 +10,4 @@ dist/
 
 # stray session file
 state.json
+*.whl

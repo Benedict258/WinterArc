@@ -273,12 +273,9 @@ export const useSyncListener = () => {
     if (!syncListenerStarted) {
       startSyncListener(
         () => {
-          console.log('Online: processing queue');
           processQueue().catch(console.error);
         },
-        () => {
-          console.log('Offline');
-        }
+        () => { /* going offline needs no action: edits queue on their own */ }
       );
       syncListenerStarted = true;
     }

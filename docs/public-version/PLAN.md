@@ -1,6 +1,6 @@
 # WinterArc Public Version — Plan
 
-Status: all roadmap items are built on `WinterArcBeta`: accounts, per-user data, planner customisation, onboarding, notifications and email, compliance and admin, Drop quotas, AI assistant (Groq or NVIDIA NIM), imports, accountability partners, shared threads, paid plans (Paystack) and the Play Store release kit (see PLAY_STORE.md). Not built, by choice: per-user Google Calendar (needs Google verification). The personal app (`main`) is untouched and keeps running.
+Status: all roadmap items are built on `WinterArcBeta`: accounts, per-user data, planner customisation, onboarding, notifications and email, compliance and admin, Drop quotas, AI assistant (Groq or NVIDIA NIM), imports, accountability partners, shared threads, paid plans (Paystack) and the Play Store release kit (see PLAY_STORE.md). Later additions, also built: focus timer, routines, habits, fitness (with Android Health Connect), nutrition, and a connector for Claude, ChatGPT and other AI apps (see docs/CHECKPOINT.md). Not built, by choice: per-user Google Calendar (needs Google verification). The personal app (`main`) is untouched and keeps running.
 
 ## 1. Decisions so far
 

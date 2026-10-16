@@ -116,10 +116,7 @@ export default function SettingsView() {
     const win = window as any
     if (win.deferredPrompt) {
       win.deferredPrompt.prompt()
-      const choiceResult = await win.deferredPrompt.userChoice
-      if (choiceResult.outcome === 'accepted') {
-        console.log('User accepted the install prompt')
-      }
+      await win.deferredPrompt.userChoice
       win.deferredPrompt = null
     }
   }
