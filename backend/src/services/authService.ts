@@ -1,3 +1,4 @@
+import { revokeAll } from './oauthService'
 import { OAuth2Client } from 'google-auth-library'
 import { User } from '../models/User'
 import { EmailToken } from '../models/EmailToken'
@@ -222,5 +223,6 @@ export async function resetPassword(token: string, password: string) {
     $inc: { sessionVersion: 1 }, // signs out every existing session
   })
   await ApiToken.deleteMany({ userId: doc.userId })
+  await revokeAll(String(doc.userId)) // apps connected through the connector lose access too
   return User.findOne({ _id: doc.userId })
 }

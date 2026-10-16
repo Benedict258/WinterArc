@@ -105,3 +105,21 @@ They are at `/privacy`, `/terms` and `/delete-account` and are written for what 
 
 ## 11. Content-Security-Policy
 `vercel.json` sends a strict Content-Security-Policy with every page: scripts only from the site itself and Google sign-in, no inline scripts, no plugins, no framing. The API (`/api/*`) sends `default-src 'none'`. If you add a new outside service the browser must talk to or load from (analytics, another font host, a different sign-in), add its address to `vercel.json` or the browser will block it; the console shows "Refused to …" when that happens. Files uploaded to Drop are fetched straight from your storage bucket over https, which the policy allows.
+
+## 12. Connecting Claude, ChatGPT and other AI apps
+People can connect an AI app to their account (Settings → Connected apps), like Notion's connectors. The app reads their plan, habits, workouts and meals, and, if they allow it, adds and changes things (tasks, routines, habits, workouts, meals, some settings). Nothing for passwords, billing, account deletion, partners, shared threads or Drop.
+
+**How it is served.** Everything lives on your site's own address (`APP_URL`, the Vercel site): `/mcp` (the connector), `/oauth/token`, `/oauth/register` and `/.well-known/*` (discovery) are forwarded to the Render API by `vercel.json`, and `/oauth/authorize` is the consent page in the app. Check that `APP_URL` is exactly your Vercel address, with `https://` and no trailing slash, because the OAuth metadata is built from it. Then check `https://YOUR-SITE/.well-known/oauth-protected-resource` shows `"resource": "https://YOUR-SITE/mcp"`.
+
+**It needs an always-on API.** Claude waits 10 seconds for the sign-in endpoints and ChatGPT is similarly impatient. A free Render service that is asleep takes longer than that to wake, so connecting fails or is flaky. Use a paid Render instance (about $7/month) for real use. The free tier is fine for trying it once after pinging `/api/health` to wake it.
+
+**Connecting.**
+- Claude: Settings → Connectors → Add custom connector → paste `https://YOUR-SITE/mcp`. (Pro, Max, Team and Enterprise plans.)
+- ChatGPT: Settings → Apps & Connectors → enable developer mode → create a connector with the same address and OAuth sign-in. (Plans that support developer mode.)
+- The apps register themselves (dynamic client registration), so there is no client id or secret to copy. Claude's callback is `https://claude.ai/api/mcp/auth_callback`; ChatGPT's is shown in its connector screen. Any `https` redirect, and `http://localhost` for desktop tools such as Claude Code, is accepted.
+
+**Safety.** Each app is shown on a consent page (who is asking, where it sends you back, what it can do). The person can allow read-only. Access tokens last 1 hour, refresh tokens are rotated and a replayed old one closes the connection, only hashes are stored, and connections end when the person disconnects them, resets their password, is suspended or deletes their account. Each connection is limited to 120 requests a minute.
+
+**Settings (all optional).** `MCP_DISABLED=true` switches the whole connector off (the endpoints return 404 and Settings says so). `MCP_CALLS_PER_MINUTE` changes the per-connection limit.
+
+**Not built:** ChatGPT's "deep research" style `search`/`fetch` tools, and the Client ID Metadata Document registration style (apps fall back to dynamic registration, which both Claude and ChatGPT support).

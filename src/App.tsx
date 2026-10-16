@@ -33,6 +33,7 @@ import RoutinesPage from './pages/RoutinesPage'
 import HabitsPage from './pages/HabitsPage'
 import FitnessPage from './pages/FitnessPage'
 import NutritionPage from './pages/NutritionPage'
+import OAuthAuthorizePage from './pages/OAuthAuthorizePage'
 import FocusRuntime from './components/FocusRuntime'
 
 const queryClient = createQueryClient()
@@ -68,6 +69,7 @@ function App() {
                       <Route path="/assistant" element={<ModuleRoute module="ai"><AssistantPage /></ModuleRoute>} />
                       <Route path="/focus" element={<ModuleRoute module="focus"><FocusPage /></ModuleRoute>} />
                       <Route path="/routines" element={<ModuleRoute module="routines"><RoutinesPage /></ModuleRoute>} />
+                      <Route path="/oauth/authorize" element={<OAuthAuthorizePage />} />
                       <Route path="/nutrition" element={<ModuleRoute module="nutrition"><NutritionPage /></ModuleRoute>} />
                       <Route path="/fitness" element={<ModuleRoute module="fitness"><FitnessPage /></ModuleRoute>} />
                       <Route path="/habits" element={<ModuleRoute module="habits"><HabitsPage /></ModuleRoute>} />

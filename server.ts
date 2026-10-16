@@ -54,6 +54,7 @@ import { focusRouter, routinesRouter } from './backend/src/routes/focus.ts'
 import { habitsRouter } from './backend/src/routes/habits.ts'
 import { fitnessRouter } from './backend/src/routes/fitness.ts'
 import { nutritionRouter } from './backend/src/routes/nutrition.ts'
+import { connectorPaths, mountConnector, oauthConsentRouter, openCors } from './backend/src/routes/connector.ts'
 import { importRouter, WINTERARC_IMPORT_PATH } from './backend/src/routes/import.ts'
 import {
   threadSchema,
@@ -160,6 +161,9 @@ export function createApp() {
     next()
   })
 
+  // Connector endpoints (discovery, registration, token, MCP) are called by other apps from any origin
+  app.use(connectorPaths, openCors)
+
   // The frontend normally calls /api through a same-origin proxy (Vercel
   // rewrite), so CORS only matters if it's pointed straight at this server.
   app.use(cors({
@@ -197,6 +201,9 @@ export function createApp() {
   // AUTH (sign-up, login, verify, reset, Google)
   // ============================================
   app.use('/api/auth', authRouter)
+
+  // Connector for AI apps (Claude, ChatGPT, …): discovery, OAuth and the MCP endpoint
+  mountConnector(app)
 
   // ============================================
   // HEALTH CHECK
@@ -692,6 +699,7 @@ export function createApp() {
   app.use('/api/habits', habitsRouter)
   app.use('/api/fitness', fitnessRouter)
   app.use('/api/nutrition', nutritionRouter)
+  app.use('/api/oauth', requireVerified, oauthConsentRouter)
   app.use('/api/teams', requireVerified, teamsRouter)
   app.use('/api/billing', billingRouter)
 

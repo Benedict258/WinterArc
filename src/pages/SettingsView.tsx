@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { toDayKey } from '@/lib/utils'
 import { detectTimezone, timezoneList } from '@/lib/timezones'
 import PrivacyCard from '@/components/PrivacyCard'
+import ConnectedAppsCard from '@/components/ConnectedAppsCard'
 import { AppearanceCard, DayStructureCard, ModulesCard, PlannerRulesCard } from '@/components/CustomizeCards'
 
 export default function SettingsView() {
@@ -427,6 +428,7 @@ export default function SettingsView() {
               </CardContent>
             </Card>
 
+            <ConnectedAppsCard />
             <PrivacyCard />
           </>
         )}

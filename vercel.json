@@ -10,6 +10,22 @@
       "destination": "https://winterarc-beta-api.onrender.com/api/:path*"
     },
     {
+      "source": "/mcp",
+      "destination": "https://winterarc-beta-api.onrender.com/mcp"
+    },
+    {
+      "source": "/oauth/token",
+      "destination": "https://winterarc-beta-api.onrender.com/oauth/token"
+    },
+    {
+      "source": "/oauth/register",
+      "destination": "https://winterarc-beta-api.onrender.com/oauth/register"
+    },
+    {
+      "source": "/.well-known/:path*",
+      "destination": "https://winterarc-beta-api.onrender.com/.well-known/:path*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

@@ -20,6 +20,8 @@ import { Workout } from '../models/Workout'
 import { StepDay } from '../models/StepDay'
 import { BodyMetric } from '../models/BodyMetric'
 import { Meal } from '../models/Meal'
+import { OAuthGrant } from '../models/OAuthGrant'
+import { OAuthCode } from '../models/OAuthCode'
 import { deleteS3Object } from './s3'
 import { removeAllFor } from './partnerService'
 import { removeAllSharingFor } from './sharedThreadService'
@@ -79,6 +81,8 @@ export async function deleteAccount(userId: string) {
     StepDay.deleteMany({ userId }),
     BodyMetric.deleteMany({ userId }),
     Meal.deleteMany({ userId }),
+    OAuthGrant.deleteMany({ userId }),
+    OAuthCode.deleteMany({ userId }),
   ])
   const gone = await User.findOne({ _id: userId }, { email: 1 })
   if (gone) { await removeAllFor(userId, gone.email); await removeAllSharingFor(userId, gone.email) }

@@ -178,3 +178,15 @@ export async function openToday(userId: string, now = new Date()) {
   const { habits } = await listHabits(userId, now)
   return habits.filter(h => h.today.scheduled && !h.today.done)
 }
+
+/** Find one of the person's habits by id or by (part of) its name. Returns an error message instead when it can't be pinned down. */
+export async function resolveHabit(userId: string, ref: string, now = new Date()): Promise<{ habit: Awaited<ReturnType<typeof listHabits>>['habits'][number] } | { error: string }> {
+  const { habits } = await listHabits(userId, now)
+  if (habits.length === 0) return { error: 'There are no habits yet. Create one first.' }
+  const r = ref.trim().toLowerCase()
+  let match = habits.filter(h => h.id === r || h.name.toLowerCase() === r)
+  if (match.length === 0 && r.length >= 2) match = habits.filter(h => h.name.toLowerCase().includes(r))
+  if (match.length === 0) return { error: `No habit matches “${ref.slice(0, 40)}”. Habits: ${habits.map(h => h.name).join(', ')}.` }
+  if (match.length > 1) return { error: `More than one habit matches (${match.map(h => h.name).join(', ')}). Use the id.` }
+  return { habit: match[0] }
+}

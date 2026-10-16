@@ -17,7 +17,7 @@ export default defineConfig({
       workbox: {
         importScripts: ['push-sw.js'],
         // Never answer /api navigations (e.g. export download) with the SPA shell
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/\.well-known\//, /^\/mcp(\/|$)/, /^\/oauth\/(token|register)$/],
         additionalManifestEntries: [
           { url: '/', revision: '1' },
         ],
