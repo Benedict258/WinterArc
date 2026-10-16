@@ -34,6 +34,7 @@ export default function NotificationsCard() {
     dueTasks: { ...DEFAULT_NOTIFICATIONS.dueTasks, ...settings?.notifications?.dueTasks },
     eventReminders: { ...DEFAULT_NOTIFICATIONS.eventReminders, ...settings?.notifications?.eventReminders },
     emailDigest: { ...DEFAULT_NOTIFICATIONS.emailDigest, ...settings?.notifications?.emailDigest },
+    habits: { ...DEFAULT_NOTIFICATIONS.habits!, ...settings?.notifications?.habits },
   }
   const save = (next: NotificationSettings) => updateSettings({ notifications: next })
 
@@ -106,6 +107,19 @@ export default function NotificationsCard() {
         </div>
 
         <div className="space-y-2 border-t border-border pt-4 text-sm">
+          <label className="flex items-center justify-between gap-3">
+            <span>
+              Habit reminders
+              <span className="block text-xs text-muted-foreground">A nudge if habits are still open, streak milestones and a recap on the 1st of each month.</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <input type="time" value={prefs.habits!.time} disabled={!prefs.habits!.enabled}
+                onChange={e => e.target.value && save({ ...prefs, habits: { ...prefs.habits!, time: e.target.value } })}
+                className="px-2 py-1 border rounded-md bg-background" aria-label="Habit reminder time" />
+              <input type="checkbox" aria-label="Habit reminders" checked={prefs.habits!.enabled} className="accent-primary"
+                onChange={e => save({ ...prefs, habits: { ...prefs.habits!, enabled: e.target.checked } })} />
+            </span>
+          </label>
           <label className="flex items-center justify-between gap-3">
             <span>
               Daily email summary

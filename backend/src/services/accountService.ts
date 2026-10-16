@@ -14,13 +14,15 @@ import { AiUsage } from '../models/AiUsage'
 import { AiProposal } from '../models/AiProposal'
 import { Routine } from '../models/Routine'
 import { FocusSession } from '../models/FocusSession'
+import { Habit } from '../models/Habit'
+import { HabitLog } from '../models/HabitLog'
 import { deleteS3Object } from './s3'
 import { removeAllFor } from './partnerService'
 import { removeAllSharingFor } from './sharedThreadService'
 
 /** Everything we hold about a person, as one JSON document (their copy of their data). */
 export async function exportAccount(userId: string) {
-  const [user, settings, threads, tasks, goals, wishlist, drop, routines, focusSessions] = await Promise.all([
+  const [user, settings, threads, tasks, goals, wishlist, drop, routines, focusSessions, habits, habitLogs] = await Promise.all([
     User.findOne({ _id: userId }),
     Settings.findOne({ userId }),
     Thread.find({ userId }),
@@ -31,13 +33,15 @@ export async function exportAccount(userId: string) {
     DropItem.find({ userId }, { s3Key: 0 }),
     Routine.find({ userId }),
     FocusSession.find({ userId }),
+    Habit.find({ userId }),
+    HabitLog.find({ userId }),
   ])
   const strip = (doc: any) => { const o = doc?.toObject ? doc.toObject() : doc; if (o) { delete o.nextCheckAt; delete o.__v } return o }
   return {
     exportedAt: new Date().toISOString(),
     profile: user && { email: user.email, name: user.name, createdAt: user.createdAt, emailVerified: !!user.emailVerifiedAt, termsAcceptedAt: user.termsAcceptedAt, termsVersion: user.termsVersion },
     settings: strip(settings),
-    threads, tasks, goals, wishlist, drop, routines, focusSessions,
+    threads, tasks, goals, wishlist, drop, routines, focusSessions, habits, habitLogs,
   }
 }
 
@@ -61,6 +65,8 @@ export async function deleteAccount(userId: string) {
     AiProposal.deleteMany({ userId }),
     Routine.deleteMany({ userId }),
     FocusSession.deleteMany({ userId }),
+    Habit.deleteMany({ userId }),
+    HabitLog.deleteMany({ userId }),
   ])
   const gone = await User.findOne({ _id: userId }, { email: 1 })
   if (gone) { await removeAllFor(userId, gone.email); await removeAllSharingFor(userId, gone.email) }

@@ -31,6 +31,10 @@ const settingsSchema = new mongoose.Schema(
         enabled: { type: Boolean, default: false },
         time: { type: String, default: '07:30' },
       },
+      habits: {
+        enabled: { type: Boolean, default: true },
+        time: { type: String, default: '20:00' },
+      },
       eventReminders: {
         enabled: { type: Boolean, default: true },
         minutesBefore: { type: Number, default: 15 },

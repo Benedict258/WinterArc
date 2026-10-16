@@ -7,6 +7,8 @@ export type NotificationSettings = {
   eventReminders: { enabled: boolean; minutesBefore: number }
   /** a once-a-day summary by email (off until the user asks for it) */
   emailDigest: { enabled: boolean; time: string }
+  /** evening nudge for habits still open, monthly recap and streak milestones */
+  habits?: { enabled: boolean; time: string }
 }
 
 export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
@@ -14,6 +16,7 @@ export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
   dueTasks: { enabled: true },
   eventReminders: { enabled: true, minutesBefore: 15 },
   emailDigest: { enabled: false, time: '07:30' },
+  habits: { enabled: true, time: '20:00' },
 }
 
 export type NotifTask = {
@@ -148,6 +151,9 @@ export function planDigest(input: {
 }
 
 /** Longest a user can go without being looked at (covers DST shifts and edits that didn't flag them). */
+/** the local time the monthly habit recap goes out (see habitNotifyService) */
+export const HABIT_RECAP_CHECK = '09:00'
+
 export const MAX_SLEEP_MINUTES = 360
 
 /**
@@ -165,6 +171,7 @@ export function minutesUntilNextCheck(input: { now: Date; timeZone: string; sett
   }
   if (settings.dailyPlan.enabled) daily(settings.dailyPlan.time)
   if (settings.emailDigest.enabled) daily(settings.emailDigest.time)
+  if (settings.habits?.enabled) { daily(settings.habits.time); daily(HABIT_RECAP_CHECK) }
   if (settings.eventReminders.enabled) {
     for (const e of today) {
       if (!e.isEvent || e.status !== 'pending' || !e.startTime) continue

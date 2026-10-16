@@ -66,7 +66,9 @@ describe('email digest', () => {
 })
 
 describe('minutesUntilNextCheck', () => {
-  const next = (time: string, today: NotifTask[] = [], settings = DEFAULT_NOTIFICATIONS) => minutesUntilNextCheck({ now: at(time), timeZone: TZ, settings, today })
+  // habit reminders have their own tests below; here they are off so the other rules stand out
+  const noHabits = { ...DEFAULT_NOTIFICATIONS, habits: { enabled: false, time: '20:00' } }
+  const next = (time: string, today: NotifTask[] = [], settings = noHabits) => minutesUntilNextCheck({ now: at(time), timeZone: TZ, settings, today })
   it('waits for the daily plan', () => {
     expect(next('07:00')).toBe(30)
   })
@@ -85,5 +87,17 @@ describe('minutesUntilNextCheck', () => {
   })
   it('is at least one minute', () => {
     expect(next('07:30')).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('minutesUntilNextCheck with habit notifications', () => {
+  const next = (time: string, settings = DEFAULT_NOTIFICATIONS) => minutesUntilNextCheck({ now: at(time), timeZone: TZ, settings, today: [] })
+  it('wakes for the evening habit reminder and the monthly recap time', () => {
+    expect(next('19:00')).toBe(60) // 20:00
+    expect(next('08:00')).toBe(60) // 09:00 recap check
+  })
+  it('does not wake for habits when they are off', () => {
+    expect(next('19:00', { ...DEFAULT_NOTIFICATIONS, habits: { enabled: false, time: '20:00' } })).toBeLessThanOrEqual(MAX_SLEEP_MINUTES)
+    expect(next('08:00', { ...DEFAULT_NOTIFICATIONS, habits: { enabled: false, time: '20:00' } })).toBe(MAX_SLEEP_MINUTES)
   })
 })

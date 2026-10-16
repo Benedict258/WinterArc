@@ -100,6 +100,7 @@ export const notificationSettingsSchema = z.object({
   dueTasks: z.object({ enabled: z.boolean() }),
   eventReminders: z.object({ enabled: z.boolean(), minutesBefore: z.number().int().min(0).max(240) }),
   emailDigest: z.object({ enabled: z.boolean(), time: clockTime }).optional(),
+  habits: z.object({ enabled: z.boolean(), time: clockTime }).optional(),
 });
 
 export const pushSubscriptionSchema = z.object({

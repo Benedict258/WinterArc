@@ -21,6 +21,7 @@ import {
   Sparkles,
   Timer,
   ListChecks,
+  Sprout,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
   { label: 'Week', path: '/week', icon: CalendarDays },
   { label: 'Threads', path: '/threads', icon: GitBranch },
   { label: 'Backlog', path: '/backlog', icon: Inbox },
+  { label: 'Habits', path: '/habits', icon: Sprout, module: 'habits' },
   { label: 'Focus', path: '/focus', icon: Timer, module: 'focus' },
   { label: 'Routines', path: '/routines', icon: ListChecks, module: 'routines' },
   { label: 'Partners', path: '/partners', icon: Users, module: 'partners' },

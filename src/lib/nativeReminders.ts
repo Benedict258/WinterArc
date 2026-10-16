@@ -37,6 +37,7 @@ async function loadSettings(): Promise<NotificationSettings> {
     dueTasks: { ...DEFAULT_NOTIFICATIONS.dueTasks, ...n?.dueTasks },
     eventReminders: { ...DEFAULT_NOTIFICATIONS.eventReminders, ...n?.eventReminders },
     emailDigest: { ...DEFAULT_NOTIFICATIONS.emailDigest, ...n?.emailDigest },
+    habits: { ...DEFAULT_NOTIFICATIONS.habits!, ...n?.habits },
   }
 }
 
@@ -76,6 +77,29 @@ function mondayOf(key: string) {
   return date.toISOString().slice(0, 10)
 }
 
+/** A nudge at the habit reminder time on each upcoming day that has habits due (today's only if some are still open). */
+async function habitReminders(settings: NotificationSettings, now: Date): Promise<{ id: number; title: string; body: string; at: Date }[]> {
+  if (!settings.habits?.enabled) return []
+  let habits: { weekdays: number[]; today: { scheduled: boolean; done: boolean } }[] = []
+  try {
+    const res = await fetch('/api/habits')
+    if (!res.ok) return []
+    habits = (await res.json()).habits
+  } catch { return [] } // offline: skip rather than guess
+  const out: { id: number; title: string; body: string; at: Date }[] = []
+  for (let i = 0; i < DAYS; i++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i)
+    const key = dayKey(day)
+    const at = atLocal(key, toMinutes(settings.habits.time))
+    if (at <= now) continue
+    const due = habits.filter(h => h.weekdays.includes(day.getDay()))
+    const open = i === 0 ? due.filter(h => !h.today.done) : due
+    if (open.length === 0) continue
+    out.push({ id: stableId(`habits:${key}`), title: open.length === 1 ? 'One habit left today' : 'Check in on your habits', body: i === 0 ? `${open.length} still open` : 'Tap to log how today went', at })
+  }
+  return out
+}
+
 export async function scheduleReminders() {
   if (!isNative()) return
   const perm = await LocalNotifications.checkPermissions()
@@ -106,6 +130,8 @@ export async function scheduleReminders() {
       }
     }
   }
+
+  upcoming.push(...(await habitReminders(settings, now)))
 
   const pending = await LocalNotifications.getPending()
   if (pending.notifications.length) await LocalNotifications.cancel({ notifications: pending.notifications })

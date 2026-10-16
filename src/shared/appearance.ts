@@ -29,6 +29,7 @@ export const MODULES: { id: ModuleId; label: string; blurb: string }[] = [
   { id: 'partners', label: 'Partners', blurb: 'Share your progress with accountability partners you choose' },
   { id: 'ai', label: 'AI assistant', blurb: 'Chat about your plan; it suggests changes and you approve each one' },
   { id: 'focus', label: 'Focus timer', blurb: 'Pomodoro sessions for work and study, with a history of your focus time' },
+  { id: 'habits', label: 'Habits', blurb: 'Track habits, streaks and monthly averages, and check in by chat' },
   { id: 'routines', label: 'Routines', blurb: 'Reusable morning, study or evening routines you can add to any day' },
 ]
 export type Modules = Record<ModuleId, boolean>

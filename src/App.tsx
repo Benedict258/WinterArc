@@ -30,6 +30,7 @@ import TeamThreadPage from './pages/TeamThreadPage'
 import BillingPage from './pages/BillingPage'
 import FocusPage from './pages/FocusPage'
 import RoutinesPage from './pages/RoutinesPage'
+import HabitsPage from './pages/HabitsPage'
 import FocusRuntime from './components/FocusRuntime'
 
 const queryClient = createQueryClient()
@@ -65,6 +66,7 @@ function App() {
                       <Route path="/assistant" element={<ModuleRoute module="ai"><AssistantPage /></ModuleRoute>} />
                       <Route path="/focus" element={<ModuleRoute module="focus"><FocusPage /></ModuleRoute>} />
                       <Route path="/routines" element={<ModuleRoute module="routines"><RoutinesPage /></ModuleRoute>} />
+                      <Route path="/habits" element={<ModuleRoute module="habits"><HabitsPage /></ModuleRoute>} />
                       <Route path="/partners" element={<ModuleRoute module="partners"><PartnersPage /></ModuleRoute>} />
                       <Route path="/billing" element={<BillingPage />} />
                       <Route path="/import" element={<ImportPage />} />

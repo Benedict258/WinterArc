@@ -11,6 +11,9 @@ import { updateSettings } from './settingsService'
 import { rebalanceWeek } from './dailyGenerationService'
 import { blocksProblem } from '../../../src/shared/dayBlocks'
 import { settingsSchema } from '../utils/validation'
+import { Habit } from '../models/Habit'
+import { archiveHabit, createHabit } from './habitService'
+import { habitProblem } from '../../../src/shared/habits'
 
 const objectId = z.string().regex(/^[0-9a-f]{24}$/i, 'Invalid id')
 const dayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
@@ -75,6 +78,14 @@ export const ACTION_SCHEMAS = {
   update_settings: settingsSchema.pick({ timezone: true, multipleThreadsPerWeekTarget: true, gridBalancing: true, planner: true, appearance: true, modules: true }).partial()
     .refine(s => Object.keys(s).length > 0, 'No changes given'),
   rebalance_week: z.object({}),
+  create_habit: z.object({
+    name: z.string().trim().min(1).max(60),
+    emoji: z.string().max(8).optional(),
+    unit: z.string().trim().max(16).optional(),
+    weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),
+    target: z.number().int().min(1).max(1000).optional(),
+  }),
+  archive_habit: z.object({ habitId: objectId }),
 } as const
 
 export type ActionKind = keyof typeof ACTION_SCHEMAS
@@ -149,6 +160,18 @@ export async function describeAction(userId: string, kind: ActionKind, raw: unkn
     }
     case 'rebalance_week':
       return { args: a, summary: 'Rebalance this week’s plan', details: ['Re-plans the days that haven’t happened yet.'] }
+    case 'create_habit': {
+      const weekdays = a.weekdays ?? [0, 1, 2, 3, 4, 5, 6]
+      const problem = habitProblem({ ...a, weekdays, target: a.target ?? 1 })
+      if (problem) throw new ActionError(problem)
+      const days = weekdays.length === 7 ? 'every day' : weekdays.map((d: number) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')
+      return { args: { ...a, weekdays }, summary: `Track habit “${a.name}”`, details: [days, `${a.target ?? 1}${a.unit ? ` ${a.unit}` : ''} a day`] }
+    }
+    case 'archive_habit': {
+      const h = await Habit.findOne({ _id: a.habitId, userId, archived: false }, { name: 1 })
+      if (!h) throw new ActionError('That habit doesn’t exist.')
+      return { args: a, summary: `Stop tracking “${h.name}”`, details: ['Its history is kept; you can still see it in monthly averages.'] }
+    }
   }
 }
 
@@ -203,5 +226,12 @@ export async function executeAction(userId: string, kind: ActionKind, args: any)
     case 'rebalance_week':
       await rebalanceWeek(userId)
       return 'Week rebalanced.'
+    case 'create_habit': {
+      const h = await createHabit(userId, { ...a, weekdays: a.weekdays ?? [0, 1, 2, 3, 4, 5, 6], target: a.target ?? 1 })
+      return `Now tracking “${h.name}”.`
+    }
+    case 'archive_habit':
+      await archiveHabit(userId, a.habitId)
+      return 'Habit archived.'
   }
 }
