@@ -131,6 +131,10 @@ export const focusPrefsSchema = z.object({
   longEvery: z.number().int().min(2).max(10), autoStart: z.boolean(),
 }).partial();
 
+export const fitnessPrefsSchema = z.object({
+  stepGoal: z.number().int().min(500).max(100000), weeklyWorkouts: z.number().int().min(1).max(14), units: z.enum(['metric', 'imperial']),
+}).partial();
+
 export const settingsSchema = z.object({
   timezone: z.string().refine(tz => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
@@ -143,6 +147,7 @@ export const settingsSchema = z.object({
   appearance: appearanceSchema.optional(),
   modules: modulesSchema.optional(),
   focus: focusPrefsSchema.optional(),
+  fitness: fitnessPrefsSchema.optional(),
 });
 export const settingsUpdateSchema = settingsSchema.partial();
 

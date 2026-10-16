@@ -95,3 +95,13 @@ Google requires digital subscriptions sold inside an app to use **Google Play Bi
 - [ ] Screenshots and graphics uploaded; listing text pasted
 - [ ] Production release created from a tested `.aab`; staged rollout 20% → 100%
 - [ ] After launch: watch crashes (Play Console → Android vitals) and the Render logs for a week
+
+## Health Connect (steps sync)
+
+The Android app can read daily steps, weight and resting heart rate from Health Connect (Fitness page → "Connect Health Connect"). It never writes to Health Connect.
+
+- **Permissions:** only `READ_STEPS`, `READ_WEIGHT` and `READ_RESTING_HEART_RATE`. The plugin declares dozens more; `android/app/src/main/AndroidManifest.xml` removes every other one with `tools:node="remove"` so the manifest matches what the app does. If you add a data type later, remove its line there and update the policy text.
+- **Play Console:** Health Connect needs the "Health apps" declaration (App content → Health apps) and a Health Connect data-use declaration. Declare the three read types above, "read only", purpose "show the person their own fitness progress", no sharing, no advertising. Data is processed on your server and stored with the account.
+- **Privacy policy:** Health Connect requires one reachable from the permission dialog. `public/privacypolicy.html` (bundled into the app) is shown there; `/privacy` also covers health data.
+- **Plugin:** [@capgo/capacitor-health](https://github.com/Cap-go/capacitor-health) (free). Health Connect ships with Android 14+; on older versions people install "Health Connect by Android" from Google Play.
+- **iOS:** not built. The same plugin supports Apple Health; it needs an iOS target and the HealthKit capability.

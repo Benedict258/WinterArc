@@ -6,7 +6,8 @@ import { useAuth } from '@/context/AuthContext'
 
 type Card = { id: string; kind: string; summary: string; details: string[]; destructive: boolean }
 type Outcome = { ok: boolean; message: string }
-type Logged = { habit: string; emoji: string; value: number; target: number; unit: string; done: boolean; streak: number; day: string; milestone: number | null }
+type HabitLogged = { habit: string; emoji: string; value: number; target: number; unit: string; done: boolean; streak: number; day: string; milestone: number | null }
+type Logged = HabitLogged | { title: string; detail: string }
 type Msg = { role: 'user' | 'assistant'; content: string; cards?: Card[]; logged?: Logged[]; outcomes?: Record<string, Outcome>; dismissed?: string[] }
 type Usage = { used: number; allowance: number; remaining: number; today: number; dailyCap: number; moreRequested: boolean; resetsOn: string }
 
@@ -116,7 +117,7 @@ export default function AssistantChat({ quick, scope = 'main', placeholder, onCh
       }
       setUsage(res.data.usage)
       setMessages([...history, { role: 'assistant', content: res.data.reply, cards: res.data.proposals, logged: res.data.logged }])
-      if (res.data.logged?.length) { await queryClient.invalidateQueries({ queryKey: ['habits'] }); onChanged?.() }
+      if (res.data.logged?.length) { await queryClient.invalidateQueries({ queryKey: ['habits'] }); await queryClient.invalidateQueries({ queryKey: ['fitness'] }); onChanged?.() }
     } catch {
       setError({ text: 'Can’t reach the server. Check your connection and try again.' })
       setMessages(history.slice(0, -1))
@@ -181,10 +182,19 @@ export default function AssistantChat({ quick, scope = 'main', placeholder, onCh
                     {m.logged.map((l, i) => (
                       <li key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs">
                         <Check size={14} className="text-emerald-500 shrink-0" />
-                        <span className="font-medium">{l.emoji} {l.habit}</span>
-                        <span>{l.value}/{l.target}{l.unit ? ` ${l.unit}` : ''}</span>
-                        <span className="flex items-center gap-1 text-muted-foreground"><Flame size={12} />{l.streak} day{l.streak === 1 ? '' : 's'}</span>
-                        {l.milestone && <span className="font-semibold text-primary">{l.milestone}-day milestone!</span>}
+                        {'habit' in l ? (
+                          <>
+                            <span className="font-medium">{l.emoji} {l.habit}</span>
+                            <span>{l.value}/{l.target}{l.unit ? ` ${l.unit}` : ''}</span>
+                            <span className="flex items-center gap-1 text-muted-foreground"><Flame size={12} />{l.streak} day{l.streak === 1 ? '' : 's'}</span>
+                            {l.milestone && <span className="font-semibold text-primary">{l.milestone}-day milestone!</span>}
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium">{l.title}</span>
+                            <span className="text-muted-foreground">{l.detail}</span>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>

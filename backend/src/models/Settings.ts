@@ -62,6 +62,11 @@ const settingsSchema = new mongoose.Schema(
       longEvery: { type: Number, default: 4 },
       autoStart: { type: Boolean, default: false },
     },
+    fitness: {
+      stepGoal: { type: Number, default: 8000 },
+      weeklyWorkouts: { type: Number, default: 3 },
+      units: { type: String, enum: ['metric', 'imperial'], default: 'metric' },
+    },
     // When the notification scheduler should next look at this user (see notificationService).
     nextCheckAt: { type: Date, default: () => new Date(0), index: true },
     gridBalancing: {

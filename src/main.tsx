@@ -5,9 +5,11 @@ import './index.css'
 import { useSyncListener } from '@/hooks/useTasks'
 import { installNativeNetworking } from '@/lib/native'
 import { startNativeReminders } from '@/lib/nativeReminders'
+import { startHealthSync } from '@/lib/healthSync'
 
 installNativeNetworking()
 startNativeReminders()
+startHealthSync()
 
 function AppWithSyncListener() {
   useSyncListener()

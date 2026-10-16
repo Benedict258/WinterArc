@@ -16,6 +16,9 @@ import { Routine } from '../models/Routine'
 import { FocusSession } from '../models/FocusSession'
 import { Habit } from '../models/Habit'
 import { HabitLog } from '../models/HabitLog'
+import { Workout } from '../models/Workout'
+import { StepDay } from '../models/StepDay'
+import { BodyMetric } from '../models/BodyMetric'
 
 const available = await dbReachable()
 const PASSWORD = 'correct horse battery'
@@ -36,6 +39,9 @@ describe.skipIf(!available)('account export/deletion and admin area', () => {
     await FocusSession.create({ userId, startedAt: new Date(), minutes: 25 })
     const habit = await Habit.create({ userId, name: 'Read', startedOn: '2026-10-01' })
     await HabitLog.create({ userId, habitId: habit._id, day: '2026-10-02', value: 1 })
+    await Workout.create({ userId, day: '2026-10-02', title: 'Run' })
+    await StepDay.create({ userId, day: '2026-10-02', manual: 5000 })
+    await BodyMetric.create({ userId, day: '2026-10-02', weightKg: 70 })
     await ApiToken.create({ userId, tokenHash: `h${userId}`, label: 'x', expiresAt: new Date(Date.now() + 1e9) })
   }
   const holdings = async (userId: string) => (await Promise.all([
@@ -43,6 +49,7 @@ describe.skipIf(!available)('account export/deletion and admin area', () => {
     Settings.countDocuments({ userId }), PushSubscription.countDocuments({ userId }), ApiToken.countDocuments({ userId }),
     Goal.countDocuments({ userId }), WishlistItem.countDocuments({ userId }),
     Routine.countDocuments({ userId }), FocusSession.countDocuments({ userId }), Habit.countDocuments({ userId }), HabitLog.countDocuments({ userId }),
+    Workout.countDocuments({ userId }), StepDay.countDocuments({ userId }), BodyMetric.countDocuments({ userId }),
   ])).reduce((a, b) => a + b, 0)
 
   describe('export', () => {
