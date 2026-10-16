@@ -75,7 +75,7 @@ export const ACTION_SCHEMAS = {
   delete_task: z.object({ taskId: objectId }),
   add_goal: z.object({ period: z.string().trim().min(1).max(20), text: z.string().trim().min(1).max(500) }),
   add_wishlist_item: z.object({ item: z.string().trim().min(1).max(200), note: z.string().max(1000).optional() }),
-  update_settings: settingsSchema.pick({ timezone: true, multipleThreadsPerWeekTarget: true, gridBalancing: true, planner: true, appearance: true, modules: true }).partial()
+  update_settings: settingsSchema.pick({ timezone: true, multipleThreadsPerWeekTarget: true, gridBalancing: true, planner: true, appearance: true, modules: true, focus: true, fitness: true, nutrition: true }).partial()
     .refine(s => Object.keys(s).length > 0, 'No changes given'),
   rebalance_week: z.object({}),
   create_habit: z.object({

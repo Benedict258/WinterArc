@@ -117,7 +117,7 @@ export default function AssistantChat({ quick, scope = 'main', placeholder, onCh
       }
       setUsage(res.data.usage)
       setMessages([...history, { role: 'assistant', content: res.data.reply, cards: res.data.proposals, logged: res.data.logged }])
-      if (res.data.logged?.length) { await queryClient.invalidateQueries({ queryKey: ['habits'] }); await queryClient.invalidateQueries({ queryKey: ['fitness'] }); onChanged?.() }
+      if (res.data.logged?.length) { await queryClient.invalidateQueries({ queryKey: ['habits'] }); await queryClient.invalidateQueries({ queryKey: ['fitness'] }); await queryClient.invalidateQueries({ queryKey: ['nutrition'] }); onChanged?.() }
     } catch {
       setError({ text: 'Can’t reach the server. Check your connection and try again.' })
       setMessages(history.slice(0, -1))

@@ -67,6 +67,15 @@ const settingsSchema = new mongoose.Schema(
       weeklyWorkouts: { type: Number, default: 3 },
       units: { type: String, enum: ['metric', 'imperial'], default: 'metric' },
     },
+    nutrition: {
+      calories: { type: Number, default: 2200 },
+      proteinG: { type: Number, default: 100 },
+      carbsG: { type: Number, default: null },
+      fatG: { type: Number, default: null },
+      mode: { type: String, enum: ['none', 'lose', 'maintain', 'gain'], default: 'none' },
+      diet: { type: String, default: '', maxlength: 80 },
+      avoid: { type: String, default: '', maxlength: 200 },
+    },
     // When the notification scheduler should next look at this user (see notificationService).
     nextCheckAt: { type: Date, default: () => new Date(0), index: true },
     gridBalancing: {

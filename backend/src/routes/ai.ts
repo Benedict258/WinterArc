@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { validateRequest } from '../middleware/validationMiddleware'
 import { uid } from '../middleware/auth'
-import { AiError, aiConfigured, applyProposals, chat, dismissProposals, getUsage, requestMore } from '../services/aiService'
+import { AiError, aiConfigured, applyProposals, chat, dismissProposals, estimateMeal, getUsage, requestMore } from '../services/aiService'
 
 // Mounted behind requireVerified (see server.ts): the assistant costs money, so it needs a confirmed email.
 export const aiRouter = Router()
@@ -43,6 +43,17 @@ aiRouter.post('/chat', validateRequest(chatSchema), async (req, res) => {
   try {
     if (tooMany(uid(req))) return res.status(429).json({ error: 'You’re sending a lot of messages. Wait a few minutes.', code: 'ai_rate' })
     const result = await chat(uid(req), req.body.messages)
+    res.json({ ...result, usage: await getUsage(uid(req)) })
+  } catch (error) {
+    fail(res, error)
+  }
+})
+
+const estimateSchema = z.object({ text: z.string().trim().min(2).max(600) })
+aiRouter.post('/estimate-meal', validateRequest(estimateSchema), async (req, res) => {
+  try {
+    if (tooMany(uid(req))) return res.status(429).json({ error: 'You’re sending a lot of requests. Wait a few minutes.', code: 'ai_rate' })
+    const result = await estimateMeal(uid(req), req.body.text)
     res.json({ ...result, usage: await getUsage(uid(req)) })
   } catch (error) {
     fail(res, error)

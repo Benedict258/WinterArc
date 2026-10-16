@@ -8,9 +8,9 @@ import { markNotificationsDirty } from './notificationService'
 export async function updateSettings(userId: string, body: Record<string, any>) {
   let settings = await Settings.findOne({ userId })
   if (!settings) settings = new Settings({ userId })
-  const { planner, notifications, gridBalancing, appearance, modules, focus, fitness, ...rest } = body
+  const { planner, notifications, gridBalancing, appearance, modules, focus, fitness, nutrition, ...rest } = body
   Object.assign(settings, rest)
-  for (const [group, value] of Object.entries({ planner, notifications, gridBalancing, appearance, modules, focus, fitness })) {
+  for (const [group, value] of Object.entries({ planner, notifications, gridBalancing, appearance, modules, focus, fitness, nutrition })) {
     if (!value) continue
     for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
       settings.set(`${group}.${key}`, v)

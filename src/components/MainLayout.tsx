@@ -23,6 +23,7 @@ import {
   ListChecks,
   Sprout,
   Dumbbell,
+  Apple,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -49,6 +50,7 @@ const navItems: NavItem[] = [
   { label: 'Backlog', path: '/backlog', icon: Inbox },
   { label: 'Habits', path: '/habits', icon: Sprout, module: 'habits' },
   { label: 'Fitness', path: '/fitness', icon: Dumbbell, module: 'fitness' },
+  { label: 'Nutrition', path: '/nutrition', icon: Apple, module: 'nutrition' },
   { label: 'Focus', path: '/focus', icon: Timer, module: 'focus' },
   { label: 'Routines', path: '/routines', icon: ListChecks, module: 'routines' },
   { label: 'Partners', path: '/partners', icon: Users, module: 'partners' },

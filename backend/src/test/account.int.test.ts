@@ -19,6 +19,7 @@ import { HabitLog } from '../models/HabitLog'
 import { Workout } from '../models/Workout'
 import { StepDay } from '../models/StepDay'
 import { BodyMetric } from '../models/BodyMetric'
+import { Meal } from '../models/Meal'
 
 const available = await dbReachable()
 const PASSWORD = 'correct horse battery'
@@ -42,6 +43,7 @@ describe.skipIf(!available)('account export/deletion and admin area', () => {
     await Workout.create({ userId, day: '2026-10-02', title: 'Run' })
     await StepDay.create({ userId, day: '2026-10-02', manual: 5000 })
     await BodyMetric.create({ userId, day: '2026-10-02', weightKg: 70 })
+    await Meal.create({ userId, day: '2026-10-02', slot: 'lunch', text: 'Rice', calories: 300, proteinG: 6, carbsG: 65, fatG: 1 })
     await ApiToken.create({ userId, tokenHash: `h${userId}`, label: 'x', expiresAt: new Date(Date.now() + 1e9) })
   }
   const holdings = async (userId: string) => (await Promise.all([
@@ -49,7 +51,7 @@ describe.skipIf(!available)('account export/deletion and admin area', () => {
     Settings.countDocuments({ userId }), PushSubscription.countDocuments({ userId }), ApiToken.countDocuments({ userId }),
     Goal.countDocuments({ userId }), WishlistItem.countDocuments({ userId }),
     Routine.countDocuments({ userId }), FocusSession.countDocuments({ userId }), Habit.countDocuments({ userId }), HabitLog.countDocuments({ userId }),
-    Workout.countDocuments({ userId }), StepDay.countDocuments({ userId }), BodyMetric.countDocuments({ userId }),
+    Workout.countDocuments({ userId }), StepDay.countDocuments({ userId }), BodyMetric.countDocuments({ userId }), Meal.countDocuments({ userId }),
   ])).reduce((a, b) => a + b, 0)
 
   describe('export', () => {

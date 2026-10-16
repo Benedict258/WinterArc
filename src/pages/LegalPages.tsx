@@ -73,6 +73,9 @@ export function PrivacyPage() {
               <Table head={['What', 'Details']} rows={[
                 [<b key="a">Account</b>, 'Your email address, an optional name, a salted hash of your password (never the password), or your Google account id if you sign in with Google; whether your email is confirmed; the invite code you used; when you accepted these terms; when you signed up, last signed in and were last seen.'],
                 [<b key="b">What you add</b>, 'Threads, tasks, goals, wishlist items, notes, Drop text, links and files, and your settings (time zone, day structure, planner rules, look and feel, reminders, which features are on).'],
+                [<b key="h">Habits, focus and routines</b>, 'Your habits and the days you checked them off, your focus (Pomodoro) rounds, and your routines.'],
+                [<b key="i">Health and fitness</b>, 'If you use Fitness: workouts you log, steps (typed, or read from Android Health Connect if you connect it: daily step totals, weight and resting heart rate only), weight, sleep, resting heart rate, waist and mood entries, and your goals. This is health information; you choose what to enter and can delete any of it. We never write to Health Connect.'],
+                [<b key="j">Food</b>, 'If you use Nutrition: the meals you log with their estimated calories and nutrients, and your goals, way of eating and foods to avoid.'],
                 [<b key="c">Reminders</b>, 'If you turn on notifications: your browser’s or device’s push address, the browser name it came from, and a short record of which reminders were sent (kept 14 days) so none is sent twice. If you turn on the daily email: that choice and its time.'],
                 [<b key="d">Partners and sharing</b>, 'Partner invitations and the email address they were sent to, who accepted, what each person chose to share, and the last few “cheers”. For shared threads: who is a member, their role, and who each team task is assigned to.'],
                 [<b key="e">AI assistant</b>, 'Only if you use it: your messages, how many tokens you have used this month, and any changes it suggested (kept for 7 days so you can approve or dismiss them). The conversation itself is kept on your device, not on our server.'],
@@ -107,7 +110,7 @@ export function PrivacyPage() {
                 ['Backblaze B2', 'Stores files you add to Drop'],
                 ['Resend', 'Sends our emails'],
                 ['Google', 'Sign-in with Google, if you use it'],
-                [config.aiProvider ?? 'An AI provider', <>Only if you use the assistant: your messages and a summary of your plan (thread names, task titles, goals, settings) go to {ai} to produce each answer</>],
+                [config.aiProvider ?? 'An AI provider', <>Only if you use the assistant or ask for a meal estimate: your messages and a summary of your plan (thread names, task titles, goals, habits, settings) go to {ai} to produce each answer. If you ask about fitness or food, that information goes too.</>],
                 ['Paystack', 'Takes payments, if paid plans are switched on'],
               ]} />
               <p>We may also share information if the law requires it. We never sell personal data.</p>
@@ -230,6 +233,7 @@ export function TermsPage() {
             <ul>
               <li>The assistant can be wrong. Check what it suggests; it can’t change anything until you approve each suggestion.</li>
               <li>Don’t rely on it for medical, legal, financial or safety decisions.</li>
+              <li><b>Fitness and food.</b> Workout, step and nutrition features and the assistant’s suggestions are general information, not medical advice. Calorie and nutrient numbers are estimates and can be wrong. We are not doctors or dietitians. Talk to a professional before changing your diet or exercise if you have a health condition, are pregnant, take medicine, have or may have an eating disorder, or feel unwell. Stop exercising and get help if you feel pain or dizziness. In an emergency, call your local emergency number.</li>
               <li>When you use it, your messages and a summary of your plan are sent to {config.aiProvider ?? 'our AI provider'} (see the Privacy Policy). Don’t put in anything you don’t want processed that way.</li>
               <li>Each account has a monthly and daily allowance. We may change allowances, and can pause the assistant for an account that abuses it.</li>
             </ul>

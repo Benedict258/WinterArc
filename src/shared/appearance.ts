@@ -31,6 +31,7 @@ export const MODULES: { id: ModuleId; label: string; blurb: string }[] = [
   { id: 'focus', label: 'Focus timer', blurb: 'Pomodoro sessions for work and study, with a history of your focus time' },
   { id: 'habits', label: 'Habits', blurb: 'Track habits, streaks and monthly averages, and check in by chat' },
   { id: 'fitness', label: 'Fitness', blurb: 'Workouts, steps and body measurements, with progress over time' },
+  { id: 'nutrition', label: 'Nutrition', blurb: 'Log meals, see calories and macros against your goals, and get food advice' },
   { id: 'routines', label: 'Routines', blurb: 'Reusable morning, study or evening routines you can add to any day' },
 ]
 export type Modules = Record<ModuleId, boolean>

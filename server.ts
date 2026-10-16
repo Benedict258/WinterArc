@@ -53,6 +53,7 @@ import { partnersRouter } from './backend/src/routes/partners.ts'
 import { focusRouter, routinesRouter } from './backend/src/routes/focus.ts'
 import { habitsRouter } from './backend/src/routes/habits.ts'
 import { fitnessRouter } from './backend/src/routes/fitness.ts'
+import { nutritionRouter } from './backend/src/routes/nutrition.ts'
 import { importRouter, WINTERARC_IMPORT_PATH } from './backend/src/routes/import.ts'
 import {
   threadSchema,
@@ -690,6 +691,7 @@ export function createApp() {
   app.use('/api/routines', routinesRouter)
   app.use('/api/habits', habitsRouter)
   app.use('/api/fitness', fitnessRouter)
+  app.use('/api/nutrition', nutritionRouter)
   app.use('/api/teams', requireVerified, teamsRouter)
   app.use('/api/billing', billingRouter)
 

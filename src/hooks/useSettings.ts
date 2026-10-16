@@ -10,6 +10,7 @@ import type { DayBlock } from '@/shared/dayBlocks'
 import type { Appearance, Modules } from '@/shared/appearance'
 import type { FocusPrefs } from '@/shared/focus'
 import type { FitnessPrefs } from '@/shared/fitness'
+import type { NutritionGoals } from '@/shared/nutrition'
 export type Settings = {
   _id: string;
   timezone: string;
@@ -24,6 +25,7 @@ export type Settings = {
   modules?: Partial<Modules>;
   focus?: Partial<FocusPrefs>;
   fitness?: Partial<FitnessPrefs>;
+  nutrition?: Partial<NutritionGoals>;
   planner?: {
     rollover?: boolean;
     makeup?: boolean;
@@ -59,7 +61,7 @@ export const useSettings = () => {
   });
 };
 
-const GROUPS = ['planner', 'notifications', 'gridBalancing', 'appearance', 'modules', 'focus', 'fitness'] as const
+const GROUPS = ['planner', 'notifications', 'gridBalancing', 'appearance', 'modules', 'focus', 'fitness', 'nutrition'] as const
 
 /** Apply a partial update locally the way the server does: nested groups merge field by field. */
 export function mergeSettings(current: any, updates: Partial<Settings>) {

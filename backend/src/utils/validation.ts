@@ -135,6 +135,12 @@ export const fitnessPrefsSchema = z.object({
   stepGoal: z.number().int().min(500).max(100000), weeklyWorkouts: z.number().int().min(1).max(14), units: z.enum(['metric', 'imperial']),
 }).partial();
 
+export const nutritionGoalsSchema = z.object({
+  calories: z.number().int().min(1000).max(6000), proteinG: z.number().int().min(0).max(500),
+  carbsG: z.number().int().min(0).max(1000).nullable(), fatG: z.number().int().min(0).max(500).nullable(),
+  mode: z.enum(['none', 'lose', 'maintain', 'gain']), diet: z.string().trim().max(80), avoid: z.string().trim().max(200),
+}).partial();
+
 export const settingsSchema = z.object({
   timezone: z.string().refine(tz => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
@@ -148,6 +154,7 @@ export const settingsSchema = z.object({
   modules: modulesSchema.optional(),
   focus: focusPrefsSchema.optional(),
   fitness: fitnessPrefsSchema.optional(),
+  nutrition: nutritionGoalsSchema.optional(),
 });
 export const settingsUpdateSchema = settingsSchema.partial();
 
