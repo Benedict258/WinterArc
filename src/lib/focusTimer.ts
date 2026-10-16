@@ -65,7 +65,14 @@ function announce(phase: Phase) {
   } catch { /* some browsers only allow notifications from a service worker */ }
 }
 
-export async function flushPending() {
+let flushing: Promise<void> | null = null
+/** Uploads finished rounds that haven't been saved yet. One upload at a time, so a round is never sent twice at once. */
+export function flushPending(): Promise<void> {
+  if (!flushing) flushing = doFlush().finally(() => { flushing = null })
+  return flushing
+}
+
+async function doFlush() {
   if (pending.length === 0) return
   const batch = [...pending]
   for (const p of batch) {

@@ -78,6 +78,7 @@ export const useUpdateSettings = () => {
   const { toast } = useToast();
   
   return useMutation({
+    mutationKey: ['settings-update'],
     mutationFn: async (updates: Partial<Settings>) => {
       return onlineOrQueue(async () => {
         const response = await fetch(`${API_URL}/api/settings`, {
@@ -105,7 +106,8 @@ export const useUpdateSettings = () => {
       return { previous };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      // While another settings change is still on its way, a refetch would bring back the older value and make the screen flicker back; the last change to finish refetches
+      if (queryClient.isMutating({ mutationKey: ['settings-update'] }) <= 1) queryClient.invalidateQueries({ queryKey: ['settings'] });
       window.dispatchEvent(new Event('winterarc-data-changed'));
       // Frequency target / timezone change the forecast
       queryClient.invalidateQueries({ queryKey: ['week'] });

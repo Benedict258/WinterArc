@@ -59,6 +59,13 @@ describe.skipIf(!available)('focus sessions and routines', () => {
     expect((await agent.post('/api/focus/sessions').send({ ...body, taskId: '0123456789abcdef01234567', clientId: 'z' })).status).toBe(404)
   })
 
+  it('counts a round once even when the same upload arrives several times at once', async () => {
+    const { agent } = await signedUpAgent(ctx, 'focus1b@example.com')
+    const body = { startedAt: new Date(Date.now() - 60_000).toISOString(), minutes: 25, clientId: 'dev-race-1' }
+    await Promise.all(Array.from({ length: 6 }, () => agent.post('/api/focus/sessions').send(body)))
+    expect((await agent.get('/api/focus/summary')).body.todayRounds).toBe(1)
+  })
+
   it('keeps one person’s sessions and routines away from another', async () => {
     const a = await signedUpAgent(ctx, 'focus2@example.com')
     const b = await signedUpAgent(ctx, 'focus3@example.com')

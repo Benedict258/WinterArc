@@ -14,20 +14,15 @@ export async function logSession(userId: string, input: FocusInput) {
   const startedAt = new Date(input.startedAt)
   if (Number.isNaN(startedAt.getTime()) || startedAt.getTime() > Date.now() + 5 * 60_000) throw new FocusError(400, 'That start time isn’t valid')
   if (input.taskId && !(await Task.exists({ _id: input.taskId, userId }))) throw new FocusError(404, 'Task not found')
-  if (input.clientId) {
-    const seen = await FocusSession.findOne({ userId, clientId: input.clientId })
-    if (seen) return { id: String(seen._id), duplicate: true }
-  }
-  try {
-    const doc = await FocusSession.create({ userId, startedAt, minutes: input.minutes, taskId: input.taskId ?? null, label: (input.label ?? '').trim().slice(0, 80), clientId: input.clientId })
-    return { id: String(doc._id), duplicate: false }
-  } catch (e: any) {
-    if (e?.code === 11000 && input.clientId) {
-      const existing = await FocusSession.findOne({ userId, clientId: input.clientId })
-      return { id: String(existing?._id), duplicate: true }
-    }
-    throw e
-  }
+  const fields = { startedAt, minutes: input.minutes, taskId: input.taskId ?? null, label: (input.label ?? '').trim().slice(0, 80) }
+  if (!input.clientId) return { id: String((await FocusSession.create({ userId, ...fields }))._id), duplicate: false }
+  // One round per device-generated id, even if the same upload arrives twice at once
+  const res: any = await FocusSession.findOneAndUpdate(
+    { userId, clientId: input.clientId }, { $setOnInsert: { userId, clientId: input.clientId, ...fields } },
+    { upsert: true, new: true, includeResultMetadata: true }
+  ).catch((e: any) => (e?.code === 11000 ? null : Promise.reject(e)))
+  const doc = res ? res.value : await FocusSession.findOne({ userId, clientId: input.clientId })
+  return { id: String(doc?._id), duplicate: res ? res.lastErrorObject?.updatedExisting === true : true }
 }
 
 export async function deleteSession(userId: string, id: string) {
