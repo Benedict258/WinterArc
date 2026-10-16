@@ -51,10 +51,12 @@ const taskSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     // Set when an unfinished task was swept off a past day (the day it was missed)
     missedOn: { type: Date, default: null },
+    // Set on tasks a routine added: 'routineId:stepId', so adding the routine again doesn't duplicate them
+    routineKey: { type: String, default: null, maxlength: 48 },
     calendarEventId: String,
     source: {
       type: String,
-      enum: ['manual', 'auto-generated', 'google-calendar', 'import'],
+      enum: ['manual', 'auto-generated', 'google-calendar', 'import', 'routine'],
       default: 'manual',
     },
     // Set when the daily generator put this task on a day, so "Rebalance"

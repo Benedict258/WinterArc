@@ -2,7 +2,8 @@
 
 export type Mode = 'dark' | 'light' | 'system'
 export type Density = 'comfortable' | 'compact'
-export type ModuleId = 'wishlist' | 'goals' | 'drop' | 'events' | 'ai' | 'partners'
+export const MODULE_IDS = ['wishlist', 'goals', 'drop', 'events', 'ai', 'partners', 'focus', 'routines', 'habits', 'fitness', 'nutrition'] as const
+export type ModuleId = (typeof MODULE_IDS)[number]
 
 export type Accent = { id: string; label: string; /** 'H S% L%' for the --primary variable */ hsl: string; /** text on top of it */ foreground: string }
 
@@ -27,9 +28,11 @@ export const MODULES: { id: ModuleId; label: string; blurb: string }[] = [
   { id: 'events', label: 'Events & sessions', blurb: 'Fixed-time sessions on threads and one-off events' },
   { id: 'partners', label: 'Partners', blurb: 'Share your progress with accountability partners you choose' },
   { id: 'ai', label: 'AI assistant', blurb: 'Chat about your plan; it suggests changes and you approve each one' },
+  { id: 'focus', label: 'Focus timer', blurb: 'Pomodoro sessions for work and study, with a history of your focus time' },
+  { id: 'routines', label: 'Routines', blurb: 'Reusable morning, study or evening routines you can add to any day' },
 ]
 export type Modules = Record<ModuleId, boolean>
-export const DEFAULT_MODULES: Modules = { wishlist: true, goals: true, drop: true, events: true, ai: true, partners: true }
+export const DEFAULT_MODULES = Object.fromEntries(MODULE_IDS.map(id => [id, true])) as Modules
 
 export const accentById = (id: string | undefined) => ACCENTS.find(a => a.id === id) ?? ACCENTS[0]
 
@@ -42,12 +45,5 @@ export function normalizeAppearance(raw: Partial<Appearance> | null | undefined)
 }
 
 export function normalizeModules(raw: Partial<Modules> | null | undefined): Modules {
-  return {
-    wishlist: raw?.wishlist !== false,
-    goals: raw?.goals !== false,
-    drop: raw?.drop !== false,
-    events: raw?.events !== false,
-    ai: raw?.ai !== false,
-    partners: raw?.partners !== false,
-  }
+  return Object.fromEntries(MODULE_IDS.map(id => [id, raw?.[id] !== false])) as Modules
 }

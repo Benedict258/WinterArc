@@ -50,6 +50,7 @@ import { billingRouter, billingWebhook } from './backend/src/routes/billing.ts'
 import { sendPlanRemindersIfDue } from './backend/src/services/billingService.ts'
 import { teamsRouter } from './backend/src/routes/teams.ts'
 import { partnersRouter } from './backend/src/routes/partners.ts'
+import { focusRouter, routinesRouter } from './backend/src/routes/focus.ts'
 import { importRouter, WINTERARC_IMPORT_PATH } from './backend/src/routes/import.ts'
 import {
   threadSchema,
@@ -683,6 +684,8 @@ export function createApp() {
   app.use('/api/ai', requireVerified, aiRouter)
   app.use('/api/import', importRouter)
   app.use('/api/partners', requireVerified, partnersRouter)
+  app.use('/api/focus', focusRouter)
+  app.use('/api/routines', routinesRouter)
   app.use('/api/teams', requireVerified, teamsRouter)
   app.use('/api/billing', billingRouter)
 

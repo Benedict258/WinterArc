@@ -7,6 +7,7 @@ import { Task } from '../models/Task'
 import { Goal } from '../models/Goal'
 import { addDaysKey, dateToDayKey, dayKeyToDate, toDayKey, weekStartKey, DEFAULT_TIMEZONE } from './dailyGenerationService'
 import { normalizeBlocks, blockRange } from '../../../src/shared/dayBlocks'
+import { MODULE_IDS } from '../../../src/shared/appearance'
 import { ACTION_SCHEMAS, ActionError, DESTRUCTIVE, describeAction, executeAction, isActionKind, type ActionKind } from './aiActions'
 
 export class AiError extends Error {
@@ -185,7 +186,7 @@ const PROPOSE_TOOLS = [
     planner: obj({ rollover: { type: 'boolean' }, makeup: { type: 'boolean' }, backlogPerDay: { type: 'integer' }, dueWindowDays: { type: 'integer' },
       blocks: { type: 'array', description: '2-6 blocks with ascending start hours', items: obj({ id: { type: 'string' }, label: { type: 'string' }, start: { type: 'integer' }, weights: obj({ light: { type: 'integer' }, medium: { type: 'integer' }, heavy: { type: 'integer' } }, ['light', 'medium', 'heavy']) }, ['id', 'label', 'start', 'weights']) } }),
     appearance: obj({ mode: { type: 'string', enum: ['dark', 'light', 'system'] }, accent: { type: 'string' }, density: { type: 'string', enum: ['comfortable', 'compact'] } }),
-    modules: obj({ wishlist: { type: 'boolean' }, goals: { type: 'boolean' }, drop: { type: 'boolean' }, events: { type: 'boolean' }, ai: { type: 'boolean' }, partners: { type: 'boolean' } }),
+    modules: obj(Object.fromEntries(MODULE_IDS.map(id => [id, { type: 'boolean' }]))),
   }) },
   { name: 'propose_rebalance_week', description: 'Suggest re-planning the rest of this week.', input_schema: obj({}) },
 ]

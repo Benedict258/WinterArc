@@ -1,4 +1,5 @@
 import { Thread } from '../models/Thread'
+import { addAutoRoutines } from './routineService'
 import { Task } from '../models/Task'
 import { Settings } from '../models/Settings'
 import { DayBlock, normalizeBlocks, blockForTime, pickBlock, resolveBlock, emptyLoads } from '../../../src/shared/dayBlocks'
@@ -581,6 +582,9 @@ export async function generateToday(userId: string, dayKey: string) {
       })
     }
   }
+
+  // Routines that run today and are set to add themselves
+  await addAutoRoutines(userId, dayKey, planOptions.blocks)
 
   return actions
 }

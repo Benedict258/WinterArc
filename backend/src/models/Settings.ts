@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import { tenantField, tenantGuard } from '../plugins/tenant'
+import { MODULE_IDS } from '../../../src/shared/appearance'
 
 const settingsSchema = new mongoose.Schema(
   {
@@ -49,13 +50,13 @@ const settingsSchema = new mongoose.Schema(
       accent: { type: String, default: 'lime', maxlength: 24 },
       density: { type: String, enum: ['comfortable', 'compact'], default: 'comfortable' },
     },
-    modules: {
-      wishlist: { type: Boolean, default: true },
-      goals: { type: Boolean, default: true },
-      drop: { type: Boolean, default: true },
-      events: { type: Boolean, default: true },
-      ai: { type: Boolean, default: true },
-      partners: { type: Boolean, default: true },
+    modules: Object.fromEntries(MODULE_IDS.map(id => [id, { type: Boolean, default: true }])),
+    focus: {
+      focusMin: { type: Number, default: 25 },
+      shortMin: { type: Number, default: 5 },
+      longMin: { type: Number, default: 15 },
+      longEvery: { type: Number, default: 4 },
+      autoStart: { type: Boolean, default: false },
     },
     // When the notification scheduler should next look at this user (see notificationService).
     nextCheckAt: { type: Date, default: () => new Date(0), index: true },

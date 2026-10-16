@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ACCENTS, normalizeAppearance, normalizeModules, accentById, DEFAULT_APPEARANCE } from './appearance'
+import { MODULE_IDS, ACCENTS, normalizeAppearance, normalizeModules, accentById, DEFAULT_APPEARANCE } from './appearance'
 
 describe('appearance and modules', () => {
   it('falls back to defaults for missing or bad values', () => {
@@ -8,7 +8,8 @@ describe('appearance and modules', () => {
     expect(normalizeAppearance({ mode: 'system', accent: 'rose', density: 'compact' })).toEqual({ mode: 'system', accent: 'rose', density: 'compact' })
   })
   it('modules are on unless explicitly off', () => {
-    expect(normalizeModules(undefined)).toEqual({ wishlist: true, goals: true, drop: true, events: true, ai: true, partners: true })
+    expect(Object.values(normalizeModules(undefined)).every(v => v === true)).toBe(true)
+    expect(Object.keys(normalizeModules(undefined)).sort()).toEqual([...MODULE_IDS].sort())
     expect(normalizeModules({ drop: false })).toMatchObject({ drop: false, wishlist: true })
   })
   it('accent ids are unique and resolvable', () => {

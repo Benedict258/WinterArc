@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { blocksProblem } from '../../../src/shared/dayBlocks';
-import { ACCENTS } from '../../../src/shared/appearance';
+import { ACCENTS, MODULE_IDS, type ModuleId } from '../../../src/shared/appearance';
 
 // NOTE: no `.default()` on any field. zod v4 applies defaults even inside
 // `.partial()`, which would silently overwrite existing values on PUT.
@@ -123,8 +123,11 @@ export const appearanceSchema = z.object({
   accent: z.enum(ACCENTS.map(a => a.id) as [string, ...string[]]),
   density: z.enum(['comfortable', 'compact']),
 }).partial();
-export const modulesSchema = z.object({
-  wishlist: z.boolean(), goals: z.boolean(), drop: z.boolean(), events: z.boolean(), ai: z.boolean(), partners: z.boolean(),
+export const modulesSchema = z.object(Object.fromEntries(MODULE_IDS.map(id => [id, z.boolean()])) as Record<ModuleId, z.ZodBoolean>).partial();
+
+export const focusPrefsSchema = z.object({
+  focusMin: z.number().int().min(1).max(180), shortMin: z.number().int().min(1).max(60), longMin: z.number().int().min(1).max(120),
+  longEvery: z.number().int().min(2).max(10), autoStart: z.boolean(),
 }).partial();
 
 export const settingsSchema = z.object({
@@ -138,6 +141,7 @@ export const settingsSchema = z.object({
   planner: plannerSettingsSchema.optional(),
   appearance: appearanceSchema.optional(),
   modules: modulesSchema.optional(),
+  focus: focusPrefsSchema.optional(),
 });
 export const settingsUpdateSchema = settingsSchema.partial();
 

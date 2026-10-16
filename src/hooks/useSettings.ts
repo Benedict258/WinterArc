@@ -8,6 +8,7 @@ import { onlineOrQueue } from '@/lib/offline';
 import type { NotificationSettings } from '@/shared/notificationPlan'
 import type { DayBlock } from '@/shared/dayBlocks'
 import type { Appearance, Modules } from '@/shared/appearance'
+import type { FocusPrefs } from '@/shared/focus'
 export type Settings = {
   _id: string;
   timezone: string;
@@ -20,6 +21,7 @@ export type Settings = {
   notifications?: NotificationSettings;
   appearance?: Partial<Appearance>;
   modules?: Partial<Modules>;
+  focus?: Partial<FocusPrefs>;
   planner?: {
     rollover?: boolean;
     makeup?: boolean;
@@ -55,7 +57,7 @@ export const useSettings = () => {
   });
 };
 
-const GROUPS = ['planner', 'notifications', 'gridBalancing', 'appearance', 'modules'] as const
+const GROUPS = ['planner', 'notifications', 'gridBalancing', 'appearance', 'modules', 'focus'] as const
 
 /** Apply a partial update locally the way the server does: nested groups merge field by field. */
 export function mergeSettings(current: any, updates: Partial<Settings>) {

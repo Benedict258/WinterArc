@@ -19,6 +19,8 @@ import {
   Upload,
   ShieldCheck,
   Sparkles,
+  Timer,
+  ListChecks,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -43,6 +45,8 @@ const navItems: NavItem[] = [
   { label: 'Week', path: '/week', icon: CalendarDays },
   { label: 'Threads', path: '/threads', icon: GitBranch },
   { label: 'Backlog', path: '/backlog', icon: Inbox },
+  { label: 'Focus', path: '/focus', icon: Timer, module: 'focus' },
+  { label: 'Routines', path: '/routines', icon: ListChecks, module: 'routines' },
   { label: 'Partners', path: '/partners', icon: Users, module: 'partners' },
   { label: 'Assistant', path: '/assistant', icon: Sparkles, module: 'ai' },
   { label: 'Wishlist', path: '/wishlist', icon: Heart, module: 'wishlist' },
