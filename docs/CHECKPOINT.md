@@ -1,6 +1,6 @@
 # Checkpoint: 17 October 2026 (branch `WinterArcBeta`)
 
-Tag: `checkpoint-2026-10-17`. Everything below is built, tested and pushed. The personal app on `main` is untouched.
+Commit: `3e1d1f4` on `WinterArcBeta` (a git tag could not be pushed from this environment). Everything below is built, tested and pushed. The personal app on `main` is untouched.
 
 ## What exists
 - **Accounts and safety:** email + Google sign-in, invite codes, email confirmation, per-user data (tenant guard + isolation tests), admin area, export and account deletion, Privacy Policy and Terms (version `2026-10-16`), strict CSP.
